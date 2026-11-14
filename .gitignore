@@ -16,3 +16,6 @@
 # signing material — never commit, never package
 .dbx-repository-signing-key.env
 *.signed.artifact.json
+
+# local workspace memory (not part of the plugin)
+/.workbuddy/

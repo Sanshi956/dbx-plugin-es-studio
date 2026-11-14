@@ -169,7 +169,7 @@ Easysearch 兼容必须经真实 API 验证，不得凭接口名相似宣称兼�
 
 ## 9. 资源安全（用户强调，硬约束）
 
-- **内存守卫**：启动本地 ES 前检查可用内存 ≥3 GB；启动后持续采样，可用 <1 GB 时自动停止 ES 并报告。当前 1.61 GB，故 P1 不启动真实 ES。
+- **内存守卫**：启动本地 ES 前检查可用内存 ≥3 GB；启动后持续采样，可用 <1 GB 时自动停止 ES 并报告。确认规格时为 1.61 GB；P1 执行时用户授权关闭 Chrome / PyCharm 后可用内存达 3.33 GB，**按 D2 阈值启动了真实 ES**（见 §11）。
 - **ES 低配**：`jvm.options.d/es-studio.options` 设 `-Xms384m -Xmx384m`；`discovery.type: single-node`；仅监听 127.0.0.1；关闭 security / ML；`path.data`、`path.logs` 指向 D 盘；放宽磁盘水位避免测试期变 red；只建 2~3 个小索引。
 - **磁盘**：npm cache、Go build cache、ES 数据与日志、构建产物一律 D 盘；C 盘剩余 10 GB 不再写入大文件。
 - **采集频率**：监控默认 60s、保留 7 天、条数上限；自动刷新前一次未完成不重复触发（需求 5.2.5 / 11.1）。
@@ -182,3 +182,19 @@ Easysearch 兼容必须经真实 API 验证，不得凭接口名相似宣称兼�
 | 8「连接密码持久化」 | 由 DBX Secret Store 承担，插件不持久化 | 官方无前端 Secret API，且需求 2.3 禁止绕过权限体系 |
 | 7.2 Monaco / ECharts | 自研轻量编辑器 + 按需静态图表 | 沙箱禁 CDN、包体积与官方模板优先原则 |
 | 5.1.1 新增/编辑/删除连接 | 插件 UI 提供入口，跳转到 DBX 官方连接对话框 | 宿主拥有连接生命周期（D4 已确认） |
+
+## 11. 实施偏差登记（P1 收尾补记）
+
+规格与终态架构不变，以下仅为 P1 实施过程中相对文字计划的实际落点，
+详细证据见 `docs/P1-ACCEPTANCE.md` §6。
+
+| 原计划 | 实际 | 原因 |
+|---|---|---|
+| P1 不启动真实 ES（§9 当时内存 1.61 GB） | 启动真实 ES 8.19.23 并跑 11 项集成 | 关闭 Chrome / PyCharm 后可用内存 3.33 GB，满足 D2 ≥3 GB |
+| `backend/cmd/es-studio-sidecar/main.go` | `backend/main.go` | 官方 dev host 在 backend 根目录执行 `go build`，main 包必须在根 |
+| `entrypoints.backend.executable` 写平台子目录 | 写 `bin/es-studio-sidecar`，CLI 打包时自动落 `bin/windows-x64/*.exe` | 依 CLI 0.1.10 实际行为，包内回归已验证 |
+| T15/T16 用 `scripts/mock-es.py` 驱动 Overview | 用真实 ES + `scripts/dev-host-check.mjs` 走官方 dev host HTTP 协议 | 内存达标后采用更强验证，且未引入静态假数据 |
+| §3 架构图中的 `cmd/es-studio-mcp` | P1 未实现，属 P5 | 架构图画的是终态，按 D1 分阶段交付 |
+| 直接 `dbx-plugin dev --path .` | 用 `npm run dev`（`scripts/dev.mjs` + `dev-host.mjs`） | 官方 CLI 0.1.10 在 Windows 传 `\\?\` 扩展长度路径作 cwd，构建命令必失败；兼容层只剥离前缀，不修改全局 CLI |
+
+`go test -race` 因本机未启用 CGO 未执行，已登记为 P1-05 待补，不阻断阶段闸口。

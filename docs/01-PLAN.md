@@ -120,3 +120,24 @@
 2. 两段式评审无 Critical；
 3. 可安装 `.signed.dbxp` 产出且验签通过；
 4. 用户明确验收 P1（D1 分批验收）。
+
+---
+
+## 实施偏差登记（P1 收尾补记）
+
+本文件保留为当时的计划原文；下表记录与实际实现的差异，证据见
+`docs/P1-ACCEPTANCE.md`。规格变更同步回写了 `docs/00-SPEC.md` §11。
+
+| 任务 | 计划 | 实际 |
+|---|---|---|
+| 前置约束 | 「本阶段不启动真实 ES」（可用 1.61 GB） | 用户关闭 Chrome / PyCharm 后可用 3.33 GB，按 D2 启动真实 ES 8.19.23，真实集成 11 项全通 |
+| T13 | `backend/cmd/es-studio-sidecar/main.go` | `backend/main.go`（官方 dev host 在 backend 根 go build） |
+| T14 | `executable: bin/windows-x64/es-studio-sidecar.exe` | `bin/es-studio-sidecar`；CLI 打包自动落平台子目录，包内回归断言通过 |
+| T15/T16 | `scripts/mock-es.py` + 浏览器控制台检查 | 真实 ES + `scripts/dev-host-check.mjs`（24/24）；浏览器人工检查因内存 1.56 GB 留给阶段验收 |
+| T16 | 直接 `dbx-plugin dev --path . --port 5190` | `npm run dev`（Windows 扩展长度路径兼容层）；`npm run dev:check` 做端到端断言 |
+| T17 | `sign-package.py --verify` 需指定 key id | `--verify` 自动从 `signature.json` 推断 key id |
+| T17 | 包内回归为手工命令 | 新增 `scripts/verify-package.py`（15 项断言 + Node crypto 交叉验签 + 解出包内 exe） |
+| T7/T9/T11 | `go test -race` | 本机无 CGO / C 工具链，未执行；普通 `go test` / `go vet` 全绿（P1-05 待补） |
+
+新增文件：`scripts/dev.mjs`、`scripts/dev-host.mjs`、`scripts/dev-host-check.mjs`、
+`scripts/verify-package.py`、`docs/P1-ACCEPTANCE.md`、`README.md`。

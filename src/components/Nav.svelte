@@ -1,0 +1,76 @@
+<script lang="ts">
+  import type { NavGroup } from "../lib/stores";
+
+  interface Props {
+    groups: NavGroup[];
+    active: string;
+    onselect: (id: string) => void;
+  }
+  let { groups, active, onselect }: Props = $props();
+</script>
+
+<nav aria-label="ES Studio navigation">
+  {#each groups as group (group.id)}
+    <section>
+      <h2>{group.label}</h2>
+      {#each group.items as item (item.id)}
+        {#if item.enabled}
+          <button
+            type="button"
+            class:active={active === item.id}
+            aria-current={active === item.id ? "page" : undefined}
+            onclick={() => onselect(item.id)}
+          >
+            <span>{item.label}</span>
+          </button>
+        {:else}
+          <div class="pending" aria-disabled="true" title="Planned for {item.phase}">
+            <span>{item.label}</span><span class="phase">{item.phase}</span>
+          </div>
+        {/if}
+      {/each}
+    </section>
+  {/each}
+</nav>
+
+<style>
+  nav { padding: 10px 8px 24px; }
+  section { margin-bottom: 10px; }
+  h2 {
+    margin: 12px 10px 4px;
+    color: var(--es-muted);
+    font-size: 10px;
+    font-weight: 700;
+    letter-spacing: 0.09em;
+    text-transform: uppercase;
+  }
+  button, .pending {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    width: 100%;
+    padding: 6px 10px;
+    border: 0;
+    border-radius: 6px;
+    background: transparent;
+    color: var(--es-text);
+    text-align: left;
+    line-height: 1.5;
+  }
+  button { cursor: pointer; }
+  button:hover { background: var(--es-surface-2); }
+  button.active {
+    background: var(--es-accent-soft);
+    color: var(--es-accent);
+    font-weight: 600;
+  }
+  .pending { color: var(--es-muted); cursor: not-allowed; }
+  .phase {
+    font-family: var(--es-mono);
+    font-size: 10px;
+    color: var(--es-muted);
+    border: 1px solid var(--es-border);
+    border-radius: 4px;
+    padding: 0 4px;
+  }
+</style>
