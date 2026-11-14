@@ -1,0 +1,18 @@
+# build artifacts
+/dist/
+/bin/
+/ui/
+/node_modules/
+/.dbx-dev/
+/.svelte-kit/
+
+# local test cluster & caches (all on D:)
+/.test-run/
+/scripts/__pycache__/
+**/__pycache__/
+*.log
+*.pyc
+
+# signing material — never commit, never package
+.dbx-repository-signing-key.env
+*.signed.artifact.json
