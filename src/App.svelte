@@ -25,6 +25,8 @@
   import ClusterMetrics from "./pages/ClusterMetrics.svelte";
   import NodeMetrics from "./pages/NodeMetrics.svelte";
   import History from "./pages/History.svelte";
+  import Diagnostics from "./pages/Diagnostics.svelte";
+  import Compare from "./pages/Compare.svelte";
   import { ready } from "./lib/bridge";
   import type { DbxBridge, ConnectionSummary } from "./lib/bridge";
   import { listConnections } from "./lib/api";
@@ -99,7 +101,7 @@
       onchange={changeConnection}
     />
     <div class="spacer"></div>
-    <span class="phase-chip">P3 · Governance & Ops</span>
+    <span class="phase-chip">P4 · Monitor & Diagnose</span>
   </header>
 
   <div class="shell">
@@ -162,6 +164,10 @@
           <NodeMetrics bridge={bridge} connectionId={activeId} />
         {:else if page === "history"}
           <History bridge={bridge} connectionId={activeId} />
+        {:else if page === "diagnostics"}
+          <Diagnostics bridge={bridge} connectionId={activeId} />
+        {:else if page === "compare"}
+          <Compare bridge={bridge} connectionId={activeId} connections={connections} />
         {/if}
       {/if}
     </main>

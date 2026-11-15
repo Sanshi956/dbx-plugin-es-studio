@@ -13,17 +13,17 @@ export type { EsResult } from "./api";
 // small parsing helpers (defensive: ES field names vary across versions)
 // ---------------------------------------------------------------------------
 
-function record(value: unknown): Record<string, unknown> {
+export function record(value: unknown): Record<string, unknown> {
   return value !== null && typeof value === "object" && !Array.isArray(value)
     ? (value as Record<string, unknown>)
     : {};
 }
 
-function str(value: unknown): string {
+export function str(value: unknown): string {
   return typeof value === "string" ? value : value === undefined || value === null ? "" : String(value);
 }
 
-function num(value: unknown): number {
+export function num(value: unknown): number {
   // `_cat/*` returns every field as a string ("2", "12915", "0.19"), so a
   // number-only check silently turned docs / store / cpu / heap into 0.
   if (typeof value === "number") return Number.isFinite(value) ? value : 0;
@@ -37,7 +37,7 @@ function num(value: unknown): number {
 }
 
 /** Read a cat-API dotted key or a nested object key without crashing. */
-function cat(value: Record<string, unknown>, ...keys: string[]): unknown {
+export function cat(value: Record<string, unknown>, ...keys: string[]): unknown {
   let current: unknown = value;
   for (const key of keys) {
     const obj = record(current);

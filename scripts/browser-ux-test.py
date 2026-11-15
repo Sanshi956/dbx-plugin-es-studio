@@ -7,6 +7,8 @@ Covers, against the REAL cluster (via scripts/browser-bridge.mjs + real Chrome):
   Aliases             查询/操作分区、新建表单补齐 filter+routing+is_*、非法 JSON 拦截、Filter 列 tooltip
   Cluster Settings    设置项可选（datalist）+ 值候选随类型动态变化 + 仍可自填 + 当前生效值
   Monitoring (P4)     打开即采集、四张图有折线、立即采样真的加点、间隔切换、节点图与 History 落盘
+  Diagnostics (P4-b)  打开即出结论、依据带真实数字、阈值改小立即命中、关规则结论消失、恢复默认
+  Compare (P4-b)      默认对比第二连接、差异行标记、两侧真实值、CSV 导出
   Index List          按索引名过滤、关闭索引只给 Open / 打开索引只给 Close
   Templates           View 用弹层展示（不再需要滚到页尾），Esc 关闭
   Snapshots           索引用 chips 多选，选中态与计数正确
@@ -21,12 +23,41 @@ import argparse
 import json
 import os
 import re
+import socket
+import subprocess
+import sys
 import time
 from pathlib import Path
 
 from playwright.sync_api import sync_playwright
 
 CHROME = r"C:/Program Files/Google/Chrome/Application/chrome.exe"
+MOCK_PORT = 19921
+
+
+def ensure_mock_cluster(port=MOCK_PORT):
+    """Start scripts/mock-cluster.py if nothing is listening (Compare's right side).
+
+    The bridge routes the `local-es-mirror` fixture connection to
+    ES_URL_MIRROR, which is expected to point here. One local ES is all this
+    machine can hold, so the second cluster is a test double.
+    """
+    def listening():
+        with socket.socket() as sock:
+            return sock.connect_ex(("127.0.0.1", port)) == 0
+
+    if listening():
+        return None
+    script = Path(__file__).with_name("mock-cluster.py")
+    proc = subprocess.Popen(
+        [sys.executable, str(script), "--port", str(port)],
+        stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+    )
+    for _ in range(60):
+        time.sleep(0.1)
+        if listening():
+            break
+    return proc
 
 
 def wait_text(page, text, timeout=20000):
@@ -42,6 +73,15 @@ def click_nav(page, label):
 
 
 def run(base_url, out_dir):
+    mock = ensure_mock_cluster()
+    try:
+        return _run(base_url, out_dir)
+    finally:
+        if mock is not None:
+            mock.terminate()
+
+
+def _run(base_url, out_dir):
     out = Path(out_dir)
     out.mkdir(parents=True, exist_ok=True)
     results = []
@@ -495,6 +535,78 @@ def run(base_url, out_dir):
         except Exception as e:
             shot("ux-history-FAIL")
             check("History 列出已落盘的采样点", False, e)
+
+        # ------------------------------------------------------- Diagnostics (P4-b)
+        try:
+            click_nav(page, "Cluster Diagnostics")
+            page.wait_for_selector("table.findings tbody tr", timeout=30000)
+            body_text = page.inner_text("main")
+            findings = page.locator("table.findings tbody tr")
+            check("Diagnostics 打开即给出结论", findings.count() >= 1, findings.count())
+            check("结论依据带真实快照数字（未分配/活跃分片）",
+                  re.search(r"未分配分片 \d+|活跃分片 \d+", body_text) is not None, body_text[:160])
+            summary = page.inner_text("section.summary")
+            check("摘要卡片统计命中数（警告非 0）", re.search(r"警告\s*[1-9]", summary) is not None, summary[:80])
+
+            page.click('main button:has-text("规则")')
+            page.wait_for_selector("section.rules tbody tr", timeout=10000)
+            rule_rows = page.locator("section.rules tbody tr").count()
+            check("规则面板列出全部规则", rule_rows >= 13, rule_rows)
+
+            # Threshold: local disk is ~82% used, so 50% must produce a finding
+            # that 85% does not. Same snapshot, no second round-trip.
+            disk_row = page.locator("section.rules tbody tr", has_text="磁盘接近水位线")
+            disk_row.locator("input.num").fill("50")
+            disk_row.locator("input.num").dispatch_event("input")
+            page.wait_for_timeout(500)
+            low_hit = page.locator("table.findings tbody tr", has_text="磁盘接近水位线").count()
+            check("调低磁盘阈值后立即多出一条结论（无需重新采集）", low_hit >= 1, low_hit)
+            disk_row.locator("input.num").fill("85")
+            disk_row.locator("input.num").dispatch_event("input")
+            page.wait_for_timeout(500)
+            high_hit = page.locator("table.findings tbody tr", has_text="磁盘接近水位线").count()
+            check("调回 85% 后该结论消失", high_hit == 0, high_hit)
+
+            page.locator("section.rules tbody tr", has_text="单节点集群仍配置副本").locator(
+                "input[type=checkbox]").uncheck()
+            page.wait_for_timeout(500)
+            single_off = page.locator("table.findings tbody tr", has_text="单节点集群仍配置副本").count()
+            check("关闭某条规则后它的结论消失", single_off == 0, single_off)
+            page.click('main button:has-text("恢复默认")')
+            page.wait_for_timeout(600)
+            single_back = page.locator("table.findings tbody tr", has_text="单节点集群仍配置副本").count()
+            check("「恢复默认」把规则恢复回来", single_back == 1, single_back)
+            checked_count = page.locator("section.rules input[type=checkbox]:checked").count()
+            check("恢复默认后所有规则重新启用", checked_count == rule_rows, f"{checked_count}/{rule_rows}")
+            shot("ux-diagnostics")
+        except Exception as e:
+            shot("ux-diagnostics-FAIL")
+            check("Diagnostics 打开即给出结论", False, e)
+
+        # ---------------------------------------------------- Multi-Cluster Compare
+        try:
+            click_nav(page, "Multi-Cluster Compare")
+            page.wait_for_selector("table.diff tbody tr", timeout=40000)
+            head = page.inner_text("div.meta")
+            check("对比默认选中第二个连接并完成对比", "vs" in head, head[:120])
+            diff_rows = page.locator("table.diff tbody tr.diff").count()
+            check("差异行被标记（tr.diff）", diff_rows >= 5, diff_rows)
+            table_text = page.inner_text("table.diff")
+            check("版本按两侧真实值分别展示",
+                  re.search(r"8\.19\.\d+", table_text) is not None and "8.15.0" in table_text, table_text[:160])
+            check("节点数按两侧真实值分别展示", re.search(r"节点数\s*1\s*2", table_text) is not None, table_text[:200])
+            check("统计栏给出差异计数", re.search(r"\d+ 项不同", head) is not None, head[:120])
+
+            page.click('button:has-text("复制 CSV")')
+            page.wait_for_timeout(800)
+            csv_ready = "已复制" in page.inner_text("div.page") or page.locator("textarea.csv").count() == 1
+            check("对比结果可导出（复制或展开文本）", csv_ready)
+            if page.locator("textarea.csv").count() == 1:
+                check("CSV 含两侧集群名", "es-mirror-remote" in page.locator("textarea.csv").input_value())
+            shot("ux-compare")
+        except Exception as e:
+            shot("ux-compare-FAIL")
+            check("对比默认选中第二个连接并完成对比", False, e)
 
         # --------------------------------------------------------- REST Console
         try:

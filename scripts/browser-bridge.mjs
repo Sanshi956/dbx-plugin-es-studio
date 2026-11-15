@@ -18,6 +18,11 @@ import { fileURLToPath } from "node:url";
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const root = resolve(__dirname, "..");
 const ES_URL = process.env.ES_URL || "http://127.0.0.1:19200";
+// The `local-es-mirror` fixture connection points here. scripts/mock-cluster.py
+// serves a deliberately different cluster so Multi-Cluster Compare has a real
+// second side to diff against (one local ES is all this machine can hold).
+const ES_URL_MIRROR = process.env.ES_URL_MIRROR || ES_URL;
+const MIRROR_CONNECTION = "local-es-mirror";
 const READ_ONLY = process.env.READ_ONLY === "1";
 const PORT = parseInt(process.env.BRIDGE_PORT || "5199", 10);
 const SIDECAR = resolve(root, "bin", "es-studio-sidecar.exe");
@@ -76,7 +81,11 @@ const bridgeScript = `<script>
   function rpc(method, params){
     return fetch('/rpc',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({method:method,params:params||{}})}).then(function(r){return r.json();});
   }
+  // host.storage persists across app restarts in DBX; sessionStorage is the
+  // closest faithful stand-in here (survives reload, dies with the tab) so that
+  // "settings stick" can actually be asserted.
   var storageMem = {};
+  function storageKey(k){ return 'dbxshim:' + k; }
   window.dbxPlugin = {
     ready: Promise.resolve({ connectionId: 'local-es', providerId:'es.studio', connectionType:'elasticsearch' }),
     context: { connectionId: 'local-es', providerId:'es.studio', connectionType:'elasticsearch' },
@@ -90,13 +99,33 @@ const bridgeScript = `<script>
       });
     },
     getConnections: function(){
-      return Promise.resolve([{ id:'local-es', name:'Local ES (test)', label:'Local ES (test)', dbType:'elasticsearch', dialect:'elasticsearch', connected:true, readOnly: READ_ONLY }]);
+      // The second entry is a fixture for Multi-Cluster Compare: this bridge only
+      // reaches one real cluster, so comparing against it proves the diff path
+      // renders "everything identical" instead of inventing differences.
+      return Promise.resolve([
+        { id:'local-es', name:'Local ES (test)', label:'Local ES (test)', dbType:'elasticsearch', dialect:'elasticsearch', connected:true, readOnly: READ_ONLY },
+        { id:'local-es-mirror', name:'Local ES (mirror)', label:'Local ES (mirror)', dbType:'elasticsearch', dialect:'elasticsearch', connected:true, readOnly: READ_ONLY }
+      ]);
     },
     listConnections: function(){ return this.getConnections(); },
     storage: {
-      get: function(k){ return Promise.resolve(k in storageMem ? storageMem[k] : null); },
-      set: function(k,v){ storageMem[k]=v; return Promise.resolve(); },
-      delete: function(k){ delete storageMem[k]; return Promise.resolve(); }
+      get: function(k){
+        try {
+          var raw = sessionStorage.getItem(storageKey(k));
+          if (raw !== null) return Promise.resolve(JSON.parse(raw));
+        } catch (e) { /* fall through to memory */ }
+        return Promise.resolve(k in storageMem ? storageMem[k] : null);
+      },
+      set: function(k,v){
+        storageMem[k] = v;
+        try { sessionStorage.setItem(storageKey(k), JSON.stringify(v)); } catch (e) { /* memory only */ }
+        return Promise.resolve();
+      },
+      delete: function(k){
+        delete storageMem[k];
+        try { sessionStorage.removeItem(storageKey(k)); } catch (e) { /* ignore */ }
+        return Promise.resolve();
+      }
     },
     onContext: function(fn){ return function(){}; },
     workbench: { setTitle: function(){ return Promise.resolve(); } }
@@ -117,7 +146,8 @@ const server = createServer((req, res) => {
         // Methods that need to reach Elasticsearch get the direct override;
         // mon/* does too, because the collector talks to ES itself.
         if (["es/request", "es/batch", "mon/start", "mon/sample"].includes(method)) {
-          p.direct = { url: ES_URL, read_only: READ_ONLY };
+          const url = p.connection_id === MIRROR_CONNECTION ? ES_URL_MIRROR : ES_URL;
+          p.direct = { url, read_only: READ_ONLY };
         }
         const out = await sidecarCall(method, p);
         res.writeHead(200, { "Content-Type": "application/json" });

@@ -11,7 +11,7 @@ P4 一次交付会有 3 个导航项 + 一套新存储 + 一套新 RPC，验收�
 | 子阶段 | 内容 | 状态 |
 |---|---|---|
 | **P4-a** | Cluster Metrics / Node Metrics / History（周期采集 + 落盘 + 图表） | 本轮交付，等验收 |
-| **P4-b** | Cluster Diagnostics（可配置规则引擎）/ Multi-Cluster Compare（diff 导出） | **验收通过后再做** |
+| **P4-b** | Cluster Diagnostics（可配置规则引擎）/ Multi-Cluster Compare（diff 导出） | 已交付（0.3.1），等验收 |
 
 采集方式用户选定：**Go 后台周期采集**（Sidecar 内 goroutine 按间隔采集并落盘，页面只读序列），
 并接受为此新增 Go RPC 方法。
@@ -81,7 +81,49 @@ SQLite → **JSONL 追加文件**（`backend/internal/storage/series.go`）：
 5. 签名包可安装 + `verify-package` 全 PASS + 包内 exe smoke 全绿；
 6. 用户确认后才进 P4-b（D1 分批验收）。
 
-## 6. P4-b 待办（本轮不做）
+## 6. P4-b 实施（0.3.1，已交付）
 
-- **Cluster Diagnostics**：确定性规则引擎，规则可配置（阈值/开关/严重级别），只给建议不自动修复（SPEC §5.6）。
-- **Multi-Cluster Compare**：两个连接的关键指标 diff（版本/节点数/分片/副本/容量/设置差异），可导出。
+同样**不新增 Go RPC**：诊断与对比都是「读一次 → 本地算」，`mon/*` 仍是 P4 唯一的架构例外。
+
+### 6.1 Cluster Diagnostics（`src/lib/diagnostics.ts` + `Diagnostics.svelte`）
+
+一次 `es/batch` 取快照：`/_cluster/health`、`/_cat/nodes?h=name,node.role,master,heap.percent,cpu,disk.used_percent`、
+`/_all/_settings?name=index.number_of_replicas,index.refresh_interval,index.blocks.*`、
+`/_cat/shards?h=...,unassigned.reason`、`/_cluster/settings?flat_settings`、`/_ilm/status`（缺失即视为不可用）。
+
+13 条确定性规则：`health-red`、`health-yellow`、`unassigned-shards`、`single-node-replicas`、
+`replicas-exceed-nodes`、`disk-watermark`、`heap-pressure`、`cpu-saturation`、`shards-per-node`、
+`ilm-stopped`、`refresh-disabled`、`write-blocked`、`delayed-unassigned`。
+
+- `evaluate(snapshot, configs)` 是**纯函数**：同一快照 + 同一配置 ⇒ 同一结论；
+- 4 条带阈值（磁盘 85 / 堆 85 / CPU 90 / 每节点分片 600），改阈值**立即重算**，不重新采集；
+- 开关与阈值存 `host.storage`（key `es.studio.diagnostics.rules`），有「恢复默认」；
+- 只输出「结论 / 依据 / 建议」，不提供任何自动修复按钮（SPEC §5.6）。
+
+### 6.2 Multi-Cluster Compare（`src/lib/compare.ts` + `Compare.svelte`）
+
+每侧 4 个只读请求：`/_cluster/health`、`/_cluster/stats`、`/_cat/nodes?h=name,node.role,master,heap.percent`、
+`/_cluster/settings?flat_settings`。归约成 `ClusterFacts`，再 `diffFacts` 出 22 行（概览 / 节点 / 分片与容量 / 关键设置）。
+
+- `same` 由**原始值**比较得出，展示串只负责格式化 —— 格式化永不制造假差异；
+- 关键设置行在未显式设置时按 ES 默认值展示（`all` / `85%` / `90%` / `95%` / `false` / `1000`）并标注来源 key；
+- 第二连接必须是**已连接会话**（Sidecar 里没有它的会话就报 `connection is not connected`），
+  页面把该错误翻成「先在 DBX 连接树里打开该连接」，不整页报错；
+- `toCsv(rows, 左标签, 右标签)` 导出，剪贴板被拒时展开文本框兜底。
+
+### 6.3 任务拆分与验收
+
+| # | 任务 | 验收 |
+|---|---|---|
+| P4b-1 | `diagnostics.ts` 规则表 + 快照 + 纯函数评估 + 配置归一化 | 阈值/开关改动即时生效 |
+| P4b-2 | `Diagnostics.svelte` 摘要 + 结论表 + 规则面板 | 真实集群命中 3 条（黄灯 / 未分配 / 单节点副本） |
+| P4b-3 | `compare.ts` 事实归约 + diff + CSV | 两侧真实差异 17 项、相同 5 项 |
+| P4b-4 | `Compare.svelte` 选连接 + 差异高亮 + 导出 | 差异行带 `tr.diff` 标记 |
+| P4b-5 | 导航启用 + 路由 + 版本 0.3.1 | 22 个导航项全部可用 |
+| P4b-6 | 浏览器实测（ux 90/90）+ 打包签名 | 见 `docs/P4B-ACCEPTANCE.md` |
+
+### 6.4 已知限制
+
+- 本机只能跑一个 ES，对比的「右侧」在测试里由 `scripts/mock-cluster.py`（测试替身）提供；
+  页面不区分真假集群，走的还是真实 `es/batch` 路径。
+- 对比只看**集群级事实**，不做索引级逐条 diff（索引数可能上百，逐条 diff 需要另做过滤 UI）。

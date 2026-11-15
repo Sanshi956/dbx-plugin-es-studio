@@ -52,10 +52,10 @@ export const NAV_GROUPS: NavGroup[] = [
       { id: "history", label: "History", phase: "P4", enabled: true },
     ],
   },
-  { id: "diagnostics", label: "Diagnostics", items: [{ id: "diagnostics", label: "Cluster Diagnostics", phase: "P4", enabled: false }] },
+  { id: "diagnostics", label: "Diagnostics", items: [{ id: "diagnostics", label: "Cluster Diagnostics", phase: "P4", enabled: true }] },
   { id: "snapshots", label: "Snapshots", items: [{ id: "snapshots", label: "Snapshots", phase: "P3", enabled: true }] },
   { id: "tasks", label: "Tasks", items: [{ id: "tasks", label: "Tasks", phase: "P3", enabled: true }] },
-  { id: "compare", label: "Compare", items: [{ id: "compare", label: "Multi-Cluster Compare", phase: "P4", enabled: false }] },
+  { id: "compare", label: "Compare", items: [{ id: "compare", label: "Multi-Cluster Compare", phase: "P4", enabled: true }] },
   { id: "mcp", label: "MCP", items: [{ id: "mcp", label: "MCP Tool Service", phase: "P5", enabled: false }] },
 ];
 
