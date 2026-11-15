@@ -470,7 +470,7 @@ export const zhCN: Record<string, string> = {
   "tpl.norm.priority": "priority 改为 order",
   "tpl.norm.composedOf": "移除 composed_of（仅组合模板支持）",
   "tpl.norm.typed": "mappings 嵌套到 _doc（6.x 要求）",
-  "tpl.norm.untyped": "mappings 从 _doc 解包（8.x 起不允许类型层）",
+  "tpl.norm.untyped": "mappings 从 _doc 解包（7.x 起不允许类型层）",
   "tpl.toast.written": "已写入 {kind} 模板 {name}",
   "tpl.toast.deleted": "已删除 {kind} 模板 {name}",
   "tpl.confirm.deleteTitle": "删除索引模板",

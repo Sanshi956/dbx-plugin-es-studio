@@ -1,13 +1,30 @@
 # ES Studio
 
-DBX 内的专业 Elasticsearch 管理工作台插件。插件 ID `local.es.studio`，版本 `0.2.2`。
+DBX 内的专业 Elasticsearch 管理工作台插件。插件 ID `local.es.studio`，版本 `0.5.0`。
 
-当前完成 **P1 · 插件基础设施**、**P2 · 日常运维**（集群/节点/分片/索引/别名/文档/查询/DSL/Analyzer/REST）与
-**P3 · 治理与运维**（Allocation/Cluster Settings/Templates/Component Templates/Data Streams/Lifecycle/
-Query Profiler/Snapshots/Tasks），共 17 个导航项可用；P4–P5 项仍在 UI 中标注阶段而非装饰性按钮。
+已完成 **P1 · 插件基础设施**、**P2 · 日常运维**、**P3 · 治理与运维**、**P4 · 观测与诊断**、
+**P5 · MCP 工具服务** 与 **P6 · 国际化 + 多版本兼容**，共 **25 个导航项**全部可用（无占位按钮）。
 
 > 规格与实施计划见 `docs/00-SPEC.md`、`docs/01-PLAN.md`；各阶段验收结论见
-> `docs/P1-ACCEPTANCE.md`、`docs/P2-ACCEPTANCE.md`、`docs/P3-ACCEPTANCE.md`。
+> `docs/P1-ACCEPTANCE.md` … `docs/P6-ACCEPTANCE.md`。
+
+## 支持版本
+
+接口形状与页面渲染在真实发行版上实测过（非推断）：
+
+| ES 版本 | 结果 |
+|---|---|
+| 6.8.23 | 全页渲染，ILM/组件模板/数据流/组合模板按版本门控并说明原因；传统 `_template` 需 `mappings._doc` |
+| 7.0.1 / 7.7.1 | 全页渲染；`_index_template`/组件模板/数据流为 400（7.8/7.9 起才存在），页面显示门控说明 |
+| 7.17.29 | 全功能（组合模板/组件模板/数据流/快照） |
+| 8.19.23 / 9.5.4 | 全功能，基线回归版本 |
+
+能力矩阵按 API 引入版本判定（ILM 6.6 / 组件模板 7.8 / 数据流 7.9 / PIT 7.10 / ES\|QL 8.11），
+低于门限的功能不发送请求，直接显示「此集群为 X，需要 Y 或更高版本」。细节见
+`docs/P6-ACCEPTANCE.md` §2、§4。
+
+> **Easysearch / OpenSearch 未做版本语义适配**：两者的版本号规则与 ES 不同，
+> 上述矩阵仅对 Elasticsearch 成立。
 
 ## 架构
 
@@ -23,7 +40,8 @@ Elasticsearch 7.x / 8.x / 9.x · Easysearch · OpenSearch
 
 - 前端在隔离 iframe 内，**不直连 ES**；所有请求经 Sidecar，凭据只在 host lifecycle hydration 时进入后端。
 - 凭据字段一律 `json:"-"`，不进响应、事件、错误文本或日志。
-- UI 主题只用 `src/styles/tokens.css` 的 `--es-*` 变量映射到宿主注入的 `--dbx-*`。
+- UI 主题只用 `src/styles/tokens.css` 的 `--es-*` 变量映射到宿主注入的 `--dbx-*`；
+  **界面语言与字号跟随 DBX**（宿主发 `env` 即全量重渲染，字号由 `--dbx-font-size` 驱动，全项目无 `px` 常量）。
 - Go SDK 已 vendor 到 `backend/internal/dbxpluginsdk/`，离线可编译。
 
 ## 环境要求
@@ -34,7 +52,7 @@ Elasticsearch 7.x / 8.x / 9.x · Easysearch · OpenSearch
 | `@dbx-app/plugin-cli` | 0.1.10（全局） |
 | Go | 1.22.12，`D:/software/dev/Go/go/bin` |
 | Python | `D:/software/dev/Python/Python313/python.exe`（脚本用） |
-| 本地 ES（可选，集成测试） | `D:/software/dev/elasticsearch-8.19.23-windows-x86_64` |
+| 本地 ES（可选，集成测试） | `D:/software/dev/elasticsearch/elasticsearch-8.19.23` |
 
 所有缓存、构建产物、ES 数据与日志都落在 D 盘，不写 C 盘大文件。
 
@@ -86,14 +104,14 @@ export PATH="/d/software/dev/Go/go/bin:$PATH"
 "D:/software/dev/Python/Python313/python.exe" scripts/check-manifest.py
 dbx-plugin package .                     # 产出未签名审核候选包，直接装会被 DBX 拒绝
 "D:/software/dev/Python/Python313/python.exe" scripts/sign-package.py \
-    --package dist/local.es.studio-0.1.0-windows-x64.dbxp \
+    --package dist/local.es.studio-0.5.0-windows-x64.dbxp \
     --key-id local.es.studio.release      # 产出 .signed.dbxp 并注册本机公钥
 
 "D:/software/dev/Python/Python313/python.exe" scripts/sign-package.py --verify \
-    --package dist/local.es.studio-0.2.2-windows-x64.signed.dbxp
-"D:/software/dev/Python/Python313/python.exe" scripts/verify-package.py
+    --package dist/local.es.studio-0.5.0-windows-x64.signed.dbxp
+"D:/software/dev/Python/Python313/python.exe" scripts/verify-package.py --package dist/local.es.studio-0.5.0-windows-x64.signed.dbxp
 "D:/software/dev/Python/Python313/python.exe" scripts/check-manifest.py \
-    --package dist/local.es.studio-0.2.2-windows-x64.signed.dbxp
+    --package dist/local.es.studio-0.5.0-windows-x64.signed.dbxp
 ```
 
 安装 `dist/*.signed.dbxp` 到 DBX 插件中心。签名私钥文件
@@ -107,7 +125,7 @@ dbx-plugin package .                     # 产出未签名审核候选包，直�
 
 DBX 只提供「插件中心 → 设置 → 从 URL 安装」入口（本机无「从文件安装」按钮）；
 本机验证时在 `dist/` 起一个临时 HTTP 服务（`python -m http.server`），把
-`http://127.0.0.1:19321/local.es.studio-0.2.2-windows-x64.signed.dbxp` 填进 URL 框。
+`http://127.0.0.1:19321/local.es.studio-0.5.0-windows-x64.signed.dbxp` 填进 URL 框。
 下载后必须先在「已安装」里卸载旧版（同版本号不允许覆盖），再重装。
 
 **打开工作台有两种路径，结果不同：**
@@ -137,10 +155,8 @@ DBX 只提供「插件中心 → 设置 → 从 URL 安装」入口（本机无�
 | `go test -race` | 本机未启用 CGO / 无对应 C 工具链，暂未执行；普通 `go test` 与 `go vet` 全绿 |
 | dev host 连接列表 | 官方 mock host 的 `host.getConnections()` 恒返回 `Mock Connection / sqlite`；UI 以 `context.connectionId` 为准并补一项占位，真实 DBX 不受影响 |
 | 浏览器人工验收 | 已在本机真实 DBX 中代验：URL 安装 → 新建连接 → Test Connection → 连接树打开工作台显示真实指标；dev host `host.getConnections()` 仍恒返回 `Mock Connection / sqlite`，UI 以 `context.connectionId` 兜底，真实 DBX 不受影响 |
-| 未实现页面 | 导航中 P2–P5 条目禁用并标注阶段，属计划内范围，非缺失功能 |
 | 包目标平台 | `dbx-plugin package` 只产当前平台（本机 windows-x64），且永远是未签名候选包 |
 
-P1 验收通过后才会进入 P2（集群拓扑、节点、分片、索引、文档、Query Studio、REST Console、Analyzer）。
 
 ## 目录
 

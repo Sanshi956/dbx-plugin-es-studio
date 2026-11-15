@@ -18,7 +18,7 @@
 
 ### 机制要点
 
-- **一处文案一个键**:`zh-CN.ts` / `en.ts` 各 960 键,键集一致(脚本比对);
+- **一处文案一个键**:`zh-CN.ts` / `en.ts` 各 1040 键,键集一致(脚本比对);
   缺键回退中文而不是空白。
 - **MCP 工具说明是例外**:中文真源在 Go registry(工具契约),英文放
   `tools.en.ts` 叠加层,`tOr()` 回退到 registry——不让同一句话存在两个真源。
@@ -223,6 +223,21 @@ filter/routing 列正常渲染。
 | check-manifest | 53(含包 107) |
 | verify-package / 签名 | 17/17 / SIGNATURE VALID |
 
+**交付包已重建(2026-11-15 20:3x)**:此前的 `0.5.0` 签名包构建于 17:16,不含 19:47
+落地的四个模板修复(`normalizeLegacyTemplate`/`failureText`/传输失败抛错/门控感知 UI)
+与对应 UI 产物——装了那个包验收会测到旧行为。重建后用**包内 exe** 全量复跑,结论与上表一致:
+smoke 125/125、主回归 23/23、UX **111/111**、写路径 7/7、只读拒绝 4/4、i18n 25+25
+(15px/13px)、verify-package 17/17、包内 manifest 107 项。
+
+> 重建过程中修掉一处**文案与实现不一致**:`tpl.norm.untyped`(传统模板写入时自动解包
+> `_doc` 的 toast)原文写「8.x 起不允许类型层」,实际分界是 **7.0**(`legacyTypedMappings
+> = major < 7`,6.x 必须带、7.x 起必须不带)。已改为「7.x 起不允许类型层」,中英文同步,
+> 并确认包内产物不再含旧措辞。
+
+> UX 复跑首次只有 106/111,5 项失败全在多集群对比段——原因是没起第二集群替身
+> `mock-cluster.py`(19921)与 `ES_URL_MIRROR`,不是回归;补齐后 111/111。
+> 这条要写进复现步骤,否则会被误判成功能坏了。
+
 > 界面语言由英文脚手架改为中文后,三个浏览器脚本的选择器与期望文案同步翻译
 > ——否则会把"文案变了"误判成"功能坏了"。本轮绝大多数调试时间花在这里,
 > 也是 106/106 与 7/7 从 0/18、3/7 涨上来的原因。
@@ -281,3 +296,15 @@ ES_URL=http://127.0.0.1:19213 BRIDGE_PORT=5199 DBX_PLUGIN_DATA_DIR=.dbx-dev/plug
 注意:本机后台起的 ES 会被环境回收,`es-cluster.py start`、`browser-bridge.mjs`
 与被测脚本应在**同一轮**内跑完(`version-probe.py` 自带这个闭环);桥接必须用
 工具级常驻(前台 `&` 起的进程在命令返回后即被回收)。
+
+**跑 UX 套件前必须先起第二集群替身**,否则多集群对比段 5 项会假 FAIL(期望 111/111 却只有 106):
+
+```bash
+python scripts/mock-cluster.py --port 19921        # 后台常驻
+ES_URL=http://127.0.0.1:19200 ES_URL_MIRROR=http://127.0.0.1:19921 \
+  BRIDGE_PORT=5199 node scripts/browser-bridge.mjs # 后台常驻
+# 只读拒绝需要第二个只读桥
+ES_URL=http://127.0.0.1:19200 BRIDGE_PORT=5200 READ_ONLY=1 node scripts/browser-bridge.mjs
+python scripts/browser-ux-test.py  --base-url http://127.0.0.1:5199
+python scripts/browser-write-test.py --rw http://127.0.0.1:5199 --ro http://127.0.0.1:5200
+```

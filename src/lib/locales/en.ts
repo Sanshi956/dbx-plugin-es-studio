@@ -468,7 +468,7 @@ export const en: Record<string, string> = {
   "tpl.norm.priority": "renamed priority to order",
   "tpl.norm.composedOf": "dropped composed_of (composable-only)",
   "tpl.norm.typed": "nested mappings under _doc (required by 6.x)",
-  "tpl.norm.untyped": "removed the _doc type layer (not allowed from 8.x)",
+  "tpl.norm.untyped": "removed the _doc type layer (not allowed from 7.x)",
   "tpl.toast.written": "Wrote {kind} template {name}",
   "tpl.toast.deleted": "Deleted {kind} template {name}",
   "tpl.confirm.deleteTitle": "Delete index template",
