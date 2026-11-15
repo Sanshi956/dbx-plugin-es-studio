@@ -10,20 +10,26 @@ import (
 	"strings"
 
 	"github.com/t8y2/dbx/plugins/sdk/go/dbx-plugin-sdk"
+	"github.com/xihonglei/es-studio/backend/internal/collector"
 	"github.com/xihonglei/es-studio/backend/internal/core/connection"
 	"github.com/xihonglei/es-studio/backend/internal/core/es"
 	"github.com/xihonglei/es-studio/backend/internal/core/permission"
+	"github.com/xihonglei/es-studio/backend/internal/storage"
 )
 
 // Deps wires the shared core engine into the transport. The same core packages
 // are reused by the independent MCP server in P5 (docs/00-SPEC.md D3).
 type Deps struct {
-	Manager *connection.Manager
+	Manager   *connection.Manager
+	Collector *collector.Collector
+	Store     *storage.Store
 }
 
 // Handler is the DBX stdio-jsonl Sidecar adapter (and, later, MCP adapter).
 type Handler struct {
-	manager *connection.Manager
+	manager   *connection.Manager
+	collector *collector.Collector
+	store     *storage.Store
 }
 
 // NewHandler builds the Sidecar handler; it satisfies dbxpluginsdk.Handler.
@@ -32,7 +38,7 @@ func NewHandler(d Deps) *Handler {
 	if manager == nil {
 		manager = connection.NewManager()
 	}
-	return &Handler{manager: manager}
+	return &Handler{manager: manager, collector: d.Collector, store: d.Store}
 }
 
 type callParams struct {
@@ -45,6 +51,9 @@ type callParams struct {
 	Connection   json.RawMessage     `json:"connection"` // present on DBX lifecycle payloads
 	Direct       *connection.Direct  `json:"direct"`
 	Requests     []callParams        `json:"requests"`
+	IntervalSec  int                 `json:"interval_sec"` // mon/start
+	Since        int64               `json:"since"`        // mon/history (unix ms)
+	Limit        int                 `json:"limit"`        // mon/history
 }
 
 // Handle dispatches one JSON-RPC request. Responses never contain credentials:
@@ -77,6 +86,16 @@ func (h *Handler) Handle(
 		return h.connectionDisconnect(params, p)
 	case "connection/action":
 		return h.connectionAction(params)
+	case "mon/start":
+		return h.monStart(p)
+	case "mon/stop":
+		return h.monStop(p)
+	case "mon/status":
+		return h.monStatus(p)
+	case "mon/sample":
+		return h.monSample(p)
+	case "mon/history":
+		return h.monHistory(p)
 	default:
 		return nil, dbxpluginsdk.MethodNotFound(method)
 	}

@@ -22,6 +22,9 @@
   import QueryProfiler from "./pages/QueryProfiler.svelte";
   import Snapshots from "./pages/Snapshots.svelte";
   import Tasks from "./pages/Tasks.svelte";
+  import ClusterMetrics from "./pages/ClusterMetrics.svelte";
+  import NodeMetrics from "./pages/NodeMetrics.svelte";
+  import History from "./pages/History.svelte";
   import { ready } from "./lib/bridge";
   import type { DbxBridge, ConnectionSummary } from "./lib/bridge";
   import { listConnections } from "./lib/api";
@@ -153,6 +156,12 @@
           <Snapshots bridge={bridge} connectionId={activeId} />
         {:else if page === "tasks"}
           <Tasks bridge={bridge} connectionId={activeId} />
+        {:else if page === "cluster-metrics"}
+          <ClusterMetrics bridge={bridge} connectionId={activeId} />
+        {:else if page === "node-metrics"}
+          <NodeMetrics bridge={bridge} connectionId={activeId} />
+        {:else if page === "history"}
+          <History bridge={bridge} connectionId={activeId} />
         {/if}
       {/if}
     </main>

@@ -6,6 +6,7 @@ Covers, against the REAL cluster (via scripts/browser-bridge.mjs + real Chrome):
   Shards & Topology   状态摘要（已就绪/分配中/迁移中/未分配）+ 未分配原因列 + 头部只留一行
   Aliases             查询/操作分区、新建表单补齐 filter+routing+is_*、非法 JSON 拦截、Filter 列 tooltip
   Cluster Settings    设置项可选（datalist）+ 值候选随类型动态变化 + 仍可自填 + 当前生效值
+  Monitoring (P4)     打开即采集、四张图有折线、立即采样真的加点、间隔切换、节点图与 History 落盘
   Index List          按索引名过滤、关闭索引只给 Open / 打开索引只给 Close
   Templates           View 用弹层展示（不再需要滚到页尾），Esc 关闭
   Snapshots           索引用 chips 多选，选中态与计数正确
@@ -19,6 +20,7 @@ Usage:
 import argparse
 import json
 import os
+import re
 import time
 from pathlib import Path
 
@@ -417,6 +419,82 @@ def run(base_url, out_dir):
         except Exception as e:
             shot("ux-cluster-settings-FAIL")
             check("值候选随设置项动态变化（allocation.enable -> all/primaries/new_primaries/none）", False, e)
+
+        # ------------------------------------------------------- Monitoring (P4)
+        try:
+            click_nav(page, "Cluster Metrics")
+            page.wait_for_selector("section.bar .dot", timeout=20000)
+            page.wait_for_function(
+                "() => document.querySelectorAll('.panel svg path.line').length >= 4",
+                timeout=40000,
+            )
+            bar = page.inner_text("section.bar")
+            check("Cluster Metrics 打开即开始采集", "采集中" in bar, bar[:120])
+            paths = page.locator(".panel svg path.line").count()
+            check("四张集群图都画出了折线", paths >= 4, paths)
+
+            cards = page.inner_text("section.cards")
+            check("指标卡显示真实健康与分片数", "yellow" in cards or "green" in cards, cards[:140])
+            heap_card = page.locator("section.cards .card").last.inner_text()
+            heap_match = re.search(r"([\d.]+)%", heap_card)
+            heap_value = float(heap_match.group(1)) if heap_match else 0.0
+            # The first implementation read nodes.jvm.memory instead of
+            # nodes.jvm.mem and silently charted 0% forever.
+            check("集群堆内存百分比来自 _cluster/stats（非 0）", heap_value > 0, heap_card)
+
+            foot_before = page.inner_text("section.bar .foot")
+            before_n = int(re.match(r"(\d+) 点", foot_before).group(1)) if re.match(r"(\d+) 点", foot_before) else 0
+            page.click('button:has-text("立即采样")')
+            page.wait_for_timeout(2500)
+            foot_after = page.inner_text("section.bar .foot")
+            after_n = int(re.match(r"(\d+) 点", foot_after).group(1)) if re.match(r"(\d+) 点", foot_after) else 0
+            check("「立即采样」真的往序列里追加了一个点", after_n > before_n, f"{foot_before} -> {foot_after}")
+
+            page.select_option("section.bar select", "30")
+            page.wait_for_timeout(1500)
+            check("切换采集间隔后采集器重启（30s 生效）",
+                  "30s" in page.inner_text("div.page"), page.inner_text(".toast") if page.locator(".toast").count() else "")
+            page.screenshot(path=str(Path(out_dir) / "ux-cluster-metrics.png"), full_page=True)
+        except Exception as e:
+            shot("ux-cluster-metrics-FAIL")
+            check("四张集群图都画出了折线", False, e)
+
+        try:
+            click_nav(page, "Node Metrics")
+            page.wait_for_function(
+                "() => document.querySelectorAll('.panel svg path.line').length >= 3",
+                timeout=40000,
+            )
+            chips = page.locator("section.bar .chip")
+            check("Node Metrics 用 chips 选节点", chips.count() >= 1, chips.count())
+            chip = chips.first
+            chip.click()
+            page.wait_for_timeout(400)
+            node_rows = page.locator("table tbody tr").count()
+            check("Latest sample 表列出真实节点", node_rows >= 1, node_rows)
+            table = page.inner_text("table")
+            check("节点指标来自 _cat/nodes（堆/CPU/磁盘有真实值）",
+                  re.search(r"\d+%", table) is not None and "—" != table.strip(), table[:160])
+            shot("ux-node-metrics")
+        except Exception as e:
+            shot("ux-node-metrics-FAIL")
+            check("Latest sample 表列出真实节点", False, e)
+
+        try:
+            click_nav(page, "History")
+            page.wait_for_selector("table.hist tbody tr", timeout=30000)
+            hist_rows = page.locator("table.hist tbody tr").count()
+            check("History 列出已落盘的采样点", hist_rows >= 2, hist_rows)
+            check("History 显示序列文件名（证明落在插件 data 目录）",
+                  ".jsonl" in page.inner_text("div.meta"), page.inner_text("div.meta")[:120])
+            page.click('button:has-text("复制 CSV")')
+            page.wait_for_timeout(1000)
+            exported = "已复制" in page.inner_text("div.page") or page.locator("textarea.csv").count() == 1
+            check("History 导出 CSV 有可见结果（复制或展开文本）", exported)
+            shot("ux-history")
+        except Exception as e:
+            shot("ux-history-FAIL")
+            check("History 列出已落盘的采样点", False, e)
 
         # --------------------------------------------------------- REST Console
         try:

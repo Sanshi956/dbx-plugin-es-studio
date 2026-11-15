@@ -114,7 +114,9 @@ const server = createServer((req, res) => {
       try {
         const { method, params } = JSON.parse(body || "{}");
         const p = Object.assign({}, params);
-        if (method === "es/request" || method === "es/batch") {
+        // Methods that need to reach Elasticsearch get the direct override;
+        // mon/* does too, because the collector talks to ES itself.
+        if (["es/request", "es/batch", "mon/start", "mon/sample"].includes(method)) {
           p.direct = { url: ES_URL, read_only: READ_ONLY };
         }
         const out = await sidecarCall(method, p);

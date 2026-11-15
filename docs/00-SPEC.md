@@ -52,12 +52,18 @@ internal/core/*   ← 唯一业务实现（连接、ES client、版本、能力�
 |---|---|
 | 连接配置 / 密码 / API Key / Token | **DBX Secret Store**（`binding:"secret"`），插件不存明文 |
 | UI 偏好：主题、布局、当前连接 ID、展开态 | `window.dbxPlugin.storage`（<1 MiB） |
-| 请求历史 / 收藏 API / 查询历史 / DSL 历史 | Sidecar `DBX_PLUGIN_DATA_DIR`（SQLite） |
-| 监控历史 / 诊断历史 / MCP 调用日志 / 对比报告 | Sidecar `DBX_PLUGIN_DATA_DIR`（SQLite，带保留期与容量上限） |
+| 请求历史 / 收藏 API / 查询历史 / DSL 历史 | Sidecar `DBX_PLUGIN_DATA_DIR`（JSONL 追加文件） |
+| 监控历史 / 诊断历史 / MCP 调用日志 / 对比报告 | Sidecar `DBX_PLUGIN_DATA_DIR`（JSONL 追加文件，带保留期与容量上限） |
 | 缓存、导出临时文件 | Sidecar data dir，**全部位于 D 盘** |
 
 `DBX_PLUGIN_DATA_DIR` 由宿主注入、跨升级保留；SDK 提供 `DataDir()` / `EnsureDataDir()`，首次写入前自行创建。
 监控历史必须**周期采集后自己落库**，不能把 ES 累计计数当时间序列（需求 5.12 明确）。
+
+> **P4 落地修订（2026-11-15，已实施）**：原定 SQLite 改为 **JSONL 追加文件**。
+> 理由：纯 Go SQLite 驱动（`modernc.org/sqlite`）需 vendor ~10 MB 且本项目未启用 CGO；
+> 而 P4 落盘量级是「每分钟一行的日志」，不需要索引与事务。实现见
+> `backend/internal/storage/series.go`：追加写 + 保留期/条数/字节三重上限 + 每 64 次追加压缩一次，
+> 文件可用文本编辑器直读、截断可恢复。诊断历史与对比报告（P4-b）沿用同一存储。
 
 ### 2.3 连接管理（需求 5.1，D4）
 - **权威**：DBX 连接树。连接 CRUD 表单由宿主渲染并拥有生命周期；凭据、TLS、只读标记由宿主管理。

@@ -1761,3 +1761,161 @@ export function classifyOperation(method: string, path: string): OperationRisk {
   }
   return { dangerous: false, kind: "other", label: m, scope: "无状态变更" };
 }
+
+// ---------------------------------------------------------------------------
+// P4 · Monitoring
+//
+// Unlike every other domain here, the series is NOT fetched through es/request:
+// the Sidecar collects it on its own schedule and persists it to the plugin data
+// dir, so the chart keeps filling while the user is on another page. These
+// wrappers therefore call dedicated mon/* RPCs (see backend/internal/transport/
+// monitor.go) and only map snake_case → camelCase.
+// ---------------------------------------------------------------------------
+
+export interface MonitorClusterPoint {
+  status: string;
+  nodes: number;
+  primary: number;
+  active: number;
+  unassigned: number;
+  relocating: number;
+  initializing: number;
+  indices: number;
+  docs: number;
+  storeBytes: number;
+  heapPercent: number;
+  cpuPercent: number;
+  diskFreeBytes: number;
+  diskTotalBytes: number;
+}
+
+export interface MonitorNodePoint {
+  name: string;
+  heapPercent: number;
+  cpuPercent: number;
+  load1: number;
+  diskPercent: number;
+}
+
+export interface MonitorSample {
+  at: number;
+  cluster: MonitorClusterPoint;
+  nodes: Record<string, MonitorNodePoint>;
+}
+
+export interface MonitorStatus {
+  connectionId: string;
+  running: boolean;
+  intervalSec: number;
+  collected: number;
+  lastAt: number;
+  lastError: string;
+  stored: number;
+  bytes: number;
+  file: string;
+}
+
+export interface MonitorHistory {
+  samples: MonitorSample[];
+  count: number;
+  stored: number;
+  firstAt: number;
+  lastAt: number;
+  bytes: number;
+  file: string;
+}
+
+function parseClusterPoint(value: unknown): MonitorClusterPoint {
+  const row = record(value);
+  return {
+    status: str(row.status),
+    nodes: num(row.nodes),
+    primary: num(row.primary),
+    active: num(row.active),
+    unassigned: num(row.unassigned),
+    relocating: num(row.relocating),
+    initializing: num(row.initializing),
+    indices: num(row.indices),
+    docs: num(row.docs),
+    storeBytes: num(row.store_bytes),
+    heapPercent: num(row.heap_percent),
+    cpuPercent: num(row.cpu_percent),
+    diskFreeBytes: num(row.disk_free_bytes),
+    diskTotalBytes: num(row.disk_total_bytes),
+  };
+}
+
+function parseSample(value: unknown): MonitorSample {
+  const row = record(value);
+  const nodes: Record<string, MonitorNodePoint> = {};
+  for (const [name, raw] of Object.entries(record(row.nodes))) {
+    const node = record(raw);
+    nodes[name] = {
+      name: str(node.name) || name,
+      heapPercent: num(node.heap_percent),
+      cpuPercent: num(node.cpu_percent),
+      load1: num(node.load_1m),
+      diskPercent: num(node.disk_percent),
+    };
+  }
+  return { at: num(row.t), cluster: parseClusterPoint(row.cluster), nodes };
+}
+
+export function parseMonitorStatus(value: unknown): MonitorStatus {
+  const row = record(value);
+  return {
+    connectionId: str(row.connection_id),
+    running: row.running === true,
+    intervalSec: num(row.interval_sec),
+    collected: num(row.collected),
+    lastAt: num(row.last_at),
+    lastError: str(row.last_error),
+    stored: num(row.stored),
+    bytes: num(row.bytes),
+    file: str(row.file),
+  };
+}
+
+export async function startMonitor(bridge: DbxBridge, connectionId: string, intervalSec: number): Promise<MonitorStatus> {
+  const res = await invoke<unknown>(bridge, "mon/start", { connection_id: connectionId, interval_sec: intervalSec });
+  return parseMonitorStatus(res);
+}
+
+export async function stopMonitor(bridge: DbxBridge, connectionId: string): Promise<MonitorStatus> {
+  const res = record(await invoke<unknown>(bridge, "mon/stop", { connection_id: connectionId }));
+  return parseMonitorStatus(res.status);
+}
+
+export async function monitorStatus(bridge: DbxBridge, connectionId: string): Promise<MonitorStatus> {
+  const res = record(await invoke<unknown>(bridge, "mon/status", { connection_id: connectionId }));
+  return parseMonitorStatus(res.status);
+}
+
+export async function sampleNow(bridge: DbxBridge, connectionId: string): Promise<MonitorStatus> {
+  const res = record(await invoke<unknown>(bridge, "mon/sample", { connection_id: connectionId }));
+  return parseMonitorStatus(res.status);
+}
+
+export async function fetchMonitorHistory(
+  bridge: DbxBridge,
+  connectionId: string,
+  options: { sinceMs?: number; limit?: number } = {},
+): Promise<MonitorHistory> {
+  const res = record(
+    await invoke<unknown>(bridge, "mon/history", {
+      connection_id: connectionId,
+      since: options.sinceMs ?? 0,
+      limit: options.limit ?? 0,
+    }),
+  );
+  const rows = Array.isArray(res.samples) ? (res.samples as unknown[]) : [];
+  return {
+    samples: rows.map(parseSample),
+    count: num(res.count),
+    stored: num(res.stored),
+    firstAt: num(res.first_at),
+    lastAt: num(res.last_at),
+    bytes: num(res.bytes),
+    file: str(res.file),
+  };
+}

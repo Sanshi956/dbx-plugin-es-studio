@@ -47,9 +47,9 @@ export const NAV_GROUPS: NavGroup[] = [
   { id: "rest", label: "REST Console", items: [{ id: "rest-console", label: "REST Console", phase: "P2", enabled: true }] },
   {
     id: "monitoring", label: "Monitoring", items: [
-      { id: "cluster-metrics", label: "Cluster Metrics", phase: "P4", enabled: false },
-      { id: "node-metrics", label: "Node Metrics", phase: "P4", enabled: false },
-      { id: "history", label: "History", phase: "P4", enabled: false },
+      { id: "cluster-metrics", label: "Cluster Metrics", phase: "P4", enabled: true },
+      { id: "node-metrics", label: "Node Metrics", phase: "P4", enabled: true },
+      { id: "history", label: "History", phase: "P4", enabled: true },
     ],
   },
   { id: "diagnostics", label: "Diagnostics", items: [{ id: "diagnostics", label: "Cluster Diagnostics", phase: "P4", enabled: false }] },

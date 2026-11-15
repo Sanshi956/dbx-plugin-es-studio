@@ -19,8 +19,10 @@ import concurrent.futures
 import http.server
 import json
 import os
+import shutil
 import subprocess
 import sys
+import tempfile
 import threading
 import time
 
@@ -117,10 +119,14 @@ class Sidecar:
     """JSON-RPC client with a reader thread so out-of-order / concurrent
     responses are matched by id (the Go SDK dispatches each call in a goroutine)."""
 
-    def __init__(self, executable):
+    def __init__(self, executable, env_extra=None):
+        env = dict(os.environ)
+        if env_extra:
+            env.update(env_extra)
         self.proc = subprocess.Popen(
             [executable], stdin=subprocess.PIPE, stdout=subprocess.PIPE,
             stderr=subprocess.PIPE, text=True, encoding="utf-8", errors="replace", bufsize=1,
+            env=env,
         )
         self.responses = {}
         self.cv = threading.Condition()
@@ -226,7 +232,10 @@ def main():
     print(f"sidecar: {args.sidecar}")
 
     c = Checks()
-    s = Sidecar(args.sidecar)
+    # Keep the collector's JSONL series out of the shared temp dir: browser tests
+    # run against the same default location and would see smoke samples mixed in.
+    data_dir = tempfile.mkdtemp(prefix="es-studio-smoke-")
+    s = Sidecar(args.sidecar, env_extra={"DBX_PLUGIN_DATA_DIR": data_dir})
     try:
         c.section("SDK protocol")
         r = s.call("plugin/initialize", {"host": {"protocolVersions": [1]}})
@@ -454,10 +463,58 @@ def main():
                         (real_ro("/_tasks?group_by=none&detailed=true").get("result") or {}).get("status") == 200)
                 s.call("connection/disconnect", {"connection_id": "real-es-ro"})
 
+                # ---- P4 monitoring: the sidecar owns a series, it does not just proxy ES ----
+                # These are the first RPCs that keep server-side state (a goroutine plus
+                # a JSONL file), so assert on real cluster numbers and on the file itself.
+                mon = s.call("mon/start", {"connection_id": "real-es", "interval_sec": 10})
+                mstart = mon.get("result") or {}
+                c.check("P4 mon/start reports running", mstart.get("running") is True, str(mon)[:200])
+                c.check("P4 mon/start honours interval_sec", mstart.get("interval_sec") == 10, str(mstart)[:200])
+                c.check("P4 mon/start owns a series file",
+                        str(mstart.get("file") or "").endswith(".jsonl"), str(mstart.get("file"))[:200])
+
+                # The first tick lives in the goroutine, so collect once synchronously:
+                # the assertions below must not depend on scheduler timing.
+                sample = s.call("mon/sample", {"connection_id": "real-es"})
+                sres = (sample.get("result") or {}).get("status") or {}
+                c.check("P4 mon/sample collects synchronously", sres.get("collected", 0) >= 1, str(sample)[:200])
+                c.check("P4 mon/sample leaves no error behind", not sres.get("last_error"), str(sres)[:200])
+
+                hist = s.call("mon/history", {"connection_id": "real-es", "limit": 5}).get("result") or {}
+                c.check("P4 mon/history returns samples", hist.get("count", 0) >= 1, str(hist)[:200])
+                first = (hist.get("samples") or [{}])[0]
+                cluster = first.get("cluster") or {}
+                c.check("P4 mon/history sample carries a real health status",
+                        cluster.get("status") in ("green", "yellow", "red"), str(cluster)[:200])
+                c.check("P4 mon/history sample carries real node counts",
+                        cluster.get("nodes", 0) >= 1 and cluster.get("active", 0) >= 0, str(cluster)[:200])
+                c.check("P4 mon/history sample carries per-node metrics",
+                        len(first.get("nodes") or {}) >= 1, str(first.get("nodes"))[:200])
+                c.check("P4 mon/history reports the stored series",
+                        str(hist.get("file") or "").endswith(".jsonl") and hist.get("stored", 0) >= 1,
+                        str(hist.get("file"))[:200])
+
+                # An over-eager interval must be clamped, not trusted.
+                clamped = s.call("mon/start", {"connection_id": "real-es", "interval_sec": 1}).get("result") or {}
+                c.check("P4 mon/start clamps interval_sec to 5", clamped.get("interval_sec") == 5, str(clamped)[:200])
+                c.check("P4 mon/start rejects a missing connection_id -> -32602",
+                        err_code(s.call("mon/start", {"interval_sec": 10})) == -32602)
+
+                status = (s.call("mon/status", {"connection_id": "real-es"}).get("result") or {}).get("status") or {}
+                c.check("P4 mon/status reports running", status.get("running") is True, str(status)[:200])
+
+                stop = s.call("mon/stop", {"connection_id": "real-es"}).get("result") or {}
+                c.check("P4 mon/stop stops the loop", stop.get("stopped") is True, str(stop)[:200])
+                after = (s.call("mon/status", {"connection_id": "real-es"}).get("result") or {}).get("status") or {}
+                c.check("P4 mon/status is stopped afterwards", after.get("running") is False, str(after)[:200])
+                c.check("P4 samples survive a stop",
+                        (s.call("mon/history", {"connection_id": "real-es", "limit": 5}).get("result") or {}).get("count", 0) >= 1)
+
                 s.call("connection/disconnect", {"connection_id": "real-es"})
     finally:
         s.close()
         mock.shutdown()
+        shutil.rmtree(data_dir, ignore_errors=True)
 
     return c.result()
 
