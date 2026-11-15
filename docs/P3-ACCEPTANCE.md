@@ -273,3 +273,32 @@ rollover 数据流、删除数据流、写集群设置、改副本数 / 路由�
 > 说明：本轮第一次跑只读拒绝时 3 条 FAIL，原因是本地 ES 被外部终止（日志停在 13:46:16、
 > 无 shutdown 记录），只读连接拿不到会话所以错误码不是 -32003。重启 ES 后同一条用例 **6/6** 通过，
 > 属环境问题而非产品回归。
+
+---
+
+## 8. 0.2.3 · 第三轮验收反馈（设置项可选 + 别名参数补齐）
+
+两条反馈都属「不要让用户手填」这一类，与 P2 以来「控件能下拉就不要手输」的约定一致。
+
+### 8.1 逐条处理
+
+| # | 反馈 | 处理 |
+|---|---|---|
+| 1 | Cluster Settings：设置项也配置为可选；值应跟着动态可选；自填要留出来 | 设置项输入框接 `datalist`（29 个常用 `cluster.*` 键 + 当前集群已设置的键），值区按元数据**动态给候选**：枚举给全集（`allocation.enable` → `all/primaries/new_primaries/none`）、布尔给 `true/false`、时间给 `10s/30s/1m/5m`、磁盘水位给 `85%/90%/95%/5gb`、数值项给该设置项的默认值。候选只是快捷方式，**输入框始终可自由填写**；同时给出该键当前生效值（persistent → transient → 默认）与类型标签（语义走 `title`，不进正文）。元数据落在 `src/lib/clusterSettings.ts`，未收录的键按规则推断兜底（`*.enable`→布尔、`*interval/timeout/ttl`→时间、`watermark`→百分比、并发/阈值类→数值）。表格里的设置项名也变成可点击回填 |
+| 2 | Aliases：查询与操作分开、新建别名的其他参数都加上 | 页面拆成两张卡片：`操作 · 新建别名`（左侧强调色条）与 `查询 · 别名列表`（筛选 + 计数 + 表格）。新建表单补齐 `filter`（JSON 校验：非法当场拦下、不进危险确认、不发请求）、`routing` / `index_routing` / `search_routing`、`is_write_index`、`is_hidden`，确认弹层的影响范围会逐项列出实际要写的参数。数据源由 `_cat/aliases` 换成 `GET /_alias`，因此表格能真实渲染 filter、两路 routing 与 hidden —— `_cat` 根本没有 `is_hidden` 列，routing 也只有 `routing.index`/`routing.search` 两列且用 `-` 表示空值 |
+
+### 8.2 验证矩阵（0.2.3）
+
+| 项 | 结果 |
+|---|---|
+| `npm run build` / `svelte-check` | **0 error 0 warning**，单文件 UI |
+| 浏览器体验回归 `browser-ux-test.py` | **63/63**，控制台 0 报错（新增 15 条：别名分区/字段齐全/JSON 拦截/确认范围、设置项 datalist 候选 > 20、候选随设置项切换、点候选回填、当前值、自填不被锁死） |
+| 浏览器主回归 `browser-test.py` | **23/23** |
+| 写路径 `browser-write-test.py` | **7/7**（未启 `TASK_DEMO`；回查真实 ES 状态） |
+| 只读拒绝 | **4/4** |
+| 真实 ES smoke | **89/89** |
+
+> 夹具补充：为验证 filter / routing / hidden 三列的**真实渲染**，测试前置创建了
+> `products → prod-eu`（filter `term.category=display` + `index_routing/search_routing=eu`）与
+> `orders → orders-hidden`（`is_hidden: true`），断言直接读取这两行渲染结果，而不是空态截图。
+

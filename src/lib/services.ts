@@ -444,32 +444,76 @@ export interface AliasRow {
   filter: string;
   /** `_cat/aliases` reports "-" for "not the write index" */
   writeIndex: boolean;
-  routing: string;
+  /** set with `is_hidden: true`; hidden aliases are skipped by wildcards */
+  hidden: boolean;
+  indexRouting: string;
+  searchRouting: string;
 }
 
+/**
+ * Reads `GET /_alias` rather than `_cat/aliases`: the cat API has no column for
+ * `is_hidden`, and it collapses both routings into `routing.index` /
+ * `routing.search` with "-" for empty, which is what made the Filter column
+ * look meaningless.
+ */
 export async function fetchAliases(bridge: DbxBridge, connectionId: string): Promise<AliasRow[]> {
-  const rows = await batch(bridge, connectionId, [{ path: "/_cat/aliases?format=json&h=*" }]);
-  const body = Array.isArray(rows[0]?.body) ? (rows[0].body as unknown[]) : [];
-  // `_cat` uses the literal "-" for "no value"; a filter column showing "-" is
-  // what made the Filter column look meaningless.
-  const clean = (value: unknown): string => {
-    const text = str(value).trim();
-    return text === "-" || text === "null" ? "" : text;
-  };
-  return body.map((entry) => {
-    const a = record(entry);
-    return {
-      alias: clean(a.alias),
-      index: clean(a.index),
-      filter: clean(a.filter),
-      writeIndex: clean(a.is_write_index) === "true",
-      routing: clean(a["routing.index"]) || clean(a["routing.search"]),
-    };
-  });
+  const rows = await batch(bridge, connectionId, [{ path: "/_alias" }]);
+  const body = record(rows[0]?.body);
+  const out: AliasRow[] = [];
+  for (const [index, node] of Object.entries(body)) {
+    const definitions = record(record(node).aliases);
+    for (const [alias, raw] of Object.entries(definitions)) {
+      const def = record(raw);
+      const shared = str(def.routing).trim();
+      const filter = def.filter;
+      out.push({
+        index,
+        alias,
+        filter: filter && typeof filter === "object" && Object.keys(record(filter)).length ? JSON.stringify(filter) : "",
+        writeIndex: def.is_write_index === true,
+        hidden: def.is_hidden === true,
+        indexRouting: shared || str(def.index_routing).trim(),
+        searchRouting: shared || str(def.search_routing).trim(),
+      });
+    }
+  }
+  return out.sort((a, b) => a.alias.localeCompare(b.alias) || a.index.localeCompare(b.index));
 }
 
-export function aliasActionsBody(actions: { add?: { index: string; alias: string }; remove?: { index: string; alias: string } }[]) {
+export interface AliasAdd {
+  index: string;
+  alias: string;
+  filter?: unknown;
+  routing?: string;
+  index_routing?: string;
+  search_routing?: string;
+  is_write_index?: boolean;
+  is_hidden?: boolean;
+}
+
+export interface AliasRemove {
+  index: string;
+  alias: string;
+}
+
+export function aliasActionsBody(actions: ({ add: AliasAdd } | { remove: AliasRemove })[]) {
   return { actions };
+}
+
+/** The filter box on the Aliases page takes raw query DSL; empty means "no filter". */
+export function parseAliasFilter(text: string): { ok: true; value?: Record<string, unknown> } | { ok: false; error: string } {
+  const trimmed = text.trim();
+  if (!trimmed) return { ok: true };
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(trimmed);
+  } catch (cause) {
+    return { ok: false, error: `Filter 不是合法 JSON：${cause instanceof Error ? cause.message : String(cause)}` };
+  }
+  if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
+    return { ok: false, error: "Filter 必须是 JSON 对象，例如 {\"term\": {\"env\": \"prod\"}}" };
+  }
+  return { ok: true, value: parsed as Record<string, unknown> };
 }
 
 // ---------------------------------------------------------------------------

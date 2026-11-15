@@ -132,6 +132,19 @@ def main() -> int:
         for locale in manifest.get("localizations", {}):
             check(valid_locale(locale), f"{prefix}invalid localization locale '{locale}'")
 
+        # The Sidecar reports its own constant; a stale one stays invisible until
+        # initialize/plugin.version is compared (the 0.2.3 bump did exactly that).
+        sidecar_main = ROOT / "backend" / "main.go"
+        declaration = (
+            re.search(r'pluginVersion\s*=\s*"([^"]+)"', sidecar_main.read_text(encoding="utf-8"))
+            if sidecar_main.is_file() else None
+        )
+        check(
+            declaration is not None and declaration.group(1) == manifest.get("version"),
+            f"{prefix}backend/main.go pluginVersion must equal manifest version "
+            f"'{manifest.get('version')}' (got {declaration.group(1) if declaration else 'missing'})",
+        )
+
         contributions = manifest.get("contributions", [])
         ids = [c.get("id", "") for c in contributions]
         check(len(ids) == len(set(ids)), f"{prefix}duplicate contribution ids")

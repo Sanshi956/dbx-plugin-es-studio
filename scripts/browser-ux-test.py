@@ -4,7 +4,8 @@
 Covers, against the REAL cluster (via scripts/browser-bridge.mjs + real Chrome):
 
   Shards & Topology   状态摘要（已就绪/分配中/迁移中/未分配）+ 未分配原因列 + 头部只留一行
-  Aliases             筛选框、索引下拉、Filter 列 tooltip、头部只留一行
+  Aliases             查询/操作分区、新建表单补齐 filter+routing+is_*、非法 JSON 拦截、Filter 列 tooltip
+  Cluster Settings    设置项可选（datalist）+ 值候选随类型动态变化 + 仍可自填 + 当前生效值
   Index List          按索引名过滤、关闭索引只给 Open / 打开索引只给 Close
   Templates           View 用弹层展示（不再需要滚到页尾），Esc 关闭
   Snapshots           索引用 chips 多选，选中态与计数正确
@@ -91,29 +92,74 @@ def run(base_url, out_dir):
         try:
             click_nav(page, "Aliases")
             wait_text(page, "prod-view", timeout=20000)
-            check("Aliases 新增表单的索引是下拉", page.locator("section.add select").count() == 1)
-            opts = page.locator("section.add select option").all_inner_texts()
+            op_head = page.inner_text("section.panel.op h2")
+            query_head = page.inner_text("section.panel:not(.op) h2")
+            check("Aliases 查询与操作分成两个区块（标题可辨）",
+                  "操作" in op_head and "查询" in query_head, f"{op_head} | {query_head}")
+            op_selects = page.locator("section.panel.op select")
+            check("Aliases 新建表单的索引仍是下拉（另有 2 个布尔下拉）",
+                  op_selects.count() == 3, op_selects.count())
+            opts = page.locator("section.panel.op select").first.locator("option").all_inner_texts()
             check("Aliases 索引下拉里有真实索引", any("products" in o for o in opts), opts[:4])
+            alias_form = page.inner_text("section.panel.op")
+            check("Aliases 新建表单补齐 filter / routing / index_routing / search_routing / is_write_index / is_hidden",
+                  all(k in alias_form for k in ("Filter", "Routing", "index_routing", "search_routing",
+                                                "is_write_index", "is_hidden")), alias_form[:160])
             alias_head = page.inner_text("div.page header")
             check("Aliases 头部只留一行接口说明（与其它页风格统一）",
                   len(alias_head) < 220 and "alias filter" not in alias_head, alias_head)
             filter_th = page.locator("table.ax thead th").nth(3)
             tip = filter_th.get_attribute("title") or ""
             check("Aliases Filter 列的语义放在表头 tooltip", "过滤查询" in tip, tip)
+            check("Aliases 表格有 Hidden 列", "Hidden" in page.inner_text("table.ax thead"), "")
             total_before = page.locator("table.ax tbody tr").count()
-            page.fill('input[placeholder="筛选：别名 / 索引 / 过滤条件"]', "prod")
+            page.fill('input[placeholder="筛选：别名 / 索引 / 过滤条件"]', "prod-view")
             page.wait_for_timeout(300)
             after = page.locator("table.ax tbody tr").count()
-            check("Aliases 筛选生效（prod -> 只剩 1 行）", after == 1 and total_before >= 2,
+            check("Aliases 筛选生效（prod-view -> 只剩 1 行）", after == 1 and total_before >= 2,
                   f"{total_before} -> {after}")
+            page.fill('input[placeholder="筛选：别名 / 索引 / 过滤条件"]', "prod-eu")
+            page.wait_for_timeout(300)
+            eu_row = page.locator("table.ax tbody tr").first.inner_text()
+            check("Aliases filter / routing 从 /_alias 读出并渲染",
+                  "display" in eu_row and "eu" in eu_row, eu_row[:160])
+            page.fill('input[placeholder="筛选：别名 / 索引 / 过滤条件"]', "orders-hidden")
+            page.wait_for_timeout(300)
+            hidden_row = page.locator("table.ax tbody tr").first.inner_text()
+            check("Aliases hidden 别名有 hidden 标记", "hidden" in hidden_row, hidden_row[:120])
             page.fill('input[placeholder="筛选：别名 / 索引 / 过滤条件"]', "zzz-none")
             page.wait_for_timeout(300)
             check("Aliases 无匹配时给空态", page.locator("text=没有匹配的别名").count() >= 1)
             page.fill('input[placeholder="筛选：别名 / 索引 / 过滤条件"]', "")
+
+            # filter 不是合法 JSON 时必须当场拦下，不能进危险确认、更不能发请求
+            page.fill('section.panel.op input[placeholder="例如 prod-view"]', "ux-check-alias")
+            page.fill("section.panel.op textarea", "not-json")
+            page.click("section.panel.op button.primary")
+            page.wait_for_timeout(300)
+            form_err = page.inner_text("section.panel.op .form-error")
+            check("Aliases 非法 filter 在发请求前被拦下", "不是合法 JSON" in form_err, form_err)
+            check("Aliases 非法 filter 不弹危险确认框", page.locator(".overlay").count() == 0)
+
+            # 合法 filter 要出现在确认弹层的影响范围里，且各附加参数都在
+            page.fill("section.panel.op textarea", '{"term": {"env": "prod"}}')
+            page.fill('section.panel.op input[placeholder="留空 = 不设置"]', "r1")
+            page.locator("section.panel.op select").nth(1).select_option("true")
+            page.click("section.panel.op button.primary")
+            page.wait_for_selector(".overlay .scope", timeout=10000)
+            scope_text = page.inner_text(".overlay .scope")
+            check("Aliases 新增时 filter 与 routing 出现在确认影响范围里",
+                  "filter" in scope_text and "prod" in scope_text and "routing r1" in scope_text
+                  and "is_write_index true" in scope_text, scope_text[:220])
+            page.click('.overlay button:has-text("取消")')
+            page.wait_for_timeout(200)
+            page.fill('section.panel.op input[placeholder="例如 prod-view"]', "")
+            page.fill("section.panel.op textarea", "")
+            page.fill('section.panel.op input[placeholder="留空 = 不设置"]', "")
             shot("ux-aliases")
         except Exception as e:
             shot("ux-aliases-FAIL")
-            check("Aliases 筛选生效（prod -> 只剩 1 行）", False, e)
+            check("Aliases 筛选生效（prod-view -> 只剩 1 行）", False, e)
 
         # ------------------------------------------------------------ Index List
         try:
@@ -336,6 +382,41 @@ def run(base_url, out_dir):
             except Exception as e:
                 shot(f"{shot_name}-FAIL")
                 check(f"{nav} 的 View 在弹层里展示（不用滚到页尾）", False, e)
+
+        # ------------------------------------------------------- Cluster Settings
+        try:
+            click_nav(page, "Cluster Settings")
+            page.wait_for_selector("input.key-input", timeout=20000)
+            list_id = page.get_attribute("input.key-input", "list")
+            datalist_n = page.locator(f"datalist#{list_id} option").count()
+            check("Cluster Settings 设置项可从列表选（datalist 候选 > 20）",
+                  bool(list_id) and datalist_n > 20, f"list={list_id} n={datalist_n}")
+
+            key_input = page.locator("input.key-input")
+            key_input.fill("cluster.routing.allocation.enable")
+            page.wait_for_timeout(300)
+            chip_texts = page.locator("section.writer .chip").all_inner_texts()
+            check("值候选随设置项动态变化（allocation.enable -> all/primaries/new_primaries/none）",
+                  chip_texts == ["all", "primaries", "new_primaries", "none"], chip_texts)
+            page.locator('section.writer .chip:has-text("none")').first.click()
+            page.wait_for_timeout(200)
+            check("点候选项即把值填进输入框", page.input_value("input.value-input") == "none",
+                  page.input_value("input.value-input"))
+
+            key_input.fill("cluster.blocks.read_only")
+            page.wait_for_timeout(300)
+            chip_texts2 = page.locator("section.writer .chip").all_inner_texts()
+            check("换设置项后值候选跟着换成 true/false", chip_texts2 == ["true", "false"], chip_texts2)
+            current = page.inner_text("section.writer .current")
+            check("同时给出该设置项当前生效值", "当前" in current, current)
+
+            page.fill("input.value-input", "true")
+            check("值仍可自填（不被候选锁死）", page.input_value("input.value-input") == "true")
+            check("有写入入口", page.locator('section.writer button.primary:has-text("应用")').count() == 1)
+            shot("ux-cluster-settings")
+        except Exception as e:
+            shot("ux-cluster-settings-FAIL")
+            check("值候选随设置项动态变化（allocation.enable -> all/primaries/new_primaries/none）", False, e)
 
         # --------------------------------------------------------- REST Console
         try:

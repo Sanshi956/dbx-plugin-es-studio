@@ -2,6 +2,7 @@
   import StateBlock from "../components/StateBlock.svelte";
   import ConfirmDanger from "../components/ConfirmDanger.svelte";
   import { fetchClusterSettings, updateClusterSettings, isError, type ClusterSettingsSnapshot } from "../lib/services";
+  import { settingMeta, settingKeyCandidates, type SettingMeta } from "../lib/clusterSettings";
   import type { DbxBridge } from "../lib/bridge";
 
   interface Props {
@@ -20,6 +21,8 @@
   let scope = $state<"persistent" | "transient">("persistent");
   let editKey = $state("");
   let editValue = $state("");
+  let meta = $state<SettingMeta>({ kind: "text", options: [], hint: "" });
+  let keyCandidates = $state<string[]>([]);
   let formError = $state("");
   let pending = $state<{ mode: "set" | "remove"; scope: "persistent" | "transient"; key: string; value: string } | null>(null);
 
@@ -39,6 +42,12 @@
     void load();
   });
 
+  // Picker candidates: curated keys plus whatever this cluster already sets.
+  $effect(() => {
+    const extra = [...Object.keys(snapshot.persistent), ...Object.keys(snapshot.transient)];
+    keyCandidates = settingKeyCandidates(extra);
+  });
+
   function entries(source: Record<string, string>): { key: string; value: string }[] {
     const q = filter.trim().toLowerCase();
     return Object.entries(source)
@@ -47,18 +56,48 @@
       .sort((a, b) => a.key.localeCompare(b.key));
   }
 
+  function onKeyChange(next: string): void {
+    editKey = next;
+    meta = settingMeta(next);
+    formError = "";
+  }
+
+  function valuePlaceholder(): string {
+    switch (meta.kind) {
+      case "number": return "数值，如 2";
+      case "duration": return "带单位，如 30s";
+      case "size": return "如 85% 或 5gb";
+      case "boolean":
+      case "enum": return "点下方候选，或直接输入";
+      default: return "值（留空 = 移除该项）";
+    }
+  }
+
+  /** persistent > transient > default — what is actually in effect right now. */
+  function currentOf(key: string): string {
+    const k = key.trim();
+    if (!k) return "";
+    const persistent = snapshot.persistent[k];
+    if (persistent !== undefined) return `当前 persistent = ${persistent}`;
+    const transient = snapshot.transient[k];
+    if (transient !== undefined) return `当前 transient = ${transient}`;
+    const fallback = snapshot.defaults[k];
+    if (fallback !== undefined) return `当前默认 = ${fallback}`;
+    return "当前未显式设置";
+  }
+
   function askSet(): void {
     formError = "";
     const key = editKey.trim();
     if (!key) {
-      formError = "请填写设置项名称";
+      formError = "请选择或填写设置项名称";
       return;
     }
     if (!key.startsWith("cluster.")) {
-      formError = "集群设置项通常以 cluster. 开头（如 cluster.routing.allocation.enable）";
+      formError = "集群设置项以 cluster. 开头（如 cluster.routing.allocation.enable）";
       return;
     }
-    pending = { mode: "set", scope, key, value: editValue };
+    pending = { mode: "set", scope, key, value: editValue.trim() };
   }
 
   function askRemove(target: "persistent" | "transient", key: string): void {
@@ -74,7 +113,6 @@
       toast = `失败：${res.error?.message ?? "HTTP " + res.status}`;
     } else {
       toast = job.mode === "remove" ? `已移除 ${job.key}` : `已写入 ${job.scope}.${job.key} = ${job.value}`;
-      if (job.mode === "set") editKey = "";
       editValue = "";
       await load();
     }
@@ -102,10 +140,43 @@
           <option value="transient">transient</option>
         </select>
       </label>
-      <label class="wide">设置项<input placeholder="cluster.routing.allocation.enable" bind:value={editKey} /></label>
-      <label class="wide">值<input placeholder='all / none / "new_primaries" / 30s（留空或 null = 移除）' bind:value={editValue} /></label>
+      <label class="wide">设置项
+        <input
+          list="cluster-setting-keys"
+          class="key-input"
+          placeholder="从列表选，或直接输入"
+          value={editKey}
+          oninput={(e) => onKeyChange(e.currentTarget.value)}
+        />
+        <datalist id="cluster-setting-keys">
+          {#each keyCandidates as key (key)}<option value={key}></option>{/each}
+        </datalist>
+      </label>
+      <label class="wide">值
+        <input class="value-input" title={meta.hint} placeholder={valuePlaceholder()} bind:value={editValue} />
+      </label>
       <button type="button" class="primary" onclick={askSet}>应用</button>
     </div>
+
+    {#if editKey.trim()}
+      <div class="value-row">
+        <span class="kind" title={meta.hint}>{meta.kind}</span>
+        {#if meta.options.length}
+          <div class="chips">
+            {#each meta.options as option (option)}
+              <button
+                type="button"
+                class="chip"
+                class:on={editValue.trim() === option}
+                onclick={() => (editValue = option)}
+              >{option}</button>
+            {/each}
+          </div>
+        {/if}
+        <span class="current">{currentOf(editKey)}</span>
+      </div>
+    {/if}
+
     {#if formError}<p class="form-error">{formError}</p>{/if}
   </section>
 
@@ -127,7 +198,9 @@
             <tbody>
               {#each entries(snapshot[group.id as "persistent" | "transient"]) as row (`${group.id}:${row.key}`)}
                 <tr>
-                  <td class="mono">{row.key}</td>
+                  <td class="mono">
+                    <button type="button" class="link" title="填入上方表单" onclick={() => onKeyChange(row.key)}>{row.key}</button>
+                  </td>
                   <td class="mono value">{row.value}</td>
                   <td class="act"><button type="button" class="mini danger" onclick={() => askRemove(group.id as "persistent" | "transient", row.key)}>移除</button></td>
                 </tr>
@@ -187,6 +260,12 @@
   .fields label { display: flex; flex-direction: column; gap: 4px; font-size: 11px; color: var(--es-muted); }
   .fields .wide { flex: 1 1 260px; }
   .fields input, .fields select, .filter-row input { padding: 6px 10px; border: 1px solid var(--es-border); border-radius: 6px; background: var(--es-surface); color: var(--es-text); width: 100%; }
+  .value-row { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-top: 10px; }
+  .kind { font-size: 10px; font-family: var(--es-mono); color: var(--es-muted); border: 1px solid var(--es-border); border-radius: 4px; padding: 2px 6px; }
+  .chips { display: flex; gap: 6px; flex-wrap: wrap; }
+  .chip { padding: 2px 8px; font-size: 11px; font-family: var(--es-mono); border-radius: 999px; background: var(--es-surface-2); }
+  .chip.on { border-color: var(--es-accent); color: var(--es-accent); background: var(--es-surface); }
+  .current { font-size: 11px; color: var(--es-muted); font-family: var(--es-mono); }
   .filter-row { margin-bottom: 14px; }
   .filter-row label { display: flex; flex-direction: column; gap: 4px; font-size: 11px; color: var(--es-muted); }
   .form-error { margin: 8px 0 0; font-size: 11px; color: var(--es-red); }
@@ -194,6 +273,8 @@
   th, td { padding: 5px 8px; border-bottom: 1px solid var(--es-border); text-align: left; }
   th { color: var(--es-muted); font-size: 11px; font-weight: 600; }
   .mono { font-family: var(--es-mono); }
+  .link { padding: 0; border: 0; background: none; font-family: var(--es-mono); font-size: 12px; color: var(--es-text); text-align: left; white-space: normal; }
+  .link:hover:not(:disabled):not(.primary) { background: none; color: var(--es-accent); text-decoration: underline; }
   .value { word-break: break-all; }
   .act { text-align: right; white-space: nowrap; }
   .empty { margin: 0; font-size: 11px; color: var(--es-muted); }
