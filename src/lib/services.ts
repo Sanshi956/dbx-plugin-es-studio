@@ -384,26 +384,34 @@ export interface FieldInfo {
   /** Dotted path, e.g. `name`, `name.kw`, `address.city`. */
   name: string;
   type: string;
+  /** For leaves inside a `nested` object: the innermost `nested` parent path.
+   *  A plain `term` on such a leaf silently matches nothing — the query must be
+   *  wrapped in `nested: { path }`, which `buildDsl` does when this is set. */
+  nestedPath?: string;
 }
 
 function collectFields(
   props: Record<string, unknown>,
   prefix: string,
-  out: Map<string, string>,
+  out: Map<string, { type: string; nestedPath: string }>,
   depth: number,
+  nestedPath = "",
 ): void {
   if (depth > 8) return;
   for (const [name, raw] of Object.entries(props)) {
     const def = record(raw);
     const path = prefix ? `${prefix}.${name}` : name;
     const type = str(def.type);
-    if (type) out.set(path, type);
+    if (type) out.set(path, { type, nestedPath });
     // multi-fields: name.kw -> keyword
     for (const [sub, subRaw] of Object.entries(record(def.fields))) {
-      out.set(`${path}.${sub}`, str(record(subRaw).type) || "text");
+      out.set(`${path}.${sub}`, { type: str(record(subRaw).type) || "text", nestedPath });
     }
+    // Nested parent: everything below it queries through that path.
     const nested = record(def.properties);
-    if (Object.keys(nested).length) collectFields(nested, path, out, depth + 1);
+    if (Object.keys(nested).length) {
+      collectFields(nested, path, out, depth + 1, type === "nested" ? path : nestedPath);
+    }
   }
 }
 
@@ -442,7 +450,7 @@ export async function fetchFields(
 ): Promise<FieldInfo[]> {
   const res = await single(bridge, connectionId, "GET", `/${encodeURIComponent(index)}/_mapping`);
   if (isError(res)) return [];
-  const found = new Map<string, string>();
+  const found = new Map<string, { type: string; nestedPath: string }>();
   const body = record(res.body);
   for (const indexKey of Object.keys(body)) {
     const mappings = record(record(body[indexKey]).mappings);
@@ -460,7 +468,9 @@ export async function fetchFields(
     }
   }
   return [...found.entries()]
-    .map(([name, type]) => ({ name, type }))
+    .map(([name, { type, nestedPath }]) => ({
+      name, type, ...(nestedPath ? { nestedPath } : {}),
+    }))
     .sort((a, b) => a.name.localeCompare(b.name));
 }
 
@@ -666,6 +676,13 @@ export interface DslOptions {
   sortOrder?: "asc" | "desc";
   /** only meaningful when there is at least one `should` clause */
   minimumShouldMatch?: string;
+  /**
+   * Leaf field -> innermost `nested` path (from the index mapping). A term on
+   * `tags.name` without the wrapper matches nothing on real nested docs, so
+   * clauses whose field is listed here are wrapped in
+   * `{ nested: { path, query } }` — the silent-zero-hits trap, closed.
+   */
+  nestedPaths?: Record<string, string>;
 }
 
 /**
@@ -697,24 +714,33 @@ export function buildDsl(clauses: QueryClause[], opts: DslOptions = {}): Record<
     }
     const occur = c.occur ?? defaultOccur(c);
     const field = c.field;
+    // Leaf clauses on a `nested` field go through the nested query wrapper.
+    const wrapPath = field && opts.nestedPaths?.[field];
+    const push = (leaf: Record<string, unknown>): void => {
+      if (wrapPath) {
+        groups[occur].push({ nested: { path: wrapPath, query: leaf } });
+      } else {
+        groups[occur].push(leaf);
+      }
+    };
     switch (c.type) {
       case "term":
-        if (field && c.value !== "") groups[occur].push({ term: { [field]: c.value } });
+        if (field && c.value !== "") push({ term: { [field]: c.value } });
         break;
       case "match":
-        if (field && c.value !== "") groups[occur].push({ match: { [field]: c.value } });
+        if (field && c.value !== "") push({ match: { [field]: c.value } });
         break;
       case "match_phrase":
-        if (field && c.value !== "") groups[occur].push({ match_phrase: { [field]: c.value } });
+        if (field && c.value !== "") push({ match_phrase: { [field]: c.value } });
         break;
       case "prefix":
-        if (field && c.value !== "") groups[occur].push({ prefix: { [field]: c.value } });
+        if (field && c.value !== "") push({ prefix: { [field]: c.value } });
         break;
       case "wildcard":
-        if (field && c.value !== "") groups[occur].push({ wildcard: { [field]: c.value } });
+        if (field && c.value !== "") push({ wildcard: { [field]: c.value } });
         break;
       case "exists":
-        if (field) groups[occur].push({ exists: { field } });
+        if (field) push({ exists: { field } });
         break;
       case "range": {
         const r: Record<string, string> = {};
@@ -722,7 +748,7 @@ export function buildDsl(clauses: QueryClause[], opts: DslOptions = {}): Record<
         if (c.lte) r.lte = c.lte;
         if (c.gt) r.gt = c.gt;
         if (c.lt) r.lt = c.lt;
-        if (field && Object.keys(r).length) groups[occur].push({ range: { [field]: r } });
+        if (field && Object.keys(r).length) push({ range: { [field]: r } });
         break;
       }
     }
@@ -808,12 +834,32 @@ export function operatorsForType(type: string): OperatorOption[] {
       { value: "exists", label: t("qb.op.exists") },
     ];
   }
-  // object / nested / flattened / unknown: only existence is safe to build
+  // The nested object itself: only existence is meaningful, and it still goes
+  // through the nested wrapper (see nestedPathsOf) — a plain term on the
+  // object cannot match anything.
+  if (trimmed === "nested") {
+    return [{ value: "exists", label: t("qb.op.exists") }];
+  }
+  // object / flattened / unknown: only existence is safe to build
   // without knowing the shape.
   return [
     { value: "exists", label: t("qb.op.exists") },
     { value: "term", label: t("qb.op.term") },
   ];
+}
+
+/**
+ * Leaf field -> innermost `nested` path, plus the nested parents themselves.
+ * Feed this into `buildDsl` so clauses on nested fields get wrapped instead of
+ * silently matching zero documents.
+ */
+export function nestedPathsOf(fields: FieldInfo[]): Record<string, string> {
+  const map: Record<string, string> = {};
+  for (const f of fields) {
+    if (f.type === "nested") map[f.name] = f.name;
+    else if (f.nestedPath) map[f.name] = f.nestedPath;
+  }
+  return Object.keys(map).length ? map : {};
 }
 
 /** Default operator for a field, used when the user picks a field. */

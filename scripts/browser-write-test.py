@@ -115,7 +115,7 @@ def run_rw(base_url, out_dir):
             page.screenshot(path=str(out / f"{name}.png"), full_page=True)
 
         page.goto(base_url + "/", wait_until="domcontentloaded", timeout=30000)
-        wait_text(page, "Local ES (test)", timeout=30000)
+        wait_text(page, "集群概览", timeout=30000)
         time.sleep(0.5)
 
         # ---- 1. close an index through the danger modal ----
@@ -268,7 +268,7 @@ def run_ro(base_url, out_dir):
             page.screenshot(path=str(out / f"{name}.png"), full_page=True)
 
         page.goto(base_url + "/", wait_until="domcontentloaded", timeout=30000)
-        wait_text(page, "Local ES (test)", timeout=30000)
+        wait_text(page, "集群概览", timeout=30000)
         time.sleep(0.5)
 
         # ---- Index List: DELETE must be refused by the Sidecar ----

@@ -23,11 +23,10 @@ CHROME = r"C:/Program Files/Google/Chrome/Application/chrome.exe"
 PAGES = [
     ("集群概览", "es-studio-test"),
     ("节点", "es-studio-node-1"),
-    ("分片", "products"),
+    ("分片", "include._name"),
     ("索引列表", "archived-2023"),
     ("别名", "prod-view"),
     # P3
-    ("分片分配", "include._name"),
     ("集群设置", "写入 / 移除设置"),
     ("索引模板", "p3-demo-template", "需要 Elasticsearch 7.8"),
     ("组件模板", "p3-demo-component", "需要 Elasticsearch 7.8"),
@@ -83,8 +82,12 @@ def run(base_url, out_dir, ro_delete=False):
         rec = {"step": "boot", "ok": False}
         try:
             page.goto(base_url + "/", wait_until="domcontentloaded", timeout=30000)
-            # wait for the bridge to boot + first data (connection name in picker)
-            wait_text(page, "Local ES (test)", timeout=30000)
+            # wait for the first page to render (the picker that used to carry the
+            # connection name is gone; the workbench tab title carries it now)
+            wait_text(page, "集群概览", timeout=30000)
+            title = page.title()
+            if title != "Local ES (test)":
+                raise AssertionError(f"workbench tab title should be the connection name, got {title!r}")
             time.sleep(0.6)
             shot("00-boot")
             rec["ok"] = True
@@ -276,14 +279,16 @@ def run(base_url, out_dir, ro_delete=False):
             except Exception: pass
         results.append(rec)
 
-        # ---- Allocation: explain an unassigned shard (read-only, real reason) ----
-        rec = {"step": "interact:allocation-explain", "expect": "explain panel", "ok": False}
+        # ---- Allocation explain on the merged Shards page: expand, then collapse ----
+        rec = {"step": "interact:allocation-explain", "expect": "explain panel toggles", "ok": False}
         try:
-            click_nav(page, "分片分配")
+            click_nav(page, "分片与分配")
             page.get_by_role("button", name="解析未分配分片").click()
             page.wait_for_selector(".explain", timeout=20000)
             text = page.locator(".explain").inner_text()
             assert ("allocate" in text.lower()) or ("shard" in text.lower()), text
+            page.get_by_role("button", name="收起解析").first.click()
+            page.wait_for_selector(".explain", state="detached", timeout=10000)
             time.sleep(0.3)
             shot("ix-allocation-explain")
             rec["ok"] = True

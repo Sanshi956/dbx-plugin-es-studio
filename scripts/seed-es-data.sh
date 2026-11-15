@@ -35,6 +35,29 @@ for d in \
   curl -X POST "$ES/products/_doc?refresh=wait_for" $J -d "$d" >/dev/null
 done
 
+echo "== nested-demo (nested query / special types regression) =="
+drop nested-demo
+curl -X PUT "$ES/nested-demo?pretty" $J -d '{
+  "settings":{"number_of_shards":1,"number_of_replicas":0},
+  "mappings":{"properties":{
+    "title":{"type":"keyword"},
+    "created":{"type":"date"},
+    "score":{"type":"double"},
+    "active":{"type":"boolean"},
+    "ip":{"type":"ip"},
+    "reviewers":{"type":"nested","properties":{
+      "name":{"type":"keyword"},
+      "stars":{"type":"integer"}
+    }}
+  }}
+}' >/dev/null
+for d in \
+  '{"title":"A","created":"2026-05-01","score":4.5,"active":true,"ip":"10.0.0.1","reviewers":[{"name":"alice","stars":5}]}' \
+  '{"title":"B","created":"2026-06-01","score":3.2,"active":false,"ip":"10.0.0.2","reviewers":[{"name":"bob","stars":2},{"name":"carol","stars":4}]}' \
+  '{"title":"C","created":"2026-07-01","score":1.8,"active":true,"ip":"192.168.0.7","reviewers":[{"name":"dave","stars":3}]}' ; do
+  curl -X POST "$ES/nested-demo/_doc?refresh=wait_for" $J -d "$d" >/dev/null
+done
+
 echo "== orders (replica=1 -> UNASSIGNED on single node, exercises topology) =="
 drop orders
 curl -X PUT "$ES/orders?pretty" $J -d '{

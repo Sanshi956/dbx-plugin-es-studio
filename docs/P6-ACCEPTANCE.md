@@ -297,14 +297,42 @@ ES_URL=http://127.0.0.1:19213 BRIDGE_PORT=5199 DBX_PLUGIN_DATA_DIR=.dbx-dev/plug
 与被测脚本应在**同一轮**内跑完(`version-probe.py` 自带这个闭环);桥接必须用
 工具级常驻(前台 `&` 起的进程在命令返回后即被回收)。
 
-**跑 UX 套件前必须先起第二集群替身**,否则多集群对比段 5 项会假 FAIL(期望 111/111 却只有 106):
-
 ```bash
-python scripts/mock-cluster.py --port 19921        # 后台常驻
-ES_URL=http://127.0.0.1:19200 ES_URL_MIRROR=http://127.0.0.1:19921 \
-  BRIDGE_PORT=5199 node scripts/browser-bridge.mjs # 后台常驻
-# 只读拒绝需要第二个只读桥
+# 只读拒绝需要第二个只读桥;UX 套件已不需要镜像集群(多集群对比页已移除)
 ES_URL=http://127.0.0.1:19200 BRIDGE_PORT=5200 READ_ONLY=1 node scripts/browser-bridge.mjs
 python scripts/browser-ux-test.py  --base-url http://127.0.0.1:5199
 python scripts/browser-write-test.py --rw http://127.0.0.1:5199 --ro http://127.0.0.1:5200
 ```
+
+---
+
+## 8. 验收反馈修正（2026-11-15 21:xx，0.5.0 内消化）
+
+真实 DBX 验收提出 9 条反馈，全部处理：
+
+| 反馈 | 处理 |
+|---|---|
+| 顶栏集群切换无效（DBX 每连接一个 tab） | 移除页内 ClusterPicker；`workbench.setTitle` 改用**连接名**，解决 tab 显示「ES Studio 1/2」与连接名不一致 |
+| 图标是字母 P | 重画 `plugin.svg` / `connection.svg`：深色圆角底 + 分段彩条（Elasticsearch 官网标志风格） |
+| 分片与拓扑不能按索引名筛选 | 页头加筛选框，拓扑矩阵 / 分片明细 / 分配设置三处同步生效 |
+| 「分片分配」与「分片与拓扑」内容重复 | **两页合并**为「分片与分配」：卡片摘要 + 拓扑矩阵 + 分片明细 + 分配设置（原独立页删除）；散落在页底的每索引「编辑」按钮改为**行内操作列** |
+| 分片分配里每索引的「状态」列 | 保留待定。加它的理由：该表数据来自 `/_all/_settings`，closed 索引没有分片、分配规则在它重开前不生效，状态用于提示"这一行编辑了也没用"；但它与索引列表页信息重复，是否去掉由用户定 |
+| Allocation explain 英文原文 | **不翻译**——那是 ES explain API 返回的数据（decider 决策原文），不是界面文案；界面骨架已全部中文。另：解析按钮支持**再点收起** |
+| 「查询工作室」翻译 | 组更名「查询与分析」（Query & Analysis），REST 控制台并入该组，消除未翻译的「REST」组标题 |
+| 查询构建器嵌套/特殊类型未验证 | 实测暴露真缺陷：nested 叶子字段直接 `term` **静默 0 命中**（ES 要求 nested 查询包装）。`buildDsl` 现按 mapping 自动包装 `{ nested: { path, query } }`；夹具新增 `nested-demo`（nested/date/ip/boolean），套件断言 DSL 含包装且 alice 恰好命中 1 条 |
+| 多集群对比页无作用 | **整页移除**（导航 25→23），UX 套件不再需要 mock 镜像集群 |
+| MCP 试调用位置太低 | 试调用面板移到工具目录**上方** |
+
+### 修正后基线（真实 ES 8.19.23，签名包内 exe）
+
+| 项 | 结果 |
+|---|---|
+| `svelte-check` / `go test ./...` | 0 errors / 0 warnings；全绿 |
+| Sidecar smoke | **125/125** |
+| 浏览器主回归 | **22/22**（新增「tab 标题 = 连接名」断言；原分片分配页断言并入分片页） |
+| 浏览器 UX 回归 | **106/106**（-11 对比段，+6：筛选 3 项 + 嵌套 2 项 + 行内编辑） |
+| 浏览器写路径 / 只读拒绝 | 7/7 / 4/4 |
+| i18n 双语 ×23 页 | 23+23 全过（en 15px / zh 13px），导航计数 23 |
+| mcp-client | 32/32 |
+| verify-package / 包内 manifest | 17/17 / 107 |
+| 包内 UI 断言 | 含「分片与分配」「查询与分析」「nested 包装」，不含「多集群对比」 |

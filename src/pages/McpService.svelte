@@ -252,6 +252,33 @@
       {/if}
     </section>
 
+    {#if selected}
+      <section class="panel call">
+        <div class="panel-head">
+          <h2>{t("mcp.try")} · <span class="mono">{selected.name}</span></h2>
+          <button class="primary" onclick={() => void runTool()} disabled={calling || !connectionId}>
+            {calling ? t("mcp.call.running") : t("mcp.call.run")}
+          </button>
+        </div>
+        <p class="hint">{tOr(`mcp.tool.${selected.name}.desc`, selected.description)}</p>
+        {#if selected.args.length > 0}
+          <p class="hint">{t("mcp.call.args", { list: selected.args.map((arg) => `${arg.name}${arg.required ? t("mcp.call.required") : ""} ${arg.type}`).join(t("common.listSep")) })}</p>
+        {/if}
+        <textarea class="args-input" rows="6" bind:value={argsText} spellcheck="false"></textarea>
+        {#if callError}
+          <p class="call-error">{callError}</p>
+        {/if}
+        {#if callResult}
+          <p class="call-meta">
+            <span class="mono">{callResult.request.method} {callResult.request.path}</span>
+            · HTTP {callResult.status} · {callResult.duration_ms} ms · {callResult.bytes} B
+            {#if callResult.truncated}<span class="warn">{t("mcp.call.truncated")}</span>{/if}
+          </p>
+          <pre class="result">{callResult.text}</pre>
+        {/if}
+      </section>
+    {/if}
+
     <section class="panel">
       <div class="panel-head">
         <h2>{t("mcp.catalog.title")}</h2>
@@ -296,33 +323,6 @@
         </table>
       {/if}
     </section>
-
-    {#if selected}
-      <section class="panel call">
-        <div class="panel-head">
-          <h2>{t("mcp.try")} · <span class="mono">{selected.name}</span></h2>
-          <button class="primary" onclick={() => void runTool()} disabled={calling || !connectionId}>
-            {calling ? t("mcp.call.running") : t("mcp.call.run")}
-          </button>
-        </div>
-        <p class="hint">{tOr(`mcp.tool.${selected.name}.desc`, selected.description)}</p>
-        {#if selected.args.length > 0}
-          <p class="hint">{t("mcp.call.args", { list: selected.args.map((arg) => `${arg.name}${arg.required ? t("mcp.call.required") : ""} ${arg.type}`).join(t("common.listSep")) })}</p>
-        {/if}
-        <textarea class="args-input" rows="6" bind:value={argsText} spellcheck="false"></textarea>
-        {#if callError}
-          <p class="call-error">{callError}</p>
-        {/if}
-        {#if callResult}
-          <p class="call-meta">
-            <span class="mono">{callResult.request.method} {callResult.request.path}</span>
-            · HTTP {callResult.status} · {callResult.duration_ms} ms · {callResult.bytes} B
-            {#if callResult.truncated}<span class="warn">{t("mcp.call.truncated")}</span>{/if}
-          </p>
-          <pre class="result">{callResult.text}</pre>
-        {/if}
-      </section>
-    {/if}
 
     <section class="panel">
       <div class="panel-head">

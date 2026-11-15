@@ -26,11 +26,11 @@ from playwright.sync_api import sync_playwright
 CHROME = r"C:/Program Files/Google/Chrome/Application/chrome.exe"
 
 NAV = [
-    "集群概览", "节点", "分片", "索引列表", "别名",
+    "集群概览", "节点", "分片与分配", "索引列表", "别名",
     "文档浏览", "查询构建器", "DSL 编辑器", "分词分析", "REST 控制台",
-    "分片分配", "集群设置", "索引模板", "组件模板", "数据流", "生命周期",
+    "集群设置", "索引模板", "组件模板", "数据流", "生命周期",
     "查询剖析", "快照", "任务",
-    "集群指标", "节点指标", "历史", "集群诊断", "多集群对比", "MCP 工具服务",
+    "集群指标", "节点指标", "历史", "集群诊断", "MCP 工具服务",
 ]
 
 # Pages whose feature does not exist on 6.x: they must explain themselves.

@@ -141,10 +141,15 @@ docs/                    00-SPEC.md · 01-PLAN.md · 验收记录 · API 兼容�
 | 5.1 CON 连接管理 / 5.2 CLU 集群总览（基本信息、健康） | core/connection, core/cluster, UI Overview | **P1** |
 | 5.2 集群拓扑矩阵、5.3 NOD 节点、5.4 SHA 分片、5.5 IDX 索引、5.6 DOC 文档、5.7 QRY 查询、5.8 API REST、5.9 ANA Analyzer | 对应 core service + UI 页面 | **P2** |
 | 5.5.6~5.5.9 Templates / Component Templates / Data Streams / ILM、5.10 SNP 快照、5.11 TSK 任务、5.7.3 Query Profiler | core 扩展 + UI | **P3** |
-| 5.12 MON 监控、5.13 DIA 诊断、5.14 CMP 多集群对比、Allocation Explain | storage + 规则引擎 + diff | **P4** |
+| 5.12 MON 监控、5.13 DIA 诊断、Allocation Explain | storage + 规则引擎 + diff | **P4** |
 | 6 MCP 全章（40+ 只读工具、权限、日志、配置） | internal/mcp + cmd/es-studio-mcp + mcp/tools | **P5** |
 
 需求 14.1 的 17 项 Head 功能对照**全部在 P2 完成，不允许以新功能替代**。
+
+> 变更（0.5.0 验收反馈，2026-11-15）：5.14 CMP 多集群对比**移除**（与分片页信息重叠、
+> 使用价值低）；5.4 分片与 Allocation Explain **合并为一页**「分片与分配」；查询工作室
+> 组更名「查询与分析」并吸收 REST 控制台；工作台顶栏集群切换器移除（DBX 每连接一个
+> tab，页内切换无效），tab 标题改用连接名。
 
 ## 5. 安全设计（需求第 10 章）
 

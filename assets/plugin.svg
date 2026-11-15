@@ -1,10 +1,9 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-label="Probe Go">
-  <defs>
-    <linearGradient id="g" x1="8" y1="8" x2="56" y2="56" gradientUnits="userSpaceOnUse">
-      <stop stop-color="#6d5dfc"/>
-      <stop offset="1" stop-color="#2cc9a7"/>
-    </linearGradient>
-  </defs>
-  <rect width="64" height="64" rx="16" fill="url(#g)"/>
-  <path fill="#fff" d="M20 18h18a10 10 0 0 1 0 20H28v8h-8V18Zm8 8v4h10a2 2 0 1 0 0-4H28Z"/>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-label="ES Studio">
+  <!-- Dark tile + stacked colour bands, in the spirit of Elasticsearch's
+       segmented multicolour mark (teal/blue/yellow/pink). -->
+  <rect width="64" height="64" rx="14" fill="#343741"/>
+  <rect x="10" y="14" width="44" height="9" rx="4.5" fill="#00BFB3"/>
+  <rect x="16" y="25" width="38" height="9" rx="4.5" fill="#36A2EF"/>
+  <rect x="20" y="36" width="32" height="9" rx="4.5" fill="#FEC514"/>
+  <rect x="14" y="47" width="36" height="9" rx="4.5" fill="#F04E98"/>
 </svg>

@@ -1,7 +1,6 @@
 <script lang="ts">
   import { onMount, onDestroy } from "svelte";
   import Nav from "./components/Nav.svelte";
-  import ClusterPicker from "./components/ClusterPicker.svelte";
   import StateBlock from "./components/StateBlock.svelte";
   import Overview from "./pages/Overview.svelte";
   import Nodes from "./pages/Nodes.svelte";
@@ -13,7 +12,6 @@
   import DslEditor from "./pages/DslEditor.svelte";
   import Analyzer from "./pages/Analyzer.svelte";
   import RestConsole from "./pages/RestConsole.svelte";
-  import Allocation from "./pages/Allocation.svelte";
   import ClusterSettings from "./pages/ClusterSettings.svelte";
   import Templates from "./pages/Templates.svelte";
   import ComponentTemplates from "./pages/ComponentTemplates.svelte";
@@ -27,7 +25,6 @@
   import History from "./pages/History.svelte";
   import McpService from "./pages/McpService.svelte";
   import Diagnostics from "./pages/Diagnostics.svelte";
-  import Compare from "./pages/Compare.svelte";
   import { ready } from "./lib/bridge";
   import type { DbxBridge, ConnectionSummary } from "./lib/bridge";
   import { listConnections } from "./lib/api";
@@ -69,7 +66,9 @@
         };
         window.addEventListener("dbx-plugin-env", onEnv);
         unsubscribeEnv = () => window.removeEventListener("dbx-plugin-env", onEnv);
-        await host.workbench.setTitle("ES Studio");
+        // The workbench tab label is the only place the user can tell two
+        // plugin frames apart, so it carries the connection name, not the
+        // generic product name (DBX would otherwise number tabs "ES Studio 1/2").
         connections = await listConnections(host);
 
         const contextId = host.context?.connectionId;
@@ -79,6 +78,8 @@
           if (typeof saved === "string") activeId = saved;
         }
         ensureConnection(activeId);
+        const active = connections.find((row) => row.id === activeId);
+        await host.workbench.setTitle(active && active.name !== "Current cluster" ? active.name : "ES Studio");
         unsubscribe = host.onContext((context) => {
           if (typeof context.connectionId === "string" && context.connectionId) {
             activeId = context.connectionId;
@@ -97,11 +98,6 @@
     unsubscribe?.();
     unsubscribeEnv?.();
   });
-
-  function changeConnection(id: string): void {
-    activeId = id;
-    if (bridge) void bridge.storage.set("es.studio.connectionId", id).catch(() => undefined);
-  }
 </script>
 
 <div class="app">
@@ -110,12 +106,6 @@
       <span class="logo">ES</span>
       <div><strong>ES Studio</strong><small>{t("app.tagline")}</small></div>
     </div>
-    <ClusterPicker
-      connections={connections}
-      activeId={activeId}
-      busy={booting}
-      onchange={changeConnection}
-    />
     <div class="spacer"></div>
     <span class="version-chip">v{__PLUGIN_VERSION__}</span>
   </header>
@@ -154,8 +144,6 @@
           <Analyzer bridge={bridge} connectionId={activeId} />
         {:else if page === "rest-console"}
           <RestConsole bridge={bridge} connectionId={activeId} />
-        {:else if page === "allocation"}
-          <Allocation bridge={bridge} connectionId={activeId} />
         {:else if page === "cluster-settings"}
           <ClusterSettings bridge={bridge} connectionId={activeId} />
         {:else if page === "templates"}
@@ -180,8 +168,6 @@
           <History bridge={bridge} connectionId={activeId} />
         {:else if page === "diagnostics"}
           <Diagnostics bridge={bridge} connectionId={activeId} />
-        {:else if page === "compare"}
-          <Compare bridge={bridge} connectionId={activeId} connections={connections} />
         {:else if page === "mcp"}
           <McpService bridge={bridge} connectionId={activeId} />
         {/if}

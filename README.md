@@ -3,7 +3,7 @@
 DBX 内的专业 Elasticsearch 管理工作台插件。插件 ID `local.es.studio`，版本 `0.5.0`。
 
 已完成 **P1 · 插件基础设施**、**P2 · 日常运维**、**P3 · 治理与运维**、**P4 · 观测与诊断**、
-**P5 · MCP 工具服务** 与 **P6 · 国际化 + 多版本兼容**，共 **25 个导航项**全部可用（无占位按钮）。
+**P5 · MCP 工具服务** 与 **P6 · 国际化 + 多版本兼容**，共 **23 个导航项**全部可用（无占位按钮）。
 
 > 规格与实施计划见 `docs/00-SPEC.md`、`docs/01-PLAN.md`；各阶段验收结论见
 > `docs/P1-ACCEPTANCE.md` … `docs/P6-ACCEPTANCE.md`。
@@ -21,7 +21,7 @@ DBX 内的专业 Elasticsearch 管理工作台插件。插件 ID `local.es.studi
 
 能力矩阵按 API 引入版本判定（ILM 6.6 / 组件模板 7.8 / 数据流 7.9 / PIT 7.10 / ES\|QL 8.11），
 低于门限的功能不发送请求，直接显示「此集群为 X，需要 Y 或更高版本」。细节见
-`docs/P6-ACCEPTANCE.md` §2、§4。
+`docs/P6-ACCEPTANCE.md` §2、§4、§8。
 
 > **Easysearch / OpenSearch 未做版本语义适配**：两者的版本号规则与 ES 不同，
 > 上述矩阵仅对 Elasticsearch 成立。

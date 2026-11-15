@@ -1,7 +1,8 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" width="32" height="32">
-  <rect x="3" y="6" width="26" height="7" rx="3" fill="#2563eb" opacity="0.9"/>
-  <rect x="3" y="19" width="26" height="7" rx="3" fill="#2563eb" opacity="0.55"/>
-  <circle cx="8" cy="9.5" r="1.6" fill="#fff"/>
-  <circle cx="8" cy="22.5" r="1.6" fill="#fff"/>
-  <path d="M14 9.5h10M14 22.5h10" stroke="#fff" stroke-width="1.6" stroke-linecap="round"/>
+  <!-- Connection type icon: two segmented bands echoing the plugin mark. -->
+  <rect x="3" y="6" width="26" height="7" rx="3.5" fill="#00BFB3"/>
+  <rect x="3" y="19" width="26" height="7" rx="3.5" fill="#36A2EF"/>
+  <circle cx="8" cy="9.5" r="1.7" fill="#fff"/>
+  <circle cx="8" cy="22.5" r="1.7" fill="#fff"/>
+  <path d="M14 9.5h11M14 22.5h11" stroke="#fff" stroke-width="1.6" stroke-linecap="round"/>
 </svg>

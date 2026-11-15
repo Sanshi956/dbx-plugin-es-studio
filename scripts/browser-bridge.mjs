@@ -99,12 +99,8 @@ const bridgeScript = `<script>
       });
     },
     getConnections: function(){
-      // The second entry is a fixture for Multi-Cluster Compare: this bridge only
-      // reaches one real cluster, so comparing against it proves the diff path
-      // renders "everything identical" instead of inventing differences.
       return Promise.resolve([
-        { id:'local-es', name:'Local ES (test)', label:'Local ES (test)', dbType:'elasticsearch', dialect:'elasticsearch', connected:true, readOnly: READ_ONLY },
-        { id:'local-es-mirror', name:'Local ES (mirror)', label:'Local ES (mirror)', dbType:'elasticsearch', dialect:'elasticsearch', connected:true, readOnly: READ_ONLY }
+        { id:'local-es', name:'Local ES (test)', label:'Local ES (test)', dbType:'elasticsearch', dialect:'elasticsearch', connected:true, readOnly: READ_ONLY }
       ]);
     },
     listConnections: function(){ return this.getConnections(); },
@@ -128,7 +124,7 @@ const bridgeScript = `<script>
       }
     },
     onContext: function(fn){ return function(){}; },
-    workbench: { setTitle: function(){ return Promise.resolve(); } }
+    workbench: { setTitle: function(t){ document.title = String(t); return Promise.resolve(); } }
   };
   console.log('[browser-bridge] window.dbxPlugin ready; ES_URL=' + ES_URL + ' readOnly=' + READ_ONLY);
 })();

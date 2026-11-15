@@ -3,7 +3,7 @@
   import JsonView from "../components/JsonView.svelte";
   import {
     fetchIndices, fetchFields, searchIndex, buildDsl,
-    operatorsForType, defaultOperatorForType, clauseHasNoValue,
+    operatorsForType, defaultOperatorForType, clauseHasNoValue, nestedPathsOf,
     type IndexRow, type DocHit, type QueryClause, type FieldInfo,
     type ClauseOccur, type LeafClauseType, type OperatorOption,
   } from "../lib/services";
@@ -217,6 +217,9 @@
       size: tab.size,
       ...(tab.sortField.trim() ? { sortField: tab.sortField.trim(), sortOrder: tab.sortOrder } : {}),
       minimumShouldMatch: tab.minimumShouldMatch,
+      // Nested leaves must go through the nested query wrapper; a bare term
+      // would match nothing and look like a broken query.
+      nestedPaths: nestedPathsOf(fieldsOf(tab)),
     });
   }
 

@@ -20,7 +20,6 @@ export const NAV_GROUPS: NavGroup[] = [
     id: "cluster", label: "nav.group.cluster", items: [
       { id: "nodes", label: "nav.nodes" },
       { id: "shards", label: "nav.shards" },
-      { id: "allocation", label: "nav.allocation" },
       { id: "cluster-settings", label: "nav.clusterSettings" },
     ],
   },
@@ -41,9 +40,9 @@ export const NAV_GROUPS: NavGroup[] = [
       { id: "dsl-editor", label: "nav.dslEditor" },
       { id: "query-profiler", label: "nav.queryProfiler" },
       { id: "analyzer", label: "nav.analyzer" },
+      { id: "rest-console", label: "nav.restConsole" },
     ],
   },
-  { id: "rest", label: "nav.group.rest", items: [{ id: "rest-console", label: "nav.restConsole" }] },
   {
     id: "monitoring", label: "nav.group.monitoring", items: [
       { id: "cluster-metrics", label: "nav.clusterMetrics" },
@@ -54,7 +53,6 @@ export const NAV_GROUPS: NavGroup[] = [
   { id: "diagnostics", label: "nav.group.diagnostics", items: [{ id: "diagnostics", label: "nav.diagnostics" }] },
   { id: "snapshots", label: "nav.group.snapshots", items: [{ id: "snapshots", label: "nav.snapshots" }] },
   { id: "tasks", label: "nav.group.tasks", items: [{ id: "tasks", label: "nav.tasks" }] },
-  { id: "compare", label: "nav.group.compare", items: [{ id: "compare", label: "nav.compare" }] },
   { id: "mcp", label: "nav.group.mcp", items: [{ id: "mcp", label: "nav.mcp" }] },
 ];
 

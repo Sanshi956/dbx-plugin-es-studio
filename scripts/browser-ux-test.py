@@ -124,9 +124,8 @@ def click_nav(page, label):
 
 
 def run(base_url, out_dir):
-    mode, mirror_url, _ = ensure_mirror()
-    print(f"[compare] right side = {mode} @ {mirror_url}", flush=True)
-    return _run(base_url, out_dir, mirror_url)
+    # Multi-Cluster Compare was removed (用户反馈：看不出作用)——不再需要镜像集群。
+    return _run(base_url, out_dir, "")
 
 
 def _run(base_url, out_dir, mirror_url):
@@ -151,7 +150,7 @@ def _run(base_url, out_dir, mirror_url):
             page.screenshot(path=str(out / f"{name}.png"), full_page=True)
 
         page.goto(base_url + "/", wait_until="domcontentloaded", timeout=30000)
-        wait_text(page, "Local ES (test)", timeout=30000)
+        wait_text(page, "集群概览", timeout=30000)
         time.sleep(0.5)
 
         # ---------------------------------------------------------------- Shards
@@ -697,54 +696,52 @@ def _run(base_url, out_dir, mirror_url):
             shot("ux-diagnostics-FAIL")
             check("Diagnostics 打开即给出结论", False, e)
 
-        # ---------------------------------------------------- Multi-Cluster Compare
+        # ---------------------------------------------- Shards: filter + allocation
         try:
-            # Facts are read over HTTP from the SAME clusters the bridge points
-            # at, so nothing here is hardcoded to a fixture. If the assertions
-            # pass, the page really rendered both clusters' own numbers.
-            left_facts = fetch_facts(LOCAL_ES)
-            right_facts = fetch_facts(mirror_url)
-            click_nav(page, "多集群对比")
-            page.wait_for_selector("table.diff tbody tr", timeout=40000)
-            head = page.inner_text("div.meta")
-            table_text = page.inner_text("table.diff")
-            check("对比默认选中第二个连接并完成对比", "vs" in head, head[:120])
-            check("右侧是真实第二集群（集群名取自它自己的 stats）",
-                  right_facts["name"] in table_text, f"{right_facts['name']} not in page")
-            check("左侧是当前连接的真实集群名", left_facts["name"] in table_text, left_facts["name"])
-            check("节点数两侧按各自 /_cluster/health 展示",
-                  re.search(rf"节点数\s*{left_facts['nodes']}\s*{right_facts['nodes']}\b", table_text) is not None,
-                  f"expect {left_facts['nodes']} / {right_facts['nodes']}: {table_text[:200]}")
-            check("文档数按各自 _cluster/stats 展示（千分位）",
-                  f"{right_facts['docs']:,}" in table_text and f"{left_facts['docs']:,}" in table_text,
-                  f"expect {left_facts['docs']:,} / {right_facts['docs']:,}")
-            check("差异行被标记（tr.diff）", page.locator("table.diff tbody tr.diff").count() >= 5,
-                  page.locator("table.diff tbody tr.diff").count())
-            rows_total = page.locator("table.diff tbody tr:not(.group)").count()
-            diff_total = page.locator("table.diff tbody tr.diff").count()
-            stated = re.search(r"(\d+)\s*项不同", head)
-            check("统计栏的差异计数与表格实际标记一致",
-                  stated is not None and int(stated.group(1)) == diff_total, f"{head[:80]} / rows={diff_total}")
-            check("对比表覆盖全部 22 行事实（4 组）",
-                  rows_total == 22 and page.locator("table.diff tbody tr.group").count() == 4,
-                  f"rows={rows_total} groups={page.locator('table.diff tbody tr.group').count()}")
-            # Watermarks: B was deliberately configured to 80%/88%, A uses defaults.
-            if right_facts["settings"].get("cluster.routing.allocation.disk.watermark.low"):
-                want = right_facts["settings"]["cluster.routing.allocation.disk.watermark.low"]
-                check("磁盘 low 水位取右侧集群的真实设置", want in table_text, f"{want} missing")
-
-            page.click('button:has-text("复制 CSV")')
-            page.wait_for_timeout(800)
-            csv_ready = "已复制" in page.inner_text("div.page") or page.locator("textarea.csv").count() == 1
-            check("对比结果可导出（复制或展开文本）", csv_ready)
-            if page.locator("textarea.csv").count() == 1:
-                csv_text = page.locator("textarea.csv").input_value()
-                check("CSV 含两侧集群名", right_facts["name"] in csv_text and left_facts["name"] in csv_text,
-                      csv_text[:160])
-            shot("ux-compare")
+            click_nav(page, "分片与分配")
+            page.wait_for_selector("table.matrix", timeout=30000)
+            rows_all = page.locator("table.matrix tbody tr").count()
+            page.fill("input.filter", "products")
+            page.wait_for_timeout(400)
+            rows_filtered = page.locator("table.matrix tbody tr").count()
+            check("索引名筛选让拓扑矩阵收窄", rows_all > 1 and rows_filtered == 1,
+                  f"all={rows_all} filtered={rows_filtered}")
+            check("分配设置表随筛选收窄且带行内编辑",
+                  page.locator("table tbody tr").count() >= 1
+                  and page.locator('button:has-text("编辑")').count() >= 1,
+                  page.locator('button:has-text("编辑")').count())
+            page.fill("input.filter", "")
+            page.wait_for_timeout(400)
+            check("清空筛选后矩阵恢复", page.locator("table.matrix tbody tr").count() == rows_all,
+                  page.locator("table.matrix tbody tr").count())
+            shot("ux-shards-filter")
         except Exception as e:
-            shot("ux-compare-FAIL")
-            check("对比默认选中第二个连接并完成对比", False, e)
+            shot("ux-shards-filter-FAIL")
+            check("索引名筛选让拓扑矩阵收窄", False, e)
+
+        # ------------------------------------ Query Builder: nested + special types
+        try:
+            click_nav(page, "查询构建器")
+            page.locator("section.bar select").first.select_option("nested-demo")
+            page.wait_for_timeout(600)
+            # nested leaf field: a bare term matches nothing; the DSL must wrap it
+            page.click('button:has-text("加条件")')
+            page.locator("select.field").first.select_option("reviewers.name")
+            page.wait_for_timeout(300)
+            page.locator("input.value").first.fill("alice")
+            dsl_text = page.inner_text("details.dsl")
+            check("嵌套字段子句被 wrapped 进 nested 查询",
+                  '"nested"' in dsl_text and '"path": "reviewers"' in dsl_text,
+                  dsl_text[:200])
+            page.click('button:has-text("执行查询")')
+            page.wait_for_timeout(1500)
+            page_text = page.inner_text("main")
+            check("nested term 命中真实文档（alice 恰好 1 条）",
+                  re.search(r"total\s+1\s+hits", page_text) is not None, page_text[:160])
+            shot("ux-nested-query")
+        except Exception as e:
+            shot("ux-nested-query-FAIL")
+            check("嵌套字段子句被 wrapped 进 nested 查询", False, e)
 
         # ------------------------------------------------------- MCP (P5)
         try:
