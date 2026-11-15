@@ -3,9 +3,9 @@
   import ConfirmDanger from "../components/ConfirmDanger.svelte";
   import {
     fetchShards, buildTopology, summarizeShards,
-    fetchAllocation, explainAllocation, setReplicas, setAllocationRule, isError,
+    fetchAllocation, setReplicas, setAllocationRule, isError,
     type ShardRow, type ShardTag, type TopologyMatrix, type ShardSummary,
-    type AllocationRow, type AllocationExplain, type EsResult,
+    type AllocationRow, type EsResult,
   } from "../lib/services";
   import type { DbxBridge } from "../lib/bridge";
   import { t } from "../lib/i18n.svelte.js";
@@ -86,9 +86,6 @@
   let form = $state({ replicas: 0, include: "", exclude: "", require: "" });
   let pending = $state(false);
   let toast = $state("");
-  let explain = $state<AllocationExplain | null>(null);
-  let explaining = $state(false);
-  let showExplain = $state(false);
 
   // Index-name filter narrows the matrix, the shard list and the allocation
   // settings together — one box instead of three.
@@ -146,16 +143,6 @@
       toast = t("alloc.toast.updated", { index: target.index });
     }
     await loadAllocation();
-  }
-
-  async function runExplain(): Promise<void> {
-    explaining = true;
-    try {
-      explain = await explainAllocation(bridge, connectionId);
-      showExplain = true;
-    } finally {
-      explaining = false;
-    }
   }
 
   function stateClass(state: string): string {
@@ -324,35 +311,6 @@
     {#if toast}<div class="toast">{toast}</div>{/if}
     {#if allocError}<StateBlock kind="error" message={t("alloc.failed")} detail={allocError} />{/if}
 
-    {#if showExplain && explain}
-      <section class="explain">
-        <div class="explain-head">
-          {#if explain.ok}
-            <strong>{explain.index} · shard {explain.shard}{explain.primary ? t("alloc.role.primary") : t("alloc.role.replica")}</strong>
-            <span class="verdict"><span class={explain.canAllocate === "yes" ? "ok" : "bad"}>{explain.canAllocate}</span> {explain.reason}</span>
-          {:else}
-            <strong class="note">{t("alloc.noExplain", { detail: explain.error ?? "" })}</strong>
-          {/if}
-          <div class="inline-actions">
-            <button type="button" class="mini" onclick={() => void runExplain()} disabled={explaining}>
-              {explaining ? t("alloc.explaining") : t("alloc.explainAgain")}
-            </button>
-            <button type="button" class="mini" onclick={() => (showExplain = false)}>{t("alloc.hideExplain")}</button>
-          </div>
-        </div>
-        {#if explain.ok && explain.nodes.length}
-          <table class="mini">
-            <thead><tr><th>{t("alloc.col.node")}</th><th>{t("alloc.col.decision")}</th><th>{t("alloc.col.reason")}</th></tr></thead>
-            <tbody>
-              {#each explain.nodes as d (d.node)}
-                <tr><td class="mono">{d.node}</td><td>{d.decision}</td><td class="reason">{d.reason}</td></tr>
-              {/each}
-            </tbody>
-          </table>
-        {/if}
-        {#if explain.ok && explain.note}<p class="note">{explain.note}</p>{/if}
-      </section>
-    {/if}
 
     {#if editing}
       <section class="editor">
@@ -405,11 +363,6 @@
             {/each}
           </tbody>
         </table>
-      </div>
-      <div class="explain-launch">
-        <button type="button" onclick={() => (showExplain ? (showExplain = false) : void runExplain())} disabled={explaining}>
-          {explaining ? t("alloc.explaining") : (showExplain ? t("alloc.hideExplain") : t("alloc.explain"))}
-        </button>
       </div>
     {/if}
   {/if}
@@ -494,14 +447,10 @@
 
   .section-hint { margin: 0 0 12px; color: var(--es-muted); font-size: var(--es-fs-sm); }
   .toast { padding: 8px 12px; margin-bottom: 12px; border: 1px solid var(--es-border); border-radius: 6px; background: var(--es-surface-2); font-size: var(--es-fs-sm); }
-  .explain, .editor { border: 1px solid var(--es-border); border-radius: var(--es-radius); padding: 14px; margin-bottom: 16px; background: var(--es-surface); }
-  .explain-head { display: flex; align-items: baseline; gap: 14px; flex-wrap: wrap; margin-bottom: 8px; }
-  .explain-head .verdict { font-size: var(--es-fs-sm); }
+  .editor { border: 1px solid var(--es-border); border-radius: var(--es-radius); padding: 14px; margin-bottom: 16px; background: var(--es-surface); }
   .inline-actions { margin-left: auto; display: flex; gap: 6px; }
   .ok { color: var(--es-green); font-weight: 700; }
   .bad { color: var(--es-red); font-weight: 700; }
-  table.mini { width: 100%; border-collapse: collapse; font-size: var(--es-fs-xs); }
-  table.mini th, table.mini td { padding: 5px 8px; border-bottom: 1px solid var(--es-border); text-align: left; }
   .reason { white-space: normal; color: var(--es-muted); }
   .note { margin: 8px 0 0; font-size: var(--es-fs-xs); color: var(--es-muted); line-height: 1.6; }
   .editor h3 { margin: 0 0 8px; font-size: var(--es-fs-md); }
@@ -510,5 +459,4 @@
   .fields input { padding: 6px 10px; border: 1px solid var(--es-border); border-radius: 6px; background: var(--es-surface); color: var(--es-text); min-width: 180px; }
   .actions { display: flex; align-items: center; gap: 10px; justify-content: flex-end; }
   .diff { margin-right: auto; font-size: var(--es-fs-xs); color: var(--es-muted); font-family: var(--es-mono); }
-  .explain-launch { margin-top: 12px; }
 </style>

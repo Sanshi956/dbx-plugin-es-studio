@@ -1045,18 +1045,37 @@ export interface AllocationExplain {
   raw: unknown;
 }
 
-/** `GET /_cluster/allocation/explain` (no args -> first unassigned shard). */
-export async function explainAllocation(bridge: DbxBridge, connectionId: string): Promise<AllocationExplain> {
+/**
+ * `GET /_cluster/allocation/explain`. Without a target ES explains the first
+ * unassigned shard it picks; with a target the shard is addressed exactly,
+ * which is what the diagnosis page does per row.
+ */
+export async function explainAllocation(
+  bridge: DbxBridge,
+  connectionId: string,
+  target?: { index: string; shard: number; primary: boolean },
+): Promise<AllocationExplain> {
   const empty: AllocationExplain = {
     ok: false, index: "", shard: "", primary: false, state: "", canAllocate: "",
     reason: "", nodes: [], note: "", raw: null,
   };
-  const res = await single(bridge, connectionId, "GET", "/_cluster/allocation/explain");
+  let res;
+  if (target) {
+    res = await single(bridge, connectionId, "POST", "/_cluster/allocation/explain", {
+      index: target.index,
+      shard: target.shard,
+      primary: target.primary,
+    });
+  } else {
+    res = await single(bridge, connectionId, "GET", "/_cluster/allocation/explain");
+  }
   if (isError(res)) {
     return { ...empty, error: failureText(res), raw: res.error };
   }
   const body = record(res.body);
-  const state = record(body.current_state);
+  // Response shape (8.x verified): index / shard / primary live at the top
+  // level; current_state is a STRING ("unassigned"), not an object.
+  const state = str(body.current_state);
   const decisions = Array.isArray(body.node_allocation_decisions)
     ? (body.node_allocation_decisions as unknown[]).map((d) => {
         const node = record(d);
@@ -1071,10 +1090,10 @@ export async function explainAllocation(bridge: DbxBridge, connectionId: string)
     : [];
   return {
     ok: true,
-    index: str(state.index),
-    shard: str(state.shard),
-    primary: state.primary === true,
-    state: str(state.state),
+    index: str(body.index),
+    shard: str(body.shard),
+    primary: body.primary === true,
+    state,
     canAllocate: str(body.can_allocate),
     reason: str(body.allocate_explanation),
     nodes: decisions,

@@ -336,3 +336,28 @@ python scripts/browser-write-test.py --rw http://127.0.0.1:5199 --ro http://127.
 | mcp-client | 32/32 |
 | verify-package / 包内 manifest | 17/17 / 107 |
 | 包内 UI 断言 | 含「分片与分配」「查询与分析」「nested 包装」，不含「多集群对比」 |
+
+### 第二轮反馈（2026-11-15 22:1x）
+
+| 反馈 | 处理 |
+|---|---|
+| 图标不能统一起来吗 | `connection.svg` 与 `plugin.svg` 合并为**同一标记**（深色底 + 四段彩条），侧栏 / tab / 新建连接卡片显示完全一致的图标 |
+| Allocation Explain 单独搞一个页面 | 新增**「分片诊断」页**（导航 23→24）：未分配分片列表（索引/分片/副本类型/unassigned.reason/已等待）+ **按行定向 explain**（POST 带 index/shard/primary，不再是"随机挑一个"）。顺带修了真缺陷：解析器把响应顶层的 `index/shard/primary` 读成 `current_state` 对象里的字段（8.x 实测 `current_state` 是字符串），导致面板标题一直缺索引名 |
+| 设置→MCP 服务器：红框里的英文描述不翻译吗 | 那是 **WSL Manager 插件**的工具描述，属该插件的资产，无法代翻。ES Studio 自己的 45 个工具描述中文环境下即中文（真源在 Go registry） |
+| 设置→MCP 服务器：这里看不到 MCP（ES Studio） | 设计使然：工具走**插件内置通道**（transport/mcp，跟随连接自动注册给 DBX AI），不作为独立 MCP server 出现在该列表；在插件详情「内置 AI 工具」里可查看/管理 |
+| 插件设置页底部「工作台」区块去掉 | 不可去：该区块由 DBX 按 workbench 贡献自动渲染，侧栏图标打开工作台就是同一贡献注册的命令，删掉贡献 = 工作台彻底无法打开 |
+
+#### 修正后基线（真实 ES 8.19.23）
+
+主回归 **22/22**（explain 步骤迁移到分片诊断页）、渲染检查 **24/24 页** h1/0 控制台错
+（三个门控页在 8.19 上功能存在，门控文案断言不适用，与既往一致）、UX **106/106**、
+写路径 **7/7**、只读 **4/4**、i18n **24+24 页**（en 15px / zh 13px）、svelte-check **0/0**、
+verify-package **17/17**、包内 manifest **107**、smoke（包内 exe）**125/125**。
+`zh-CN.ts`/`en.ts` 各 **1008** 键，键集一致。新增页键前缀 `sdiag.*`（`diag.*` 归集群诊断页）。
+
+**Svelte 5 坑**：effect 内同步读写 `$state` 会被追踪——`load()` 里的 `inflight`
+一旦变成 `$state` 且模板也读它，fetch 完成会再次触发 effect 形成**无限加载循环**
+（页面永远停在加载态、且打爆本地连接池，`ERR_NO_BUFFER_SPACE`）。修复：effect 用
+`untrack(() => void load(connectionId))`。另：`each` 的 `index/shard/prirep` 组合键
+在「同一分片多个未分配副本」（replicas≥2）时**不唯一**，会抛 `each_key_duplicate`
+直接白屏——列表用索引号做键。

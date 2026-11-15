@@ -20,6 +20,7 @@ export const NAV_GROUPS: NavGroup[] = [
     id: "cluster", label: "nav.group.cluster", items: [
       { id: "nodes", label: "nav.nodes" },
       { id: "shards", label: "nav.shards" },
+      { id: "shard-diagnosis", label: "nav.shardDiag" },
       { id: "cluster-settings", label: "nav.clusterSettings" },
     ],
   },

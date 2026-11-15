@@ -23,7 +23,7 @@ CHROME = r"C:/Program Files/Google/Chrome/Application/chrome.exe"
 PAGES = [
     ("集群概览", "es-studio-test"),
     ("节点", "es-studio-node-1"),
-    ("分片", "include._name"),
+    ("分片与分配", "include._name"),
     ("索引列表", "archived-2023"),
     ("别名", "prod-view"),
     # P3
@@ -279,22 +279,21 @@ def run(base_url, out_dir, ro_delete=False):
             except Exception: pass
         results.append(rec)
 
-        # ---- Allocation explain on the merged Shards page: expand, then collapse ----
-        rec = {"step": "interact:allocation-explain", "expect": "explain panel toggles", "ok": False}
+        # ---- Shard diagnosis: unassigned list + targeted explain panel ----
+        rec = {"step": "interact:shard-diagnosis", "expect": "explain panel", "ok": False}
         try:
-            click_nav(page, "分片与分配")
-            page.get_by_role("button", name="解析未分配分片").click()
-            page.wait_for_selector(".explain", timeout=20000)
-            text = page.locator(".explain").inner_text()
-            assert ("allocate" in text.lower()) or ("shard" in text.lower()), text
-            page.get_by_role("button", name="收起解析").first.click()
-            page.wait_for_selector(".explain", state="detached", timeout=10000)
+            click_nav(page, "分片诊断")
+            page.wait_for_selector("table", timeout=20000)
+            page.get_by_role("button", name="解析").first.click()
+            page.wait_for_selector("text=解析结果", timeout=20000)
+            text = page.locator("body").inner_text()
+            assert ("allocate" in text.lower()) or ("分片" in text), text
             time.sleep(0.3)
-            shot("ix-allocation-explain")
+            shot("ix-shard-diagnosis")
             rec["ok"] = True
         except Exception as e:
             rec["error"] = str(e)
-            try: shot("ix-allocation-FAIL")
+            try: shot("ix-shard-diagnosis-FAIL")
             except Exception: pass
         results.append(rec)
 
