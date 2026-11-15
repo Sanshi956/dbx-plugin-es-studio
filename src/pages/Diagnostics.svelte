@@ -21,6 +21,9 @@
   let error = $state("");
   let showRules = $state(false);
   let toast = $state("");
+  // Rules are read from host.storage once per mount. Re-reading them on every
+  // re-check would race a still-pending save and silently revert a fresh edit.
+  let configsLoaded = $state(false);
 
   let findings = $derived(snapshot ? evaluate(snapshot, configs) : []);
   let counts = $derived(countBySeverity(findings));
@@ -35,8 +38,10 @@
     loading = true;
     error = "";
     try {
-      const saved = await bridge.storage.get<string>(STORAGE_KEY);
-      configs = normalizeConfigs(saved);
+      if (!configsLoaded) {
+        configs = normalizeConfigs(await bridge.storage.get<string>(STORAGE_KEY));
+        configsLoaded = true;
+      }
       snapshot = await collectDiagnostics(bridge, connectionId);
     } catch (cause) {
       error = cause instanceof Error ? cause.message : String(cause);
