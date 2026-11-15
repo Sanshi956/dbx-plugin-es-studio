@@ -3,8 +3,8 @@
   import ConfirmDanger from "../components/ConfirmDanger.svelte";
   import {
     fetchRepositories, fetchSnapshots, createRepository, deleteRepository,
-    createSnapshot, deleteSnapshot, restoreSnapshot, isError,
-    type RepositoryRow, type SnapshotRow,
+    createSnapshot, deleteSnapshot, restoreSnapshot, fetchIndices, isError,
+    type RepositoryRow, type SnapshotRow, type IndexRow,
   } from "../lib/services";
   import type { DbxBridge } from "../lib/bridge";
 
@@ -25,7 +25,9 @@
   let repoName = $state("");
   let repoLocation = $state("D:/tmp/es-studio/snapshots");
   let snapName = $state("");
-  let snapIndices = $state("");
+  let indices = $state<IndexRow[]>([]);
+  // 手填 "products,orders" 是典型的体验坑：这里直接从集群索引里多选。
+  let snapIndexList = $state<string[]>([]);
   let includeGlobal = $state(false);
   let renamePattern = $state("");
   let renameReplacement = $state("");
@@ -54,6 +56,18 @@
   }
   $effect(() => {
     void loadRepos();
+  });
+
+  $effect(() => {
+    const id = connectionId;
+    if (!id) return;
+    void fetchIndices(bridge, id)
+      .then((rows) => {
+        indices = rows;
+      })
+      .catch(() => {
+        indices = [];
+      });
   });
 
   async function loadSnaps(repo: string): Promise<void> {
@@ -114,7 +128,7 @@
       return;
     }
     if (job.kind === "snapshot") {
-      const res = await createSnapshot(bridge, connectionId, selectedRepo, snapName.trim(), snapIndices, includeGlobal);
+      const res = await createSnapshot(bridge, connectionId, selectedRepo, snapName.trim(), snapIndexList.join(","), includeGlobal);
       toast = isError(res) ? `创建快照失败：${res.error?.message ?? "HTTP " + res.status}` : `已创建快照 ${snapName.trim()}`;
       if (!isError(res)) snapName = "";
       await loadSnaps(selectedRepo);
@@ -154,7 +168,7 @@
     if (!pending) return "";
     switch (pending.kind) {
       case "repo": return `新建文件系统仓库 ${repoName} → ${repoLocation}`;
-      case "snapshot": return `仓库 ${selectedRepo} 快照 ${snapName}（索引 ${snapIndices || "*"}）`;
+      case "snapshot": return `仓库 ${selectedRepo} 快照 ${snapName}（索引 ${snapIndexList.join(",") || "*"}）`;
       case "delete-repo": return `仓库 ${pending.repo.name}（其下所有快照会一并不可访问）`;
       case "delete-snapshot": return `仓库 ${pending.snap.repository} 快照 ${pending.snap.snapshot}（${pending.snap.indices.length} 索引）`;
       case "restore": return `从 ${pending.snap.repository}/${pending.snap.snapshot} 恢复 ${pending.snap.indices.length} 个索引${renamePattern ? `，重命名为 ${renamePattern} → ${renameReplacement || "restored_$1"}` : "（原索引名，已存在会被拒绝）"}`;
@@ -212,7 +226,11 @@
       <h2>Snapshots in <code>{selectedRepo}</code> <span class="count">{snapshots.length}</span></h2>
       <div class="fields">
         <label>快照名<input placeholder={`snap-${new Date().toISOString().slice(0, 10)}`} bind:value={snapName} /></label>
-        <label class="wide">索引（逗号分隔，留空 = *）<input placeholder="products,orders" bind:value={snapIndices} /></label>
+        <label class="wide">索引（可多选，不选 = 全部 *）
+          <select multiple size="3" bind:value={snapIndexList}>
+            {#each indices as ix (ix.index)}<option value={ix.index}>{ix.index}</option>{/each}
+          </select>
+        </label>
         <label class="check"><input type="checkbox" bind:checked={includeGlobal} /> include_global_state</label>
         <button type="button" class="primary" onclick={askSnapshot}>创建快照</button>
       </div>
@@ -290,6 +308,7 @@
   .fields .wide { flex: 1 1 220px; }
   .fields .check { flex-direction: row; align-items: center; gap: 6px; padding-bottom: 6px; }
   .fields input { padding: 6px 10px; border: 1px solid var(--es-border); border-radius: 6px; background: var(--es-surface); color: var(--es-text); width: 100%; }
+  .fields select { padding: 4px 6px; border: 1px solid var(--es-border); border-radius: 6px; background: var(--es-surface); color: var(--es-text); width: 100%; font-family: var(--es-mono); font-size: 11px; }
   .fields .check input { width: auto; }
   .hint { font-size: 11px; color: var(--es-muted); padding-bottom: 8px; }
   .form-error { margin: 0 0 10px; font-size: 11px; color: var(--es-red); }

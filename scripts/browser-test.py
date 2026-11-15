@@ -105,34 +105,34 @@ def run(base_url, out_dir, ro_delete=False):
             # <option> inside a closed <select> has no layout box, so it never
             # counts as "visible" — wait for attachment instead.
             page.wait_for_selector(
-                'label:has-text("Field") select option[value="name"]',
+                'label:has-text("Search in") select option[value="name"]',
                 state="attached", timeout=20000,
             )
-            opts = page.locator('label:has-text("Field") select option').all_inner_texts()
+            opts = page.locator('label:has-text("Search in") select option').all_inner_texts()
             assert any(o.startswith("All fields") for o in opts), opts
             for expect_field in ("name", "name.kw", "category", "price"):
                 assert any(o.startswith(expect_field + " ·") for o in opts), (expect_field, opts)
             rec["fields"] = opts
 
             # 1) empty keyword -> match_all
-            page.get_by_role("button", name="Search", exact=True).click()
+            page.get_by_role("button", name="Search documents", exact=True).click()
             wait_text(page, "match_all", timeout=20000)
 
             # 2) keyword with no field -> multi_match over all fields
             page.locator("label.grow input").fill("Mouse")
-            page.get_by_role("button", name="Search", exact=True).click()
+            page.get_by_role("button", name="Search documents", exact=True).click()
             wait_text(page, "Wireless Mouse", timeout=20000)
             shot("ix-browser-search-all")
 
             # 3) scope to a concrete field -> metadata says which field matched
-            page.locator('label:has-text("Field") select').select_option("name")
-            page.get_by_role("button", name="Search", exact=True).click()
+            page.locator('label:has-text("Search in") select').select_option("name")
+            page.get_by_role("button", name="Search documents", exact=True).click()
             wait_text(page, 'name ~ "Mouse"', timeout=20000)
             shot("ix-browser-search-field")
 
             # 4) scoping must actually narrow: "Mouse" is not in category
-            page.locator('label:has-text("Field") select').select_option("category")
-            page.get_by_role("button", name="Search", exact=True).click()
+            page.locator('label:has-text("Search in") select').select_option("category")
+            page.get_by_role("button", name="Search documents", exact=True).click()
             wait_text(page, "No documents matched", timeout=20000)
             shot("ix-browser-scoped-empty")
             rec["ok"] = True
@@ -146,10 +146,16 @@ def run(base_url, out_dir, ro_delete=False):
         rec = {"step": "interact:querybuilder", "expect": "Wireless Mouse", "ok": False}
         try:
             click_nav(page, "Query Builder")
-            page.locator('label:has-text("Index") select').select_option("products")
-            page.locator(".clause select").first.select_option("match")
-            page.locator(".clause .field").first.fill("name")
-            page.locator(".clause .value").first.fill("Mouse")
+            page.locator("section.bar select").first.select_option("products")
+            page.wait_for_function(
+                "() => { const el = document.querySelector('.fcount');"
+                " return el && /[0-9]+ fields/.test(el.innerText); }",
+                timeout=20000,
+            )
+            page.click('button:has-text("+ 加条件")')
+            page.locator("div.clause select.field").first.select_option("name")
+            page.wait_for_timeout(200)
+            page.locator("div.clause input.value").first.fill("Mouse")
             page.get_by_role("button", name="Run query", exact=True).click()
             wait_text(page, "Wireless Mouse", timeout=20000)
             time.sleep(0.3)
@@ -180,6 +186,11 @@ def run(base_url, out_dir, ro_delete=False):
         rec = {"step": "interact:analyzer", "expect": "tokens", "ok": False}
         try:
             click_nav(page, "Analyzer")
+            page.locator("section.form select").first.select_option("products")
+            page.wait_for_selector(
+                'section.form select option[value="name"]', state="attached", timeout=20000
+            )
+            page.locator("section.form select").nth(1).select_option("name")
             page.get_by_role("button", name="Analyze", exact=True).click()
             wait_text(page, "tokens", timeout=20000)
             time.sleep(0.3)

@@ -173,3 +173,59 @@ rollover 数据流、删除数据流、写集群设置、改副本数 / 路由�
 
 > **不擅自进入 P4。** 待用户在 DBX Plugin Center 安装 `local.es.studio-0.2.0-windows-x64.signed.dbxp`
 > 并实测确认后，再开启 P4（Cluster Metrics / Node Metrics / History / Cluster Diagnostics / Multi-Cluster Compare）。
+
+---
+
+## 6. 0.2.1 · 0.1.0 验收反馈修复
+
+用户在 0.1.0（P2 包）验收时逐条提了 11 个体验问题。全部按「先看真实数据、再改、
+再回查」的方式处理，并顺手把「同一类需要手填的地方」全局排查了一遍（见 §6.2）。
+
+### 6.1 逐条处理
+
+| # | 反馈 | 原因 | 处理 | 验证 |
+|---|---|---|---|---|
+| 1 | Shards & Topology 没看懂，分配中 / 迁移中的分片没体现 | `_cat/shards` 的 `INITIALIZING`/`RELOCATING` 被归到灰色 `other`，页面也没有任何在途统计；未分配还没给原因 | 顶部四张状态卡（已就绪/分配中/迁移中/未分配，带真实计数与解释）、在途横幅、拓扑里分配中=蓝/迁移中=琥珀、表格新增「未分配原因」「已等待」列；**有在途分片时每 2 秒自动刷新**（可关） | 用真实集群制造了一次 `INITIALIZING`：把 66MB 索引快照后以 `indices.recovery.max_bytes_per_sec=1mb` 限速恢复，页面显示「分配中 1」、`big-restored 0p:INITIALIZING` 蓝色徽标、横幅「集群正在搬运 1 个分片副本」，时间戳 12:56:29→12:56:31 证明自动刷新生效（截图 `screenshots/ux/ux-shards-initializing*.png`） |
+| 2 | Aliases 不能筛选 | 页面没有筛选控件 | 加筛选框（别名 / 索引 / 过滤条件三处一起匹配）+「只看带过滤条件的」开关 + `n / total` 计数 | UX 用例：输入 `prod` 后 2→1 行；输入不存在的词出空态 |
+| 3 | Aliases 新增别名时原索引名要自己填 | 裸 `<input>` | 改成索引下拉，选项里带「该索引已有 N 个别名」，没选索引时按钮禁用 | UX 用例断言下拉存在且含真实索引 |
+| 4 | 数据列 Filter 是做什么的 | `_cat/aliases` 用字面量 `-` 表示"无"，页面把 `-` 原样显示，看着像无意义的一列 | 语义澄清：表头「Filter（别名过滤条件）」、页面说明解释 alias filter 的作用与写入约束、有过滤时渲染黄色 `有过滤条件` 标签 + 表达式（悬浮看全文）、无过滤显示「无（整个索引可见）」；同时补 `write` 与 `routing` 列 | `fetchAliases` 不再把 `-` 当值；UX 用例断言 header 里有解释文案 |
+| 5 | Document Browser 索引后面的 Search 是什么意思 | 输入框只标 `Search`，用户不知道它会发什么查询 | 标签改 `Keyword（关键字）`、字段下拉改 `Search in`、按钮改 `Search documents`，并在下方实时显示**将要执行的查询**：`match_all` / `multi_match「kw」on 全部 N 个字段` / `match「kw」on name（text）` | UX 用例断言三种状态下计划文案依次变化，搜到结果 |
+| 6 | Query Builder 不能组合 must / must_not / should | `buildDsl` 写死 term/range→filter、match→must，没有排除能力 | 每条条件自带 occur 下拉（must / filter / should / must_not，各带中文说明），bool 里分别成组；出现 should 时自动补 `minimum_should_match`（默认 1，可改） | 真实集群计数断言：`must_not category=peripheral` → 3/6；`should display + should accessory`（msm=1）→ 3/6；断言生成的 DSL 里有 `bool.should` |
+| 7 | 更换索引不清理查询条件 | 切索引只换 `index`，条件原样留着 → 换索引后静默 0 命中，像查询写错了 | 切换索引即清空该 tab 的条件/排序/结果并重新拉字段，页面有明确提示 | UX 用例：切到 orders 后 `.clause` 数量为 0 |
+| 8 | 建议多 tab，一个 tab 处理一个索引 | 单实例状态，换索引会互相覆盖 | 加了 tab 条：每个 tab 独立保存索引、条件、size、排序、msm 和**自己的结果**；`+ 新 tab` 自动选一个还没用的索引，`×` 关闭（至少留一个） | UX 用例：新 tab 不继承旧条件；两个 tab 分别显示 products / orders |
+| 9 | 查询条件应按字段类型，而不是固定几种 | 操作符是写死的 5 项，`long` 上也能选 `match` | 操作符由 mapping 类型推导：数值/日期→range/term/exists；boolean→term(true/false)/exists；keyword→term/wildcard/prefix/exists；text→match/match_phrase/term/prefix/wildcard/exists；object/nested→exists。改字段时**同时把操作符重置为该类型的默认值**（否则会留下 term 打在 text 上、静默 0 命中——这次就是靠浏览器实测抓到的） | UX 用例：`price` 的操作符里有 range、没有 match；`name` 里有 match 与 match_phrase |
+| 10 | DSL Editor 索引也要自己写 | 裸 `<input>` | 改索引下拉（`All indices (*)` + 真实索引） | UX 用例断言下拉存在 |
+| 11 | 条件输入框按 Tab 光标会跳到下面的数据组件 | `textarea` 没拦 Tab，浏览器默认把焦点移走 | Tab 插入 2 空格并保持焦点；`Esc` 后 Tab 才跳出编辑器；`Ctrl/⌘+Enter` 直接运行，页面上写明这些快捷键 | UX 用例：Tab 后内容长度 +2 且 `document.activeElement` 仍是 TEXTAREA；`Ctrl+Enter` 命中 products 6 条 |
+
+### 6.2 主动补齐的同类问题（用户说「这种类似的地方不要我提醒了」）
+
+| 位置 | 原来 | 现在 |
+|---|---|---|
+| Analyzer · Context index | 裸输入框 | 索引下拉（含「不指定索引」用全局 `_analyze`） |
+| Analyzer · Field | 裸输入框，靠记忆拼字段名 | 下拉，选项来自所选索引的 mapping（带类型），换索引自动清空 |
+| Analyzer · Analyzer / Tokenizer / Filters | 裸输入框 | 仍可自由输入，但补了 ES 内置候选 datalist |
+| Snapshots · 创建快照的索引 | 手填 `products,orders` | 多选列表（不选 = 全部 `*`） |
+
+### 6.3 验证矩阵（0.2.1）
+
+| 项 | 命令 | 结果 |
+|---|---|---|
+| 类型检查 / 构建 | `npm run check` / `npm run build` | **0 error 0 warning**；单文件 UI |
+| Go | `go test ./...` / `go vet ./...` | 全绿 |
+| 浏览器主回归（启动 + 15 页 + 8 个交互流程） | `browser-test.py` | **23/23**，控制台 0 报错（另有 1 条真实任务用例需 `scripts/es-task-demo.sh` 夹具，单独跑过） |
+| 浏览器体验回归（本轮 11 项 + 2 处补齐） | `browser-ux-test.py` | **31/31**，控制台 0 报错 |
+| 浏览器写路径 / 只读拒绝 | `browser-write-test.py --only rw|ro` | **8/8**、**6/6** |
+| 真实 ES smoke | `smoke-test.py` | **89/89** |
+| 签名 / 包内完整性 / 包内 exe | `sign-package.py --verify`、`verify-package.py`、`smoke-test.py --sidecar` | **SIGNATURE VALID**、**17/17**、**89/89** |
+| 清单预检 | `check-manifest.py`（源码 / 含包） | **52** / **105** |
+
+**新增回归脚本**：`scripts/browser-ux-test.py`（31 条断言），把用户提的每一条都钉成用例，
+下次改这几个页面会立刻红。
+
+### 6.4 已知限制（本轮未做，需要更多节点/时间才有意义）
+
+- **RELOCATING（迁移中）无法在本机实测**：单节点集群不会发生分片迁移。代码路径与
+  INITIALIZING 完全一致（同一个 `stateText`/`stateClass` 映射，同一套配色与计数），
+  INITIALIZING 已用真实分片验证；要真验 RELOCATING 需 ≥2 个节点（`_cluster/reroute` move）。
+- Query Builder 的 `range` 目前只给 gte/lte 两个输入（gt/lt 在 `buildDsl` 里支持、UI 未暴露）。
+- 快照创建的索引多选没有「全选/反选」按钮，索引特别多时需要按住 Ctrl 多选。

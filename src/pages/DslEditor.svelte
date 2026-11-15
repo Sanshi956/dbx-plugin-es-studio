@@ -1,7 +1,8 @@
 <script lang="ts">
+  import { tick } from "svelte";
   import StateBlock from "../components/StateBlock.svelte";
   import JsonView from "../components/JsonView.svelte";
-  import { searchIndex, single, type DocHit } from "../lib/services";
+  import { searchIndex, single, fetchIndices, type DocHit, type IndexRow } from "../lib/services";
   import type { DbxBridge } from "../lib/bridge";
 
   interface Props {
@@ -11,6 +12,8 @@
   let { bridge, connectionId }: Props = $props();
 
   let index = $state("");
+  let indices = $state<IndexRow[]>([]);
+  let loadingIndices = $state(true);
   let body = $state('{\n  "query": { "match_all": {} },\n  "size": 20\n}');
   let loading = $state(false);
   let error = $state("");
@@ -19,6 +22,7 @@
   let showRaw = $state(false);
   let formatError = $state("");
   let history = $state<string[]>([]);
+  let escapeArmed = $state(false);
 
   const HISTORY_KEY = "es.studio.dsls";
 
@@ -27,6 +31,55 @@
       if (Array.isArray(v)) history = v;
     });
   });
+
+  $effect(() => {
+    const id = connectionId;
+    if (!id) {
+      loadingIndices = false;
+      return;
+    }
+    loadingIndices = true;
+    void fetchIndices(bridge, id)
+      .then((rows) => {
+        indices = rows;
+      })
+      .catch(() => {
+        indices = [];
+      })
+      .finally(() => {
+        loadingIndices = false;
+      });
+  });
+
+  /**
+   * A JSON editor without Tab-to-indent is painful: Tab used to move focus into
+   * the results table mid-typing. Now Tab inserts two spaces, and Esc first if
+   * you actually want to leave the editor by keyboard.
+   */
+  async function onEditorKey(event: KeyboardEvent): Promise<void> {
+    if (event.key === "Escape") {
+      escapeArmed = true;
+      return;
+    }
+    if (event.key === "Enter" && (event.ctrlKey || event.metaKey)) {
+      event.preventDefault();
+      void run();
+      return;
+    }
+    if (event.key !== "Tab") return;
+    if (event.shiftKey || escapeArmed) {
+      escapeArmed = false;
+      return;
+    }
+    event.preventDefault();
+    const el = event.currentTarget as HTMLTextAreaElement;
+    const start = el.selectionStart;
+    const end = el.selectionEnd;
+    const indent = "  ";
+    body = body.slice(0, start) + indent + body.slice(end);
+    await tick();
+    el.selectionStart = el.selectionEnd = start + indent.length;
+  }
 
   function format(): void {
     formatError = "";
@@ -113,16 +166,28 @@
   </header>
 
   <section class="bar">
-    <label>Index (optional)<input placeholder="all indices if empty" bind:value={index} /></label>
+    <label>Index
+      <select bind:value={index} disabled={loadingIndices}>
+        <option value="">All indices (*)</option>
+        {#each indices as ix (ix.index)}<option value={ix.index}>{ix.index}</option>{/each}
+      </select>
+    </label>
     <button type="button" onclick={format}>Format</button>
     <button type="button" class="primary" onclick={run} disabled={loading || !connectionId}>
       {loading ? "Running…" : "Run"}
     </button>
+    <span class="keys">Tab 插入 2 空格 · Esc 后 Tab 跳出编辑器 · Ctrl/⌘+Enter 运行</span>
   </section>
 
   {#if formatError}<div class="err">JSON error: {formatError}</div>{/if}
 
-  <textarea class="editor" spellcheck="false" bind:value={body}></textarea>
+  <textarea
+    class="editor"
+    spellcheck="false"
+    bind:value={body}
+    onkeydown={onEditorKey}
+    placeholder={'{\n  "query": { "match_all": {} }\n}'}
+  ></textarea>
 
   <div class="cols">
     <div class="results">
@@ -163,9 +228,10 @@
   button:hover:not(:disabled):not(.primary) { background: var(--es-surface-2); }
   .primary:hover:not(:disabled) { filter: brightness(0.92); }
   button:disabled { opacity: 0.55; cursor: default; }
-  .bar { display: flex; gap: 12px; align-items: end; margin-bottom: 10px; }
+  .bar { display: flex; gap: 12px; align-items: end; margin-bottom: 10px; flex-wrap: wrap; }
   .bar label { display: flex; flex-direction: column; gap: 4px; font-size: 11px; color: var(--es-muted); }
-  .bar input { padding: 6px 10px; border: 1px solid var(--es-border); border-radius: 6px; background: var(--es-surface); color: var(--es-text); }
+  .bar select { padding: 6px 10px; border: 1px solid var(--es-border); border-radius: 6px; background: var(--es-surface); color: var(--es-text); min-width: 190px; }
+  .keys { font-size: 10px; color: var(--es-muted); font-family: var(--es-mono); padding-bottom: 9px; }
   .primary { background: var(--es-accent); color: #fff; border-color: var(--es-accent); }
   .err { padding: 8px 12px; margin-bottom: 10px; border: 1px solid var(--es-red); border-radius: 6px; background: var(--es-surface-2); color: var(--es-red); font-size: 12px; font-family: var(--es-mono); }
   .editor {

@@ -50,8 +50,7 @@
     void loadIndices(connectionId);
   });
 
-  async function loadFields(id: string): Promise<void> {
-    if (!id) return;
+  async function loadFields(id: string): Promise<void> {    if (!id) return;
     loadingFields = true;
     try {
       const next = await fetchFields(bridge, connectionId, id);
@@ -95,6 +94,20 @@
 
   function onKeywordKey(event: KeyboardEvent): void {
     if (event.key === "Enter") void runSearch();
+  }
+
+  /** Say out loud what the next click will send, so "Search" is not a mystery. */
+  function fieldType(name: string): string {
+    return fields.find((f) => f.name === name)?.type ?? "";
+  }
+
+  function queryPlan(): string {
+    const ix = selectedIndex || "<index>";
+    const kw = keyword.trim();
+    if (!kw) return `POST /${ix}/_search · match_all（前 ${size} 条）`;
+    if (!field) return `POST /${ix}/_search · multi_match「${kw}」on 全部 ${fields.length} 个字段`;
+    const type = fieldType(field);
+    return `POST /${ix}/_search · match「${kw}」on ${field}${type ? `（${type}）` : ""}`;
   }
 
   async function openDoc(id: string): Promise<void> {
@@ -155,15 +168,15 @@
         {#each indices as ix (ix.index)}<option value={ix.index}>{ix.index}</option>{/each}
       </select>
     </label>
-    <label class="grow">Search
+    <label class="grow">Keyword（关键字）
       <input
-        placeholder="关键字，留空 = 全部文档（回车搜索）"
+        placeholder="留空 = 列出全部文档；输入后回车即搜索"
         bind:value={keyword}
         onkeydown={onKeywordKey}
         disabled={!selectedIndex}
       />
     </label>
-    <label>Field
+    <label>Search in
       <select bind:value={field} disabled={!selectedIndex || loadingFields || fields.length === 0}>
         <option value="">{loadingFields ? "Loading fields…" : `All fields (${fields.length})`}</option>
         {#each fields as f (f.name)}<option value={f.name}>{f.name} · {f.type}</option>{/each}
@@ -173,9 +186,14 @@
       <input type="number" min="1" max="1000" bind:value={size} />
     </label>
     <button type="button" class="primary" onclick={runSearch} disabled={!selectedIndex || loadingSearch}>
-      {loadingSearch ? "Searching…" : "Search"}
+      {loadingSearch ? "Searching…" : "Search documents"}
     </button>
   </section>
+
+  <p class="plan">
+    将执行：<code>{queryPlan()}</code>
+    <span class="plan-hint">—— 关键字留空是「列出文档」；选了 Search in 就只在该字段上匹配，不选则在所有字段里找。</span>
+  </p>
 
   {#if selectedIndex && !loadingFields && fields.length === 0}
     <p class="hint">取不到字段列表（索引可能已关闭或无 mapping）：搜索将按全部字段进行。</p>
@@ -257,6 +275,9 @@
   .bar .grow { flex: 1 1 220px; min-width: 180px; }
   .bar .grow input { width: 100%; }
   .hint { margin: -6px 0 14px; font-size: 11px; color: var(--es-muted); }
+  .plan { margin: -4px 0 14px; font-size: 11px; color: var(--es-muted); line-height: 1.7; }
+  .plan code { font-family: var(--es-mono); font-size: 11px; color: var(--es-text); background: var(--es-surface-2); border: 1px solid var(--es-border); border-radius: 4px; padding: 1px 6px; }
+  .plan-hint { margin-left: 6px; }
 
   .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; align-items: start; }
   .meta { font-size: 11px; color: var(--es-muted); font-family: var(--es-mono); margin: 0 0 8px; }

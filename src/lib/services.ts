@@ -202,10 +202,32 @@ export interface ShardRow {
   node: string;
   ip: string;
   unassigned: boolean;
+  /** `unassigned.reason` — INDEX_CREATED / NODE_LEFT / ALLOCATION_FAILED … */
+  reason: string;
+  /** how long the copy has been waiting (e.g. "3.2m"), empty when assigned */
+  waiting: string;
 }
 
+// `_cat/shards` only returns the short default column set, and the reason for an
+// unassigned copy is the single most useful field here — ask for it explicitly.
+const SHARD_COLUMNS = [
+  "index",
+  "shard",
+  "prirep",
+  "state",
+  "docs",
+  "store",
+  "ip",
+  "node",
+  "unassigned.reason",
+  "unassigned.at",
+  "unassigned.for",
+].join(",");
+
 export async function fetchShards(bridge: DbxBridge, connectionId: string): Promise<ShardRow[]> {
-  const rows = await batch(bridge, connectionId, [{ path: "/_cat/shards?format=json&bytes=b" }]);
+  const rows = await batch(bridge, connectionId, [
+    { path: `/_cat/shards?format=json&bytes=b&h=${SHARD_COLUMNS}` },
+  ]);
   const body = Array.isArray(rows[0]?.body) ? (rows[0].body as unknown[]) : [];
   return body.map((entry) => {
     const s = record(entry);
@@ -220,9 +242,37 @@ export async function fetchShards(bridge: DbxBridge, connectionId: string): Prom
       node: str(s.node),
       ip: str(s.ip),
       unassigned: state === "UNASSIGNED",
+      reason: str(s["unassigned.reason"]),
+      waiting: str(s["unassigned.for"]),
     };
   });
 }
+
+/** Counts per shard copy state, so the page can surface in-flight allocation. */
+export interface ShardSummary {
+  total: number;
+  started: number;
+  initializing: number;
+  relocating: number;
+  unassigned: number;
+  /** copies ES is actively moving/creating right now */
+  inFlight: number;
+}
+
+export function summarizeShards(shards: ShardRow[]): ShardSummary {
+  const count = (state: string): number => shards.filter((s) => s.state === state).length;
+  const initializing = count("INITIALIZING");
+  const relocating = count("RELOCATING");
+  return {
+    total: shards.length,
+    started: count("STARTED"),
+    initializing,
+    relocating,
+    unassigned: count("UNASSIGNED"),
+    inFlight: initializing + relocating,
+  };
+}
+
 
 /** Build a node x shard topology matrix for the "cluster topology" view. */
 /**
@@ -390,18 +440,30 @@ export function simpleSearchBody(
 export interface AliasRow {
   alias: string;
   index: string;
+  /** alias filter expression (JSON) — empty when the alias has no filter */
   filter: string;
+  /** `_cat/aliases` reports "-" for "not the write index" */
+  writeIndex: boolean;
+  routing: string;
 }
 
 export async function fetchAliases(bridge: DbxBridge, connectionId: string): Promise<AliasRow[]> {
-  const rows = await batch(bridge, connectionId, [{ path: "/_cat/aliases?format=json" }]);
+  const rows = await batch(bridge, connectionId, [{ path: "/_cat/aliases?format=json&h=*" }]);
   const body = Array.isArray(rows[0]?.body) ? (rows[0].body as unknown[]) : [];
+  // `_cat` uses the literal "-" for "no value"; a filter column showing "-" is
+  // what made the Filter column look meaningless.
+  const clean = (value: unknown): string => {
+    const text = str(value).trim();
+    return text === "-" || text === "null" ? "" : text;
+  };
   return body.map((entry) => {
     const a = record(entry);
     return {
-      alias: str(a.alias),
-      index: str(a.index),
-      filter: str(a.filter),
+      alias: clean(a.alias),
+      index: clean(a.index),
+      filter: clean(a.filter),
+      writeIndex: clean(a.is_write_index) === "true",
+      routing: clean(a["routing.index"]) || clean(a["routing.search"]),
     };
   });
 }
@@ -486,30 +548,78 @@ export async function deleteDocument(
 // Query Builder (form -> DSL)
 // ---------------------------------------------------------------------------
 
+/** Where a clause lives inside a bool query. */
+export type ClauseOccur = "must" | "filter" | "should" | "must_not";
+
 export type QueryClause =
   | { type: "match_all"; boost?: number }
-  | { type: "term"; field: string; value: string }
-  | { type: "match"; field: string; value: string }
-  | { type: "range"; field: string; gte?: string; lte?: string; gt?: string; lt?: string }
-  | { type: "wildcard"; field: string; value: string };
+  | { type: "term"; field: string; value: string; occur?: ClauseOccur }
+  | { type: "match"; field: string; value: string; occur?: ClauseOccur }
+  | { type: "match_phrase"; field: string; value: string; occur?: ClauseOccur }
+  | { type: "prefix"; field: string; value: string; occur?: ClauseOccur }
+  | { type: "wildcard"; field: string; value: string; occur?: ClauseOccur }
+  | { type: "exists"; field: string; occur?: ClauseOccur }
+  | { type: "range"; field: string; gte?: string; lte?: string; gt?: string; lt?: string; occur?: ClauseOccur };
 
-export function buildDsl(
-  clauses: QueryClause[],
-  opts: { size?: number; from?: number; sortField?: string; sortOrder?: "asc" | "desc" } = {},
-): Record<string, unknown> {
-  const must: Record<string, unknown>[] = [];
-  const filter: Record<string, unknown>[] = [];
+/** Leaf clause kinds a user can pick; `match_all` is not one of them. */
+export type LeafClauseType = Exclude<QueryClause["type"], "match_all">;
+
+export interface DslOptions {
+  size?: number;
+  from?: number;
+  sortField?: string;
+  sortOrder?: "asc" | "desc";
+  /** only meaningful when there is at least one `should` clause */
+  minimumShouldMatch?: string;
+}
+
+/**
+ * Turn the clause list into a bool query. Each clause declares its own
+ * occurrence, so `must` / `filter` / `should` / `must_not` can be combined —
+ * the previous version silently mapped term/range to `filter` and match to
+ * `must`, which made "exclude these" impossible to express.
+ *
+ * Defaults keep term/range/prefix/wildcard/exists in `filter` (cached, no
+ * scoring) and match/match_phrase in `must`.
+ */
+export function buildDsl(clauses: QueryClause[], opts: DslOptions = {}): Record<string, unknown> {
+  const groups: Record<ClauseOccur, Record<string, unknown>[]> = {
+    must: [],
+    filter: [],
+    should: [],
+    must_not: [],
+  };
+
+  const defaultOccur = (c: QueryClause): ClauseOccur => {
+    if (c.type === "match" || c.type === "match_phrase") return "must";
+    return "filter";
+  };
+
   for (const c of clauses) {
+    if (c.type === "match_all") {
+      groups.must.push({ match_all: c.boost ? { boost: c.boost } : {} });
+      continue;
+    }
+    const occur = c.occur ?? defaultOccur(c);
+    const field = c.field;
     switch (c.type) {
-      case "match_all":
-        must.push({ match_all: c.boost ? { boost: c.boost } : {} });
-        break;
       case "term":
-        if (c.field && c.value !== "")
-          filter.push({ term: { [c.field]: c.value } });
+        if (field && c.value !== "") groups[occur].push({ term: { [field]: c.value } });
         break;
       case "match":
-        if (c.field && c.value !== "") must.push({ match: { [c.field]: c.value } });
+        if (field && c.value !== "") groups[occur].push({ match: { [field]: c.value } });
+        break;
+      case "match_phrase":
+        if (field && c.value !== "") groups[occur].push({ match_phrase: { [field]: c.value } });
+        break;
+      case "prefix":
+        if (field && c.value !== "") groups[occur].push({ prefix: { [field]: c.value } });
+        break;
+      case "wildcard":
+        if (field && c.value !== "") groups[occur].push({ wildcard: { [field]: c.value } });
+        break;
+      case "exists":
+        if (field) groups[occur].push({ exists: { field } });
         break;
       case "range": {
         const r: Record<string, string> = {};
@@ -517,23 +627,109 @@ export function buildDsl(
         if (c.lte) r.lte = c.lte;
         if (c.gt) r.gt = c.gt;
         if (c.lt) r.lt = c.lt;
-        if (c.field && Object.keys(r).length) filter.push({ range: { [c.field]: r } });
+        if (field && Object.keys(r).length) groups[occur].push({ range: { [field]: r } });
         break;
       }
-      case "wildcard":
-        if (c.field && c.value !== "") filter.push({ wildcard: { [c.field]: c.value } });
-        break;
     }
   }
+
   const bool: Record<string, unknown> = {};
-  if (must.length) bool.must = must;
-  if (filter.length) bool.filter = filter;
+  if (groups.must.length) bool.must = groups.must;
+  if (groups.filter.length) bool.filter = groups.filter;
+  if (groups.should.length) {
+    bool.should = groups.should;
+    // A bool with only `should` clauses requires one match by default; when the
+    // user combines should with must/filter, ES defaults to "optional", which is
+    // rarely what "I added a should" means — be explicit.
+    const msm = (opts.minimumShouldMatch ?? "").trim();
+    bool.minimum_should_match = msm === "" ? 1 : msm;
+  }
+  if (groups.must_not.length) bool.must_not = groups.must_not;
+
   const dsl: Record<string, unknown> = { query: Object.keys(bool).length ? { bool } : { match_all: {} } };
   if (opts.size !== undefined) dsl.size = opts.size;
   if (opts.from !== undefined) dsl.from = opts.from;
   if (opts.sortField) dsl.sort = [{ [opts.sortField]: opts.sortOrder ?? "asc" }];
   return dsl;
 }
+
+// ---------------------------------------------------------------------------
+// Field-type driven operators (Query Builder should not offer `match` on a
+// `long`, nor `range` on a `boolean`)
+// ---------------------------------------------------------------------------
+
+const NUMERIC_TYPES = new Set([
+  "long", "integer", "short", "byte", "double", "float", "half_float",
+  "scaled_float", "unsigned_long",
+]);
+const DATE_TYPES = new Set(["date", "date_nanos"]);
+const TEXT_TYPES = new Set(["text", "match_only_text", "search_as_you_type", "annotated_text"]);
+const KEYWORD_TYPES = new Set(["keyword", "constant_keyword", "wildcard"]);
+const GEO_TYPES = new Set(["geo_point", "geo_shape", "point", "shape", "ip"]);
+
+export interface OperatorOption {
+  value: LeafClauseType;
+  label: string;
+}
+
+/** Operators that actually make sense for a mapping type, most useful first. */
+export function operatorsForType(type: string): OperatorOption[] {
+  const t = type.trim();
+  if (NUMERIC_TYPES.has(t) || DATE_TYPES.has(t)) {
+    return [
+      { value: "range", label: "range（区间）" },
+      { value: "term", label: "term（精确值）" },
+      { value: "exists", label: "exists（字段存在）" },
+    ];
+  }
+  if (t === "boolean") {
+    return [
+      { value: "term", label: "term（true/false）" },
+      { value: "exists", label: "exists（字段存在）" },
+    ];
+  }
+  if (KEYWORD_TYPES.has(t)) {
+    return [
+      { value: "term", label: "term（精确值）" },
+      { value: "wildcard", label: "wildcard（通配符）" },
+      { value: "prefix", label: "prefix（前缀）" },
+      { value: "exists", label: "exists（字段存在）" },
+    ];
+  }
+  if (TEXT_TYPES.has(t)) {
+    return [
+      { value: "match", label: "match（分词匹配）" },
+      { value: "match_phrase", label: "match_phrase（短语）" },
+      { value: "term", label: "term（不分词精确值）" },
+      { value: "prefix", label: "prefix（前缀）" },
+      { value: "wildcard", label: "wildcard（通配符）" },
+      { value: "exists", label: "exists（字段存在）" },
+    ];
+  }
+  if (GEO_TYPES.has(t)) {
+    return [
+      { value: "term", label: "term（精确值）" },
+      { value: "exists", label: "exists（字段存在）" },
+    ];
+  }
+  // object / nested / flattened / unknown: only existence is safe to build
+  // without knowing the shape.
+  return [
+    { value: "exists", label: "exists（字段存在）" },
+    { value: "term", label: "term（精确值）" },
+  ];
+}
+
+/** Default operator for a field, used when the user picks a field. */
+export function defaultOperatorForType(type: string): LeafClauseType {
+  return operatorsForType(type)[0].value;
+}
+
+/** Clause value kinds that need no free-text input. */
+export function clauseHasNoValue(type: LeafClauseType): boolean {
+  return type === "exists";
+}
+
 
 // ---------------------------------------------------------------------------
 // Analyzer
