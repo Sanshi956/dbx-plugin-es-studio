@@ -414,6 +414,12 @@ function collectFields(
  * of simply not supporting data streams. 404 stays a legitimate empty result.
  */
 function throwIfUnsupported(res: EsResult, api: string): void {
+  // A transport failure (sidecar could not reach the cluster) must not be folded
+  // into "no rows": `status: 0` / a plugin error would otherwise render as an
+  // empty table, which reads as "this cluster has none".
+  if (res.error && res.status < 400) {
+    throw new Error(failureText(res));
+  }
   if (res.status === 400 || res.status === 405 || res.status === 501) {
     throw new Error(t("err.unsupportedApi", { api }));
   }
@@ -1123,10 +1129,33 @@ export interface ComponentTemplateRow {
   hasAliases: boolean;
 }
 
-export async function fetchTemplates(bridge: DbxBridge, connectionId: string): Promise<TemplateRow[]> {
-  const rows = await batch(bridge, connectionId, [{ path: "/_index_template" }, { path: "/_template" }]);
+export interface TemplateListing {
+  rows: TemplateRow[];
+  /** `/_index_template` answered — composable templates exist from 7.8. */
+  composableSupported: boolean;
+  /** `/_template` answered — legacy templates exist on every version tested (6.8–9.5). */
+  legacySupported: boolean;
+}
+
+export async function fetchTemplates(bridge: DbxBridge, connectionId: string): Promise<TemplateListing> {
+  const results = await batch(bridge, connectionId, [{ path: "/_index_template" }, { path: "/_template" }]);
   const out: TemplateRow[] = [];
-  const composable = record(rows[0]?.body);
+
+  // The two endpoints are gated differently: `/_index_template` is 400 on
+  // 6.x / 7.0–7.7 ("invalid index name"), while `/_template` still answers on
+  // 6.8 through 9.5. Whichever refuses has to be reported to the page — folding
+  // it into "no rows" makes a missing API look like an empty cluster.
+  const composableRes = results[0];
+  const legacyRes = results[1];
+  const composableSupported = !composableRes || !isError(composableRes);
+  const legacySupported = !legacyRes || !isError(legacyRes);
+  if (!composableSupported && !legacySupported) {
+    // Both refused: that is not "two gates", it is an unusable cluster (or a
+    // transport failure). Surface the reason instead of two misleading notes.
+    throw new Error(failureText(composableRes ?? legacyRes ?? { status: 0 }));
+  }
+
+  const composable = composableSupported ? record(composableRes?.body) : {};
   for (const entry of Array.isArray(composable.index_templates) ? (composable.index_templates as unknown[]) : []) {
     const item = record(entry);
     const def = record(item.index_template);
@@ -1139,8 +1168,13 @@ export async function fetchTemplates(bridge: DbxBridge, connectionId: string): P
       version: num(def.version),
     });
   }
-  const legacy = record(rows[1]?.body);
+
+  // `GET /_template` answers with a name -> definition map, and an ERROR body is
+  // also an object: iterating it blindly renders phantom rows literally named
+  // "error" and "status".
+  const legacy = legacySupported ? record(legacyRes?.body) : {};
   for (const [name, raw] of Object.entries(legacy)) {
+    if (name === "error" || name === "status") continue;
     const def = record(raw);
     out.push({
       name,
@@ -1151,7 +1185,81 @@ export async function fetchTemplates(bridge: DbxBridge, connectionId: string): P
       version: num(def.version),
     });
   }
-  return out.sort((a, b) => a.name.localeCompare(b.name));
+  return {
+    rows: out.sort((a, b) => a.name.localeCompare(b.name)),
+    composableSupported,
+    legacySupported,
+  };
+}
+
+
+export interface LegacyNormalization {
+  body: Record<string, unknown>;
+  /** Ids of the rewrites that were applied, so the UI can say what it changed. */
+  changes: string[];
+}
+
+/** Keys that mean "this mapping object is the mapping itself", not a type name. */
+const MAPPING_BODY_KEYS = new Set([
+  "properties", "dynamic", "dynamic_date_formats", "dynamic_templates", "date_detection",
+  "numeric_detection", "runtime", "_source", "_meta", "_routing", "enabled", "_field_names",
+]);
+
+/**
+ * Rewrite a user-authored legacy `_template` body into the shape this cluster
+ * accepts. Both facts below were verified against real 6.8.23 / 7.7.1 / 8.19.23 /
+ * 9.5.4 clusters:
+ *
+ * 1. Composable and legacy bodies are NOT interchangeable. Legacy templates take
+ *    `order` (not `priority`), no `composed_of`, and put `settings` /
+ *    `mappings` / `aliases` at the top level (not under `template`). Sending a
+ *    copied composable body answers 400 "unknown key [priority] in the template".
+ * 2. The mapping type layer switches at 7.0, not at 8.0. Measured on real
+ *    clusters: 6.8.23 needs `mappings._doc.properties` (a bare `properties`
+ *    answers 400 "Root mapping definition has unsupported parameters"), while
+ *    7.7.1 — like 8.x/9.x — answers 400 "The mapping definition cannot be nested
+ *    under a type [_doc]" for the typed form. Callers must pass the 7.0 flag,
+ *    not the 8.0 typeless-API flag.
+ */
+export function normalizeLegacyTemplate(
+  raw: Record<string, unknown>,
+  typedMappings: boolean,
+): LegacyNormalization {
+  const body: Record<string, unknown> = JSON.parse(JSON.stringify(raw));
+  const changes: string[] = [];
+
+  const inner = record(body.template);
+  if (Object.keys(inner).length > 0) {
+    for (const [key, value] of Object.entries(inner)) {
+      if (body[key] === undefined) body[key] = value;
+    }
+    delete body.template;
+    changes.push("tpl.norm.template");
+  }
+  if (body.priority !== undefined && body.order === undefined) {
+    body.order = body.priority;
+    delete body.priority;
+    changes.push("tpl.norm.priority");
+  }
+  if (body.composed_of !== undefined) {
+    delete body.composed_of;
+    changes.push("tpl.norm.composedOf");
+  }
+
+  const mappings = record(body.mappings);
+  if (Object.keys(mappings).length > 0) {
+    const looksTypeless = Object.keys(mappings).some((key) => MAPPING_BODY_KEYS.has(key));
+    if (typedMappings && looksTypeless) {
+      body.mappings = { _doc: mappings };
+      changes.push("tpl.norm.typed");
+    } else if (!typedMappings && !looksTypeless && Object.keys(mappings).length === 1) {
+      // Single wrapper key and no mapping-body keys => it is a type layer.
+      const [typeName] = Object.keys(mappings);
+      body.mappings = record(mappings[typeName]);
+      changes.push("tpl.norm.untyped");
+    }
+  }
+  return { body, changes };
 }
 
 export async function getTemplate(

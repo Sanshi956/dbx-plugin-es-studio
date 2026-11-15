@@ -5,9 +5,10 @@
   import ConfirmDanger from "../components/ConfirmDanger.svelte";
   import { handleEditorKey } from "../lib/editorKeys";
   import {
-    fetchTemplates, getTemplate, putTemplate, deleteTemplate, isError,
-    type TemplateRow, type TemplateKind,
+    fetchTemplates, getTemplate, putTemplate, deleteTemplate, isError, failureText,
+    normalizeLegacyTemplate, type TemplateRow, type TemplateKind,
   } from "../lib/services";
+  import { clusterCapabilities, type Capabilities } from "../lib/capabilities";
   import type { DbxBridge } from "../lib/bridge";
   import { t } from "../lib/i18n.svelte.js";
 
@@ -17,35 +18,83 @@
   }
   let { bridge, connectionId }: Props = $props();
 
-  let rows = $state<TemplateRow[]>([]);
-  let loading = $state(true);
-  let error = $state("");
-  let toast = $state("");
-  let filter = $state("");
-  let kindFilter = $state<"all" | TemplateKind>("all");
-
-  let detail = $state<{ name: string; kind: TemplateKind; body: unknown } | null>(null);
-
-  let creating = $state(false);
-  let newName = $state("");
-  let newKind = $state<TemplateKind>("composable");
-  let draft = $state(`{
+  const COMPOSABLE_DRAFT = `{
   "index_patterns": ["p3-demo-*"],
   "priority": 100,
   "template": {
     "settings": { "number_of_shards": 1, "number_of_replicas": 0 },
     "mappings": { "properties": { "message": { "type": "text" } } }
   }
-}`);
+}`;
+  // Legacy bodies are flat (no `template` wrapper) and use `order`, not
+  // `priority`; the mapping type layer follows the typeless switch, so 6.x needs
+  // the `_doc` wrapper or the PUT answers 400.
+  const LEGACY_DRAFT = `{
+  "index_patterns": ["legacy-demo-*"],
+  "order": 100,
+  "settings": { "number_of_shards": 1, "number_of_replicas": 0 },
+  "mappings": { "properties": { "message": { "type": "text" } } }
+}`;
+  const LEGACY_TYPED_DRAFT = `{
+  "index_patterns": ["legacy-demo-*"],
+  "order": 100,
+  "settings": { "number_of_shards": 1, "number_of_replicas": 0 },
+  "mappings": { "_doc": { "properties": { "message": { "type": "text" } } } }
+}`;
+
+  let rows = $state<TemplateRow[]>([]);
+  let loading = $state(true);
+  let error = $state("");
+  let toast = $state("");
+  let filter = $state("");
+  let kindFilter = $state<"all" | TemplateKind>("all");
+  let caps = $state<Capabilities | null>(null);
+  let composableSupported = $state(true);
+  let legacySupported = $state(true);
+
+  let detail = $state<{ name: string; kind: TemplateKind; body: unknown } | null>(null);
+
+  let creating = $state(false);
+  let newName = $state("");
+  let newKind = $state<TemplateKind>("composable");
+  let draft = $state(COMPOSABLE_DRAFT);
+  let drafts: Record<TemplateKind, string> = { composable: COMPOSABLE_DRAFT, legacy: LEGACY_DRAFT };
   let formError = $state("");
   let pendingDelete = $state<TemplateRow | null>(null);
   let pendingCreate = $state(false);
+  let pendingBody = $state<Record<string, unknown> | null>(null);
+  let pendingChanges = $state<string[]>([]);
+
+  function defaultDraft(kind: TemplateKind): string {
+    if (kind === "composable") return COMPOSABLE_DRAFT;
+    return caps?.legacyTypedMappings ? LEGACY_TYPED_DRAFT : LEGACY_DRAFT;
+  }
+
+  function switchKind(kind: TemplateKind): void {
+    if (kind === newKind) return;
+    drafts[newKind] = draft;
+    newKind = kind;
+    draft = drafts[kind] ?? defaultDraft(kind);
+  }
 
   async function load(): Promise<void> {
     loading = true;
     error = "";
     try {
-      rows = await fetchTemplates(bridge, connectionId);
+      caps = await clusterCapabilities(bridge, connectionId);
+      const listing = await fetchTemplates(bridge, connectionId);
+      rows = listing.rows;
+      composableSupported = listing.composableSupported;
+      legacySupported = listing.legacySupported;
+      // The 6.x draft must carry the `_doc` layer from the start, otherwise the
+      // first create attempt fails on a body the page itself suggested.
+      if (caps?.legacyTypedMappings) {
+        if (drafts.legacy === LEGACY_DRAFT) drafts.legacy = LEGACY_TYPED_DRAFT;
+        if (draft === LEGACY_DRAFT) draft = LEGACY_TYPED_DRAFT;
+      }
+      if (!composableSupported && newKind === "composable") {
+        switchKind("legacy");
+      }
     } catch (cause) {
       error = cause instanceof Error ? cause.message : String(cause);
       rows = [];
@@ -79,26 +128,45 @@
       formError = t("tpl.err.noName");
       return;
     }
+    let parsed: Record<string, unknown>;
     try {
-      JSON.parse(draft);
+      parsed = JSON.parse(draft) as Record<string, unknown>;
     } catch (cause) {
       formError = t("common.jsonParseFailed", { detail: cause instanceof Error ? cause.message : String(cause) });
       return;
+    }
+    if (newKind === "legacy") {
+      // Rewrite composable-shaped bodies (and the wrong mapping layout for this
+      // cluster's typeless switch) instead of letting ES answer a bare 400.
+      const normalized = normalizeLegacyTemplate(parsed, caps?.legacyTypedMappings ?? false);
+      pendingBody = normalized.body;
+      pendingChanges = normalized.changes;
+    } else {
+      pendingBody = parsed;
+      pendingChanges = [];
     }
     pendingCreate = true;
   }
 
   async function confirmCreate(): Promise<void> {
     pendingCreate = false;
-    const res = await putTemplate(bridge, connectionId, newName.trim(), JSON.parse(draft), newKind);
+    const payload = pendingBody ?? {};
+    const res = await putTemplate(bridge, connectionId, newName.trim(), payload, newKind);
     if (isError(res)) {
-      toast = t("common.toast.writeFailed", { detail: res.error?.message ?? "HTTP " + res.status });
+      toast = t("common.toast.writeFailed", { detail: failureText(res) });
+      return;
+    }
+    if (pendingChanges.length > 0) {
+      const applied = pendingChanges.map((key) => t(key)).join("；");
+      toast = t("tpl.toast.writtenNormalized", { kind: newKind, name: newName.trim(), changes: applied });
     } else {
       toast = t("tpl.toast.written", { kind: newKind, name: newName.trim() });
-      creating = false;
-      newName = "";
-      await load();
     }
+    creating = false;
+    newName = "";
+    pendingBody = null;
+    pendingChanges = [];
+    await load();
   }
 
   async function confirmDelete(): Promise<void> {
@@ -107,7 +175,7 @@
     pendingDelete = null;
     const res = await deleteTemplate(bridge, connectionId, target.name, target.kind);
     toast = isError(res)
-      ? t("common.toast.deleteFailed", { detail: res.error?.message ?? "HTTP " + res.status })
+      ? t("common.toast.deleteFailed", { detail: failureText(res) })
       : t("tpl.toast.deleted", { kind: target.kind, name: target.name });
     if (detail?.name === target.name) detail = null;
     await load();
@@ -125,14 +193,26 @@
 
   {#if toast}<div class="toast">{toast}</div>{/if}
   {#if error}<StateBlock kind="error" message={t("tpl.failed")} detail={error} />{/if}
+  {#if !composableSupported}
+    <p class="gate">{caps?.version
+      ? t("tpl.gate.composable", { version: caps.version })
+      : t("tpl.gate.composableNoVersion")}</p>
+  {/if}
+  {#if !legacySupported}
+    <p class="gate">{caps?.version
+      ? t("tpl.gate.legacy", { version: caps.version })
+      : t("tpl.gate.legacyNoVersion")}</p>
+  {/if}
 
   {#if creating}
     <section class="editor">
       <div class="fields">
         <label>{t("tpl.name")}<input placeholder="demo-template" bind:value={newName} /></label>
         <label>{t("tpl.kind")}
-          <select bind:value={newKind}>
-            <option value="composable">composable (_index_template)</option>
+          <select value={newKind} onchange={(event) => switchKind(event.currentTarget.value as TemplateKind)}>
+            {#if composableSupported}
+              <option value="composable">composable (_index_template)</option>
+            {/if}
             <option value="legacy">legacy (_template)</option>
           </select>
         </label>
@@ -229,6 +309,7 @@
   .mini.danger { color: var(--es-red); border-color: var(--es-red); }
   .mini.danger:hover { background: var(--es-red); color: #fff; }
   .toast { padding: 8px 12px; margin-bottom: 12px; border: 1px solid var(--es-border); border-radius: 6px; background: var(--es-surface-2); font-size: var(--es-fs-sm); }
+  .gate { margin: 0 0 12px; padding: 8px 12px; border: 1px solid var(--es-border); border-radius: 6px; background: var(--es-surface-2); color: var(--es-muted); font-size: var(--es-fs-sm); }
   .editor { border: 1px solid var(--es-border); border-radius: var(--es-radius); padding: 14px; margin-bottom: 14px; background: var(--es-surface); }
   .fields { display: flex; gap: 12px; align-items: end; flex-wrap: wrap; margin-bottom: 10px; }
   .fields label { display: flex; flex-direction: column; gap: 4px; font-size: var(--es-fs-xs); color: var(--es-muted); }

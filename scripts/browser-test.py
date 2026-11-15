@@ -14,8 +14,13 @@ from playwright.sync_api import sync_playwright
 
 CHROME = r"C:/Program Files/Google/Chrome/Application/chrome.exe"
 
+# (nav_label, expected_text, *fallback_text)
+#
+# The fallback is a version-gate marker. `p3-demo-*` fixtures require 7.8/7.9, so
+# on an older cluster the three gated pages cannot contain them - but they must
+# still render and explain themselves. Waiting only for the fixture turned a
+# correct gate into a red "FAIL", which is how a real regression would hide.
 PAGES = [
-    # (nav_label, expected_text_in_rendered_page)
     ("集群概览", "es-studio-test"),
     ("节点", "es-studio-node-1"),
     ("分片", "products"),
@@ -24,9 +29,9 @@ PAGES = [
     # P3
     ("分片分配", "include._name"),
     ("集群设置", "写入 / 移除设置"),
-    ("索引模板", "p3-demo-template"),
-    ("组件模板", "p3-demo-component"),
-    ("数据流", "logs-p3-demo"),
+    ("索引模板", "p3-demo-template", "需要 Elasticsearch 7.8"),
+    ("组件模板", "p3-demo-component", "需要 Elasticsearch 7.8"),
+    ("数据流", "logs-p3-demo", "需要 Elasticsearch 7.9"),
     ("生命周期", "p3-demo-policy"),
     ("查询剖析", "运行剖析"),
     ("快照", "p3-fs-repo"),
@@ -39,6 +44,16 @@ def wait_text(page, text, timeout=20000):
         "t => document.body && document.body.innerText.includes(t)",
         arg=text, timeout=timeout,
     )
+
+
+def wait_any(page, texts, timeout=20000):
+    """First of `texts` to appear, returned; raises on timeout."""
+    page.wait_for_function(
+        "(ts) => ts.some(t => document.body && document.body.innerText.includes(t))",
+        arg=list(texts), timeout=timeout,
+    )
+    body = page.inner_text("body")
+    return next(t for t in texts if t in body)
 
 
 def click_nav(page, label):
@@ -80,11 +95,15 @@ def run(base_url, out_dir, ro_delete=False):
         results.append(rec)
 
         # ---- display pages ----
-        for label, expect in PAGES:
+        for label, expect, *fallback in PAGES:
             rec = {"step": f"nav:{label}", "expect": expect, "ok": False}
             try:
                 click_nav(page, label)
-                wait_text(page, expect, timeout=20000)
+                matched = wait_any(page, [expect, *fallback], timeout=20000)
+                if matched != expect:
+                    # Gated page: the fixture cannot exist on this version. Keep
+                    # the evidence in the report instead of silently passing.
+                    rec["gated_by"] = matched
                 time.sleep(0.3)
                 shot("pg-" + label.split()[0].lower())
                 rec["ok"] = True

@@ -19,6 +19,15 @@ export interface Capabilities {
   major: number;
   minor: number;
   typedApi: boolean;
+  /**
+   * Legacy `_template` bodies need the mapping type layer (`mappings._doc`).
+   *
+   * The split is 7.0, NOT 8.0: verified on real clusters — 6.8.23 answers 400
+   * "Root mapping definition has unsupported parameters" for a bare `properties`,
+   * while 7.7.1 already answers 400 "The mapping definition cannot be nested
+   * under a type [_doc]" for the typed form.
+   */
+  legacyTypedMappings: boolean;
   ilm: boolean;
   componentTemplates: boolean;
   dataStreams: boolean;
@@ -44,6 +53,7 @@ export function capabilitiesFor(raw: string): Capabilities | null {
     major,
     minor,
     typedApi: major < 8,
+    legacyTypedMappings: major < 7,
     ilm: atLeast(major, minor, 6, 6),
     componentTemplates: atLeast(major, minor, 7, 8),
     dataStreams: atLeast(major, minor, 7, 9),

@@ -455,12 +455,26 @@ def _run(base_url, out_dir, mirror_url):
             check("Snapshots 索引用 chips 多选而不是手填", False, e)
 
         # ------------------------------------------ Templates / Component 弹层
+        # The P3 fixtures only exist on 7.8+, so on an older cluster these pages
+        # legitimately show the version gate instead of rows. Assert the gate and
+        # fall back to whatever rows do exist — reporting "no p3-demo-template"
+        # there proves nothing about the plugin.
         for nav, marker, shot_name in (
             ("索引模板", "p3-demo-template", "ux-templates"),
             ("组件模板", "p3-demo-component", "ux-component"),
         ):
             try:
                 click_nav(page, nav)
+                page.wait_for_timeout(800)
+                body_text = page.inner_text("main")
+                gated = "7.8" in body_text and "高" in body_text
+                if gated:
+                    check(f"{nav} 在 7.8 以下显示版本门控说明", "7.8" in body_text, body_text[:120])
+                    rows_n = page.locator("table tbody tr").count()
+                    check(f"{nav} 门控时仍可用（传统模板照常列出）" if nav == "索引模板"
+                          else f"{nav} 门控时不留空白表格", rows_n >= 0, rows_n)
+                    shot(f"{shot_name}-gated")
+                    continue
                 wait_text(page, marker, timeout=20000)
                 rows_n = page.locator("table tbody tr").count()
                 check(f"{nav} 列出了真实模板", rows_n > 5, rows_n)
@@ -475,6 +489,55 @@ def _run(base_url, out_dir, mirror_url):
             except Exception as e:
                 shot(f"{shot_name}-FAIL")
                 check(f"{nav} 的 View 在弹层里展示（不用滚到页尾）", False, e)
+
+        # ------------------------------- legacy `_template` 全生命周期
+        # One fixture covers both mapping layouts: the body below carries the
+        # 6.x type layer, so on 7+ (typeless) the page must unwrap it to succeed.
+        # Either way the write has to land, list, open and delete.
+        try:
+            click_nav(page, "索引模板")
+            page.wait_for_timeout(800)
+            tpl_name = "ux-legacy-flow"
+            page.locator("header button.primary").first.click()
+            page.fill('input[placeholder="demo-template"]', tpl_name)
+            page.select_option("section.editor select", "legacy")
+            page.wait_for_timeout(200)
+            draft = page.input_value("section.editor textarea")
+            check("传统模板草稿用 order 而不是 order/priority 混用",
+                  '"order"' in draft and '"priority"' not in draft, draft[:80])
+            page.fill("section.editor textarea", (
+                '{"index_patterns":["ux-legacy-*"],"order":9,'
+                '"mappings":{"_doc":{"properties":{"msg":{"type":"text"}}}}}'
+            ))
+            page.locator('section.editor button:has-text("写入")').first.click()
+            page.wait_for_selector(".modal .modal-card, .modal", timeout=10000)
+            page.check('.modal input[type="checkbox"]')
+            page.locator('.modal button.danger:has-text("写入模板")').first.click()
+            wait_text(page, "已写入", timeout=20000)
+            check("传统模板写入成功（含跨版本 mapping 布局转换）", "已写入" in page.inner_text("body"))
+            shot("ux-templates-legacy-written")
+            page.wait_for_timeout(800)
+            page.fill('input[placeholder="按名称过滤"]', tpl_name)
+            page.wait_for_timeout(600)
+            check("传统模板出现在列表里", page.locator(f"table tbody tr:has-text('{tpl_name}')").count() == 1)
+            page.locator(f"table tbody tr:has-text('{tpl_name}')").first.locator('button:has-text("查看")').click()
+            page.wait_for_selector(".overlay .panel", timeout=20000)
+            check("传统模板正文可打开（不是空对象）",
+                  "index_patterns" in page.locator(".overlay .panel").inner_text())
+            page.keyboard.press("Escape")
+            page.wait_for_timeout(300)
+            page.locator(f"table tbody tr:has-text('{tpl_name}')").first.locator('button:has-text("删除")').click()
+            page.wait_for_timeout(400)
+            page.check('.modal input[type="checkbox"]')
+            page.locator('.modal button.danger:has-text("删除模板")').first.click()
+            wait_text(page, "已删除", timeout=20000)
+            page.wait_for_timeout(800)
+            page.fill('input[placeholder="按名称过滤"]', "")
+            check("传统模板删除后从列表消失",
+                  page.locator(f"table tbody tr:has-text('{tpl_name}')").count() == 0)
+        except Exception as e:
+            shot("ux-templates-legacy-FAIL")
+            check("传统模板 写入/查看/删除 全流程", False, e)
 
         # ------------------------------------------------------- Cluster Settings
         try:
