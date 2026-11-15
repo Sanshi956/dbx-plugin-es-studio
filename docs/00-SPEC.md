@@ -45,6 +45,12 @@ internal/core/*   ← 唯一业务实现（连接、ES client、版本、能力�
 严格满足需求 6.2「UI 与 MCP 共用 Core Service，禁止两套业务逻辑」，且不绕过官方生命周期。
 `mcp/call` 与独立 MCP 的 `tools/call` 都走同一 `Permission Layer` → `core`。
 
+> **P5 落地修订（2026-11-15，已实施）**：包内**不额外放第二个 exe**。manifest 只允许一个
+> `entrypoints.backend.executable`，`dbx-plugin package` 也只产出这一个，因此交付路径是
+> `es-studio-sidecar.exe --mcp`（`internal/mcpcmd` 统一入口）。`backend/cmd/es-studio-mcp`
+> 仍然保留并可构建，供「一个客户端一个进程」的高级用法。两个入口共用 `internal/mcpserver`，
+> 工具层仍是唯一的 `internal/mcp`。
+
 ### 2.2 持久化分层（需求第 8 章）
 若按字面把监控/诊断/请求/查询/MCP 历史都放 `host.storage`，会直接爆 1 MiB 上限。
 
@@ -144,6 +150,11 @@ docs/                    00-SPEC.md · 01-PLAN.md · 验收记录 · API 兼容�
 
 1. **凭据**：只走 DBX Secret Store；Sidecar 结构体凭据字段 `json:"-"`，不进 events / context / error / log / 请求历史 / 导出配置。
 2. **独立 MCP Server 凭据**（需求 8 允许的「单独安全凭据提供器」）：**不读 DBX 内部数据库或文件**。由用户在插件 MCP 设置页对**指定 DBX 连接显式授权**后，Sidecar 把该连接的授权令牌写入 OS 级加密库（Windows DPAPI，仅当前用户可解）；MCP Server 只凭令牌向已授权连接发起请求，工具不接受任意 URL / 任意 connection_id。
+   > **P5 落地**：`internal/mcp/grant.go` 把 `{endpoint, auth}` 整体封进 DPAPI blob
+   > （`seal_windows.go`，`CryptProtectData` + 固定 entropy，纯 syscall、无新依赖），
+   > 令牌是 256-bit 随机串且不落明文（页面只显示一次，重新授权即轮换，默认 30 天过期，可撤销）。
+   > 非 Windows 退化为 0600 密钥文件的 AES-GCM，强度低于 DPAPI —— 已在代码注释与
+   > `docs/P5-ACCEPTANCE.md` 明写，不假装等价。
 3. **只读模式**：在 `internal/permission` 服务层强制校验，不是前端隐藏按钮；所有写操作（DELETE/PUT/POST 危险端点、索引删除、reroute、restore）先过确认 + 影响范围展示。
 4. **MCP 默认全只读**：工具 `annotations.readOnlyHint=true`，`size` 上限、查询超时、返回条数上限、调用日志、连接白名单；写工具（`es_create_index` 等）第一版不开放。
 5. **REST Console**：只相对路径、只当前授权集群、method 白名单、超时与响应上限、危险操作标识。
@@ -184,7 +195,7 @@ Easysearch 兼容必须经真实 API 验证，不得凭接口名相似宣称兼�
 
 | 需求原文 | 实际 | 原因 |
 |---|---|---|
-| 6.3 独立 MCP Server 集成进插件 | 独立 exe 交付（需求 6.8 允许的备选） | 官方 manifest 仅支持一个 backend executable，且无 MCP 进程托管 API |
+| 6.3 独立 MCP Server 集成进插件 | 独立 exe 交付（需求 6.8 允许的备选）；P5 进一步落为**同一个 exe 的 `--mcp` 模式**，另留可独立构建的 `cmd/es-studio-mcp` | 官方 manifest 仅支持一个 backend executable，且无 MCP 进程托管 API；包内放第二个 exe 无法被 manifest 声明，`--mcp` 才能保证「装完即用」 |
 | 8「连接密码持久化」 | 由 DBX Secret Store 承担，插件不持久化 | 官方无前端 Secret API，且需求 2.3 禁止绕过权限体系 |
 | 7.2 Monaco / ECharts | 自研轻量编辑器 + 按需静态图表 | 沙箱禁 CDN、包体积与官方模板优先原则 |
 | 5.1.1 新增/编辑/删除连接 | 插件 UI 提供入口，跳转到 DBX 官方连接对话框 | 宿主拥有连接生命周期（D4 已确认） |

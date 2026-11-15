@@ -145,7 +145,7 @@ const server = createServer((req, res) => {
         const p = Object.assign({}, params);
         // Methods that need to reach Elasticsearch get the direct override;
         // mon/* does too, because the collector talks to ES itself.
-        if (["es/request", "es/batch", "mon/start", "mon/sample"].includes(method)) {
+        if (["es/request", "es/batch", "mon/start", "mon/sample", "mcp/call", "mcp/grant"].includes(method)) {
           const url = p.connection_id === MIRROR_CONNECTION ? ES_URL_MIRROR : ES_URL;
           p.direct = { url, read_only: READ_ONLY };
         }

@@ -25,6 +25,7 @@
   import ClusterMetrics from "./pages/ClusterMetrics.svelte";
   import NodeMetrics from "./pages/NodeMetrics.svelte";
   import History from "./pages/History.svelte";
+  import McpService from "./pages/McpService.svelte";
   import Diagnostics from "./pages/Diagnostics.svelte";
   import Compare from "./pages/Compare.svelte";
   import { ready } from "./lib/bridge";
@@ -101,7 +102,7 @@
       onchange={changeConnection}
     />
     <div class="spacer"></div>
-    <span class="phase-chip">P4 · Monitor & Diagnose</span>
+    <span class="phase-chip">P5 · MCP Tool Service</span>
   </header>
 
   <div class="shell">
@@ -168,6 +169,8 @@
           <Diagnostics bridge={bridge} connectionId={activeId} />
         {:else if page === "compare"}
           <Compare bridge={bridge} connectionId={activeId} connections={connections} />
+        {:else if page === "mcp"}
+          <McpService bridge={bridge} connectionId={activeId} />
         {/if}
       {/if}
     </main>

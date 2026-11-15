@@ -14,6 +14,7 @@ import (
 	"github.com/xihonglei/es-studio/backend/internal/core/connection"
 	"github.com/xihonglei/es-studio/backend/internal/core/es"
 	"github.com/xihonglei/es-studio/backend/internal/core/permission"
+	"github.com/xihonglei/es-studio/backend/internal/mcp"
 	"github.com/xihonglei/es-studio/backend/internal/storage"
 )
 
@@ -23,6 +24,11 @@ type Deps struct {
 	Manager   *connection.Manager
 	Collector *collector.Collector
 	Store     *storage.Store
+	// MCP is the shared tool layer (P5). Optional: without it the mcp/* methods
+	// report unavailable instead of serving an empty catalogue.
+	MCP *mcp.Caller
+	// Grants seals per-connection authorisations for the independent MCP server.
+	Grants *mcp.GrantStore
 }
 
 // Handler is the DBX stdio-jsonl Sidecar adapter (and, later, MCP adapter).
@@ -30,6 +36,9 @@ type Handler struct {
 	manager   *connection.Manager
 	collector *collector.Collector
 	store     *storage.Store
+	mcpCaller *mcp.Caller
+	mcpLogger *mcp.Logger
+	grants    *mcp.GrantStore
 }
 
 // NewHandler builds the Sidecar handler; it satisfies dbxpluginsdk.Handler.
@@ -38,7 +47,22 @@ func NewHandler(d Deps) *Handler {
 	if manager == nil {
 		manager = connection.NewManager()
 	}
-	return &Handler{manager: manager, collector: d.Collector, store: d.Store}
+	caller := d.MCP
+	if caller == nil {
+		caller = mcp.NewCaller(mcp.Default(), mcp.NewLogger(d.Store))
+	}
+	grants := d.Grants
+	if grants == nil {
+		grants = mcp.NewGrantStore("")
+	}
+	return &Handler{
+		manager:   manager,
+		collector: d.Collector,
+		store:     d.Store,
+		mcpCaller: caller,
+		mcpLogger: mcp.NewLogger(d.Store),
+		grants:    grants,
+	}
 }
 
 type callParams struct {
@@ -53,7 +77,10 @@ type callParams struct {
 	Requests     []callParams        `json:"requests"`
 	IntervalSec  int                 `json:"interval_sec"` // mon/start
 	Since        int64               `json:"since"`        // mon/history (unix ms)
-	Limit        int                 `json:"limit"`        // mon/history
+	Limit        int                 `json:"limit"`        // mon/history, mcp/log
+	Tool         string              `json:"tool"`         // mcp/call
+	Arguments    map[string]any      `json:"arguments"`    // mcp/call
+	TTLDays      int                 `json:"ttl_days"`     // mcp/grant
 }
 
 // Handle dispatches one JSON-RPC request. Responses never contain credentials:
@@ -96,6 +123,18 @@ func (h *Handler) Handle(
 		return h.monSample(p)
 	case "mon/history":
 		return h.monHistory(p)
+	case "mcp/tools":
+		return h.mcpTools(), nil
+	case "mcp/call":
+		return h.mcpCall(p)
+	case "mcp/log":
+		return h.mcpLog(p)
+	case "mcp/grants":
+		return h.mcpGrants(), nil
+	case "mcp/grant":
+		return h.mcpGrant(p)
+	case "mcp/revoke":
+		return h.mcpRevoke(p)
 	default:
 		return nil, dbxpluginsdk.MethodNotFound(method)
 	}

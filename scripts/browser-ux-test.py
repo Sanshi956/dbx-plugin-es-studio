@@ -9,6 +9,7 @@ Covers, against the REAL cluster (via scripts/browser-bridge.mjs + real Chrome):
   Monitoring (P4)     打开即采集、四张图有折线、立即采样真的加点、间隔切换、节点图与 History 落盘
   Diagnostics (P4-b)  打开即出结论、依据带真实数字、阈值改小立即命中、关规则结论消失、恢复默认
   Compare (P4-b)      默认对比第二连接、差异行标记、两侧真实值、CSV 导出
+  MCP (P5)            工具目录 40+、搜索过滤、授权给出客户端配置、试调用真实集群、日志、撤销
   Index List          按索引名过滤、关闭索引只给 Open / 打开索引只给 Close
   Templates           View 用弹层展示（不再需要滚到页尾），Esc 关闭
   Snapshots           索引用 chips 多选，选中态与计数正确
@@ -27,37 +28,87 @@ import socket
 import subprocess
 import sys
 import time
+import urllib.request
 from pathlib import Path
 
 from playwright.sync_api import sync_playwright
 
 CHROME = r"C:/Program Files/Google/Chrome/Application/chrome.exe"
 MOCK_PORT = 19921
+# Compare's right side. Prefer a REAL second cluster (a genuine ES on another
+# port); fall back to scripts/mock-cluster.py only when nothing is listening.
+REAL_MIRROR_PORT = int(os.environ.get("MIRROR_PORT", "19201"))
+LOCAL_ES = os.environ.get("ES_URL", "http://127.0.0.1:19200")
 
 
-def ensure_mock_cluster(port=MOCK_PORT):
-    """Start scripts/mock-cluster.py if nothing is listening (Compare's right side).
+def probe_es(url):
+    """Return the root info dict of a live ES, or None."""
+    try:
+        with urllib.request.urlopen(url + "/", timeout=4) as r:
+            return json.loads(r.read().decode("utf-8"))
+    except Exception:
+        return None
 
-    The bridge routes the `local-es-mirror` fixture connection to
-    ES_URL_MIRROR, which is expected to point here. One local ES is all this
-    machine can hold, so the second cluster is a test double.
+
+def fetch_facts(url):
+    """Reduce a cluster to the same facts the Compare page shows (over HTTP)."""
+    def get(path):
+        with urllib.request.urlopen(url + path, timeout=15) as r:
+            return json.loads(r.read().decode("utf-8"))
+
+    health = get("/_cluster/health")
+    stats = get("/_cluster/stats")
+    cat = get("/_cat/nodes?format=json&h=name,node.role,master,heap.percent")
+    settings = get("/_cluster/settings?flat_settings=true")
+    nodes = stats.get("nodes") or {}
+    indices = stats.get("indices") or {}
+    persistent = (settings.get("persistent") or {})
+    roles = [str(entry.get("node.role") or entry.get("roles") or "") for entry in cat]
+    master_flags = [str(entry.get("master") or "") for entry in cat]
+    return {
+        "name": stats.get("cluster_name") or health.get("cluster_name"),
+        "version": " / ".join(nodes.get("versions") or []),
+        "health": health.get("status"),
+        "nodes": health.get("number_of_nodes"),
+        "dataNodes": sum(1 for role in roles if "d" in role),
+        "masterNodes": sum(1 for flag in master_flags if flag == "*"),
+        "indices": indices.get("count"),
+        "docs": (indices.get("docs") or {}).get("count"),
+        "store": (indices.get("store") or {}).get("size_in_bytes"),
+        "primary": health.get("active_primary_shards"),
+        "active": health.get("active_shards"),
+        "unassigned": health.get("unassigned_shards"),
+        "settings": {k: str(v) for k, v in persistent.items()},
+    }
+
+
+def ensure_mirror(mock_port=MOCK_PORT):
+    """Make sure Compare's right side exists; return (mode, url, proc).
+
+    Order of preference: the real second cluster on REAL_MIRROR_PORT, then a
+    started test double. `mode` is reported so the console output never pretends
+    a double is a real cluster.
     """
+    real_url = f"http://127.0.0.1:{REAL_MIRROR_PORT}"
+    info = probe_es(real_url)
+    if info is not None:
+        return "real", real_url, None
+
     def listening():
         with socket.socket() as sock:
-            return sock.connect_ex(("127.0.0.1", port)) == 0
+            return sock.connect_ex(("127.0.0.1", mock_port)) == 0
 
-    if listening():
-        return None
-    script = Path(__file__).with_name("mock-cluster.py")
-    proc = subprocess.Popen(
-        [sys.executable, str(script), "--port", str(port)],
-        stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
-    )
-    for _ in range(60):
-        time.sleep(0.1)
-        if listening():
-            break
-    return proc
+    if not listening():
+        script = Path(__file__).with_name("mock-cluster.py")
+        subprocess.Popen(
+            [sys.executable, str(script), "--port", str(mock_port)],
+            stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+        )
+        for _ in range(60):
+            time.sleep(0.1)
+            if listening():
+                break
+    return "mock", f"http://127.0.0.1:{mock_port}", None
 
 
 def wait_text(page, text, timeout=20000):
@@ -73,15 +124,12 @@ def click_nav(page, label):
 
 
 def run(base_url, out_dir):
-    mock = ensure_mock_cluster()
-    try:
-        return _run(base_url, out_dir)
-    finally:
-        if mock is not None:
-            mock.terminate()
+    mode, mirror_url, _ = ensure_mirror()
+    print(f"[compare] right side = {mode} @ {mirror_url}", flush=True)
+    return _run(base_url, out_dir, mirror_url)
 
 
-def _run(base_url, out_dir):
+def _run(base_url, out_dir, mirror_url):
     out = Path(out_dir)
     out.mkdir(parents=True, exist_ok=True)
     results = []
@@ -585,28 +633,104 @@ def _run(base_url, out_dir):
 
         # ---------------------------------------------------- Multi-Cluster Compare
         try:
+            # Facts are read over HTTP from the SAME clusters the bridge points
+            # at, so nothing here is hardcoded to a fixture. If the assertions
+            # pass, the page really rendered both clusters' own numbers.
+            left_facts = fetch_facts(LOCAL_ES)
+            right_facts = fetch_facts(mirror_url)
             click_nav(page, "Multi-Cluster Compare")
             page.wait_for_selector("table.diff tbody tr", timeout=40000)
             head = page.inner_text("div.meta")
-            check("对比默认选中第二个连接并完成对比", "vs" in head, head[:120])
-            diff_rows = page.locator("table.diff tbody tr.diff").count()
-            check("差异行被标记（tr.diff）", diff_rows >= 5, diff_rows)
             table_text = page.inner_text("table.diff")
-            check("版本按两侧真实值分别展示",
-                  re.search(r"8\.19\.\d+", table_text) is not None and "8.15.0" in table_text, table_text[:160])
-            check("节点数按两侧真实值分别展示", re.search(r"节点数\s*1\s*2", table_text) is not None, table_text[:200])
-            check("统计栏给出差异计数", re.search(r"\d+ 项不同", head) is not None, head[:120])
+            check("对比默认选中第二个连接并完成对比", "vs" in head, head[:120])
+            check("右侧是真实第二集群（集群名取自它自己的 stats）",
+                  right_facts["name"] in table_text, f"{right_facts['name']} not in page")
+            check("左侧是当前连接的真实集群名", left_facts["name"] in table_text, left_facts["name"])
+            check("节点数两侧按各自 /_cluster/health 展示",
+                  re.search(rf"节点数\s*{left_facts['nodes']}\s*{right_facts['nodes']}\b", table_text) is not None,
+                  f"expect {left_facts['nodes']} / {right_facts['nodes']}: {table_text[:200]}")
+            check("文档数按各自 _cluster/stats 展示（千分位）",
+                  f"{right_facts['docs']:,}" in table_text and f"{left_facts['docs']:,}" in table_text,
+                  f"expect {left_facts['docs']:,} / {right_facts['docs']:,}")
+            check("差异行被标记（tr.diff）", page.locator("table.diff tbody tr.diff").count() >= 5,
+                  page.locator("table.diff tbody tr.diff").count())
+            rows_total = page.locator("table.diff tbody tr:not(.group)").count()
+            diff_total = page.locator("table.diff tbody tr.diff").count()
+            stated = re.search(r"(\d+)\s*项不同", head)
+            check("统计栏的差异计数与表格实际标记一致",
+                  stated is not None and int(stated.group(1)) == diff_total, f"{head[:80]} / rows={diff_total}")
+            check("对比表覆盖全部 22 行事实（4 组）",
+                  rows_total == 22 and page.locator("table.diff tbody tr.group").count() == 4,
+                  f"rows={rows_total} groups={page.locator('table.diff tbody tr.group').count()}")
+            # Watermarks: B was deliberately configured to 80%/88%, A uses defaults.
+            if right_facts["settings"].get("cluster.routing.allocation.disk.watermark.low"):
+                want = right_facts["settings"]["cluster.routing.allocation.disk.watermark.low"]
+                check("磁盘 low 水位取右侧集群的真实设置", want in table_text, f"{want} missing")
 
             page.click('button:has-text("复制 CSV")')
             page.wait_for_timeout(800)
             csv_ready = "已复制" in page.inner_text("div.page") or page.locator("textarea.csv").count() == 1
             check("对比结果可导出（复制或展开文本）", csv_ready)
             if page.locator("textarea.csv").count() == 1:
-                check("CSV 含两侧集群名", "es-mirror-remote" in page.locator("textarea.csv").input_value())
+                csv_text = page.locator("textarea.csv").input_value()
+                check("CSV 含两侧集群名", right_facts["name"] in csv_text and left_facts["name"] in csv_text,
+                      csv_text[:160])
             shot("ux-compare")
         except Exception as e:
             shot("ux-compare-FAIL")
             check("对比默认选中第二个连接并完成对比", False, e)
+
+        # ------------------------------------------------------- MCP (P5)
+        try:
+            click_nav(page, "MCP Tool Service")
+            page.wait_for_selector("table.tools tbody tr", timeout=30000)
+            tool_rows = page.locator("table.tools tbody tr").count()
+            check("MCP 工具目录列出 40+ 只读工具", tool_rows >= 40, tool_rows)
+            summary = page.inner_text("section.summary")
+            check("摘要卡写明写工具为 0", re.search(r"写工具\s*0", summary) is not None, summary[:80])
+
+            page.fill("input.search", "shard")
+            page.wait_for_timeout(400)
+            filtered = page.locator("table.tools tbody tr").count()
+            check("工具搜索按名称过滤", 0 < filtered < tool_rows, f"{filtered}/{tool_rows}")
+            check("过滤结果包含 es_list_shards", "es_list_shards" in page.inner_text("main"), "")
+            page.fill("input.search", "")
+            page.wait_for_timeout(300)
+
+            # Authorise the current connection: the snippet it returns is what a
+            # real MCP client pastes, so it must contain the token and --mcp.
+            page.click('button:has-text("授权当前连接")')
+            page.wait_for_selector("textarea.snippet", timeout=20000)
+            snippet = page.locator("textarea.snippet").input_value()
+            check("授权后给出可直接粘贴的客户端配置",
+                  "--mcp" in snippet and "ES_STUDIO_MCP_TOKEN" in snippet, snippet[:120])
+            check("授权表出现一行（只给指纹）", page.locator("table.grants tbody tr").count() == 1)
+            grants_text = page.inner_text("table.grants")
+            check("授权表不含令牌明文", len(snippet) > 0 and snippet.split('"')[-2] not in grants_text[:200], grants_text[:120])
+
+            # Try-call goes through the same path an AI client uses.
+            page.locator("table.tools tbody tr", has_text="es_get_cluster_health").first.locator(
+                'button:has-text("试调用")').click()
+            page.wait_for_selector("section.call", timeout=10000)
+            page.click('section.call button:has-text("调用")')
+            page.wait_for_selector("pre.result", timeout=30000)
+            result_text = page.inner_text("pre.result")
+            meta = page.inner_text(".call-meta")
+            check("试调用返回真实集群健康", '"status"' in result_text, result_text[:120])
+            check("试调用显示真实 HTTP 状态与耗时", "HTTP 200" in meta and "GET /_cluster/health" in meta, meta[:120])
+
+            page.wait_for_timeout(600)
+            log_rows = page.locator("table.calls tbody tr").count()
+            check("调用日志记录了刚才的调用", log_rows >= 1, log_rows)
+            check("日志行显示工具名", "es_get_cluster_health" in page.inner_text("table.calls"), "")
+            shot("ux-mcp")
+
+            page.click('table.grants button:has-text("撤销")')
+            page.wait_for_timeout(800)
+            check("撤销后授权列表清空", page.locator("table.grants tbody tr").count() == 0)
+        except Exception as e:
+            shot("ux-mcp-FAIL")
+            check("MCP 工具目录列出 40+ 只读工具", False, e)
 
         # --------------------------------------------------------- REST Console
         try:

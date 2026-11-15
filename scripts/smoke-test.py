@@ -510,6 +510,55 @@ def main():
                 c.check("P4 samples survive a stop",
                         (s.call("mon/history", {"connection_id": "real-es", "limit": 5}).get("result") or {}).get("count", 0) >= 1)
 
+                # ---- P5 MCP: the tool layer shared by DBX AI and external clients ----
+                tools = s.call("mcp/tools", {}).get("result") or {}
+                names = [t.get("name") for t in (tools.get("tools") or [])]
+                c.check("P5 mcp/tools lists 40+ tools", len(names) >= 40, len(names))
+                c.check("P5 mcp/tools advertises read-only only",
+                        all((t.get("annotations") or {}).get("readOnlyHint") is True
+                            for t in (tools.get("tools") or [])))
+                for required in ("es_get_cluster_health", "es_list_indices", "es_get_index_mapping",
+                                 "es_search_documents", "es_list_shards", "es_call_readonly_api"):
+                    c.check(f"P5 mcp/tools exposes {required}", required in names,
+                            [n for n in names if n.startswith("es_get")][:5])
+
+                health = s.call("mcp/call", {"connection_id": "real-es", "direct": rd,
+                                             "tool": "es_get_cluster_health", "arguments": {}}).get("result") or {}
+                c.check("P5 mcp/call returns a real cluster status", health.get("status") == 200
+                        and ('"status"' in (health.get("text") or "")), str(health)[:200])
+                c.check("P5 mcp/call reports the request it made",
+                        (health.get("request") or {}).get("path") == "/_cluster/health", str(health.get("request"))[:160])
+
+                denied = s.call("mcp/call", {"connection_id": "real-es", "direct": rd,
+                                             "tool": "es_call_readonly_api",
+                                             "arguments": {"path": "/products", "method": "POST"}})
+                c.check("P5 mcp/call rejects a write method -> -32602", err_code(denied) == -32602, str(denied)[:200])
+
+                unknown = s.call("mcp/call", {"connection_id": "real-es", "direct": rd,
+                                              "tool": "es_drop_everything", "arguments": {}})
+                c.check("P5 mcp/call rejects an unknown tool -> -32602", err_code(unknown) == -32602, str(unknown)[:200])
+
+                log = s.call("mcp/log", {"limit": 50}).get("result") or {}
+                logged = {row.get("tool") for row in (log.get("calls") or [])}
+                c.check("P5 mcp/log records the calls", "es_get_cluster_health" in logged, sorted(logged)[:6])
+                c.check("P5 mcp/log persists to a jsonl file", ".jsonl" in (log.get("file") or ""), log.get("file"))
+                c.check("P5 mcp/log never stores argument values",
+                        "products" not in json.dumps(log.get("calls") or [], ensure_ascii=False))
+
+                granted = s.call("mcp/grant", {"connection_id": "real-es", "direct": rd}).get("result") or {}
+                token = granted.get("token") or ""
+                c.check("P5 mcp/grant issues a token", len(token) >= 32, str(granted)[:160])
+                c.check("P5 mcp/grant returns a paste-ready client config",
+                        "--mcp" in (granted.get("snippet") or ""), str(granted.get("snippet"))[:160])
+                c.check("P5 mcp/grant never returns the password", "password" not in
+                        json.dumps(granted.get("public") or {}, ensure_ascii=False).lower())
+                grants = s.call("mcp/grants", {}).get("result") or {}
+                c.check("P5 mcp/grants lists the authorisation",
+                        any(g.get("connection_id") == "real-es" for g in (grants.get("grants") or [])),
+                        str(grants)[:200])
+                revoked = s.call("mcp/revoke", {"connection_id": "real-es"}).get("result") or {}
+                c.check("P5 mcp/revoke removes it", revoked.get("revoked") is True, str(revoked))
+
                 s.call("connection/disconnect", {"connection_id": "real-es"})
     finally:
         s.close()
