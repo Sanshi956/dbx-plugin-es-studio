@@ -138,6 +138,8 @@
 | T17 | `sign-package.py --verify` 需指定 key id | `--verify` 自动从 `signature.json` 推断 key id |
 | T17 | 包内回归为手工命令 | 新增 `scripts/verify-package.py`（15 项断言 + Node crypto 交叉验签 + 解出包内 exe） |
 | T7/T9/T11 | `go test -race` | 本机无 CGO / C 工具链，未执行；普通 `go test` / `go vet` 全绿（P1-05 待补） |
+| T15 / T17（验收期修复） | Vite 默认多文件 UI 产物 | `vite.config.js` 的 `dbx-ui-single-file` 插件在每次构建（含 watch）后内联 CSS + JS 为单文件 `ui/index.html`；`index.html` 加静态启动占位，`src/main.ts` 挂载前清空；baseline 与包内回归强制断言 |
+| T14（验收期修复） | connection-provider `label: "Elasticsearch"` | 改为 `ES Studio (Elasticsearch)`，避免与 DBX 内置 Elasticsearch 连接类型重名 |
 
 新增文件：`scripts/dev.mjs`、`scripts/dev-host.mjs`、`scripts/dev-host-check.mjs`、
 `scripts/verify-package.py`、`docs/P1-ACCEPTANCE.md`、`README.md`。

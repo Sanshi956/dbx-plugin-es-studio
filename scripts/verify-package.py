@@ -11,6 +11,7 @@ import base64
 import hashlib
 import json
 import os
+import re
 import subprocess
 import sys
 import zipfile
@@ -97,10 +98,11 @@ def main():
         else:
             different.append(f"{name}: bytes differ")
     check(f"all {len(ui_files)} UI assets byte-identical to build output", not different, "; ".join(different))
-    check("UI entry uses relative asset paths", not any(
-        b'src="/assets' in entries[name] or b'href="/assets' in entries[name]
-        for name in ui_files if name.endswith(".html")
-    ))
+    ui_html = entries.get("ui/index.html", b"")
+    check("UI entry is a self-contained single file", bool(ui_html)
+          and not re.search(rb"<script\b[^>]*\ssrc=|<link\b[^>]*\shref=", ui_html, re.I)
+          and b"<script>\n" in ui_html and b"<style>\n" in ui_html)
+    check("no external UI assets in package", ui_files == ["ui/index.html"], ", ".join(ui_files))
 
     signature_doc = json.loads(entries[SIGNATURE])
     trust_store = default_trust_store()

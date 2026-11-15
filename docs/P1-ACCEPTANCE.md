@@ -114,3 +114,39 @@
 **在此停下，不擅自进入 P2。** 用户验收建议：安装 `.signed.dbxp` 到 DBX，
 或 `npm run dev` 打开 `http://127.0.0.1:5190`，确认 Overview 显示真实集群指标、
 左侧未实现页面为禁用态、切换深浅主题无颜色异常。
+
+---
+
+## 8. 验收期修复（2026-11-15，用户导入 DBX 后反馈）
+
+### 8.1 工作台纯白（Critical，已修复并回归）
+
+| 项 | 内容 |
+|---|---|
+| 现象 | 用户导入 `.signed.dbxp` 后，「打开 ES Studio」标签内容区纯白，无顶栏 / 导航 / 错误块；进程列表里没有 `es-studio-sidecar.exe` |
+| 排查 | 读 DBX 安装目录、`dbx.db`、%LOCALAPPDATA% 日志；抓 DBX 窗口截图；对比 4 个可正常工作的已装插件 manifest 与 `ui/index.html`；在 `dbx.exe` 中定位 `read_plugin_ui_entry` / `read_plugin_ui_asset` Tauri commands；尝试 DevTools / CDP |
+| 根因 | DBX 以单 HTML 文档形式把插件 UI 放进 opaque-origin iframe；Vite 默认产物 `<script type="module" crossorigin src="./assets/...">` 在该环境无法解析，应用脚本从未执行。能正常渲染的插件全是单文件内联（WSL / RDP）或同级普通 script（Portainer） |
+| 修复 | `vite.config.js` 新增 `dbx-ui-single-file`：每次构建（含 watch）后内联 CSS + JS 并删除 `ui/assets/`；`index.html` 加静态启动占位，`src/main.ts` 挂载前清空它 |
+| 防回归 | `scripts/check-baseline.mjs` 与 `scripts/verify-package.py` 强制断言：单文件、无外部 script/link 标签、含内联 script/style、包内 UI 仅 1 个文件 |
+| 回归结果 | svelte-check 0 error / 0 warning、`BASELINE OK`、check-manifest 52 + 105、dev-host-check 24/24、真实 ES smoke 49/49、verify-package 16/16、`SIGNATURE VALID` |
+| 交付 | 重新生成 `dist/local.es.studio-0.1.0-windows-x64.signed.dbxp`（4,365,677 B），并就地同步到 DBX 已安装目录（保留被占用的旧 exe，重算 checksums 后重签，安装目录自洽） |
+
+### 8.2 连接名称与插件名不一致（已澄清并修正）
+
+DBX **原生内置** Elasticsearch 连接类型；用户连接树里的 `elasticsearch`
+（`192.168.1.240:9200`，`db_type=elasticsearch`，无 `plugin_id`）是既有连接，
+既不是插件创建的，也不是本次启动的测试集群（`127.0.0.1:19200`）。
+插件名 / 工作台名是 **ES Studio**，连接类型名是 **Elasticsearch**，本就是不同层级。
+但本插件 connection-provider 的 `label` 原先也叫 `Elasticsearch`，与内置项完全重名，
+导致「新建连接」里无法区分 —— 已改为 `ES Studio (Elasticsearch)`，
+`display_name` 默认值改为 `ES Studio cluster`，zh-CN 同步。
+
+### 8.3 仍待用户完成的一步
+
+修复需要重新创建工作台 iframe 才能看到。已重启 DBX 让其重新读取插件文件，
+但 DBX 以更高完整性级别运行，模拟键鼠输入被 UIPI 拦截（截图可读、输入不生效），
+release 版也未开 DevTools / CDP 端口。因此**需要用户本人点一次**「打开 ES Studio」
+（顶部「更多」或命令面板），或直接在插件中心重装新 `.signed.dbxp`。
+判读方式：显示完整 Overview = 修复生效；只显示静态占位
+「ES Studio / Starting workbench…」= HTML 已加载但 JS 未执行；纯白 = iframe 未挂载。
+此项并入 P1 闸口第 4 项的验收动作。

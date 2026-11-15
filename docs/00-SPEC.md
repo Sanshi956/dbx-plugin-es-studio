@@ -196,5 +196,7 @@ Easysearch 兼容必须经真实 API 验证，不得凭接口名相似宣称兼�
 | T15/T16 用 `scripts/mock-es.py` 驱动 Overview | 用真实 ES + `scripts/dev-host-check.mjs` 走官方 dev host HTTP 协议 | 内存达标后采用更强验证，且未引入静态假数据 |
 | §3 架构图中的 `cmd/es-studio-mcp` | P1 未实现，属 P5 | 架构图画的是终态，按 D1 分阶段交付 |
 | 直接 `dbx-plugin dev --path .` | 用 `npm run dev`（`scripts/dev.mjs` + `dev-host.mjs`） | 官方 CLI 0.1.10 在 Windows 传 `\\?\` 扩展长度路径作 cwd，构建命令必失败；兼容层只剥离前缀，不修改全局 CLI |
+| Vite 默认多文件 UI 产物（`./assets/*.js` 外链） | `ui/index.html` **单文件内联** CSS + JS | DBX 通过 `read_plugin_ui_entry` 把 HTML 放入 opaque-origin iframe，外链资源解析不到 → 工作台纯白；`vite.config.js` 构建后自动内联，`check-baseline.mjs` / `verify-package.py` 强制断言 |
+| connection-provider `label: "Elasticsearch"` | `label: "ES Studio (Elasticsearch)"` | DBX 原生内置 Elasticsearch 连接类型，同名会让「新建连接」里无法区分插件入口与内置驱动 |
 
 `go test -race` 因本机未启用 CGO 未执行，已登记为 P1-05 待补，不阻断阶段闸口。

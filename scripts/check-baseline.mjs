@@ -45,12 +45,18 @@ if (!existsSync(htmlPath)) {
   process.exit(1);
 }
 const html = readFileSync(htmlPath, "utf8");
-const refs = [...html.matchAll(/(?:src|href)="([^"]+)"/g)].map((m) => m[1]);
-const absolute = refs.filter((r) => r.startsWith("/"));
-if (absolute.length) {
-  console.error("FAIL: absolute asset refs break the DBX sandboxed iframe:", absolute);
+if (/<script\b[^>]*\ssrc=|<link\b[^>]*\shref=/i.test(html)) {
+  console.error("FAIL: DBX needs a self-contained UI; external asset tags remain");
   process.exit(1);
 }
-console.log("\n=== sandbox asset refs ===");
-console.log(refs.join("  |  "));
+if (!html.includes("<script>\n") || !html.includes("<style>\n")) {
+  console.error("FAIL: inlined application script/style missing from ui/index.html");
+  process.exit(1);
+}
+if (existsSync(path.join(root, "ui", "assets"))) {
+  console.error("FAIL: ui/assets/ must be removed after inlining");
+  process.exit(1);
+}
+console.log("\n=== sandbox UI ===");
+console.log(`single-file ui/index.html (${Buffer.byteLength(html)} bytes, no external refs)`);
 console.log("\nBASELINE OK");

@@ -101,6 +101,24 @@ dbx-plugin package .                     # 产出未签名审核候选包，直�
 或把公钥 `y/qvmEhlUn128fZCUZQdAH3TwArjkKKIAEGz6Ht/naY=` 加入该机
 「插件中心 → 自定义仓库信任」。**任何包内文件改动都必须重新 package + sign**。
 
+## 在 DBX 中打开工作台
+
+安装 `dist/*.signed.dbxp` 后，工作台入口来自 manifest 的 command / menus 贡献点：
+顶部「更多」菜单、命令面板或插件中心的「打开 ES Studio」。标签标题取命令名
+「打开 ES Studio」，插件与工作台名是「ES Studio」。
+
+连接树里的 `elasticsearch` 是 **DBX 内置的 Elasticsearch 连接类型**
+（`db_type=elasticsearch`，无 `plugin_id`），不是插件名，也不是本项目的名字；
+本插件的连接提供方在「新建连接」里显示为 **ES Studio (Elasticsearch)**，与内置项区分。
+要连本地测试集群，新建时填 `127.0.0.1:19200`、`http`、认证 `none`。
+
+> **UI 必须是单文件。** `ui/index.html` 内联 CSS + JS，不能有 `./assets/*.js` 外链。
+> DBX 通过 `read_plugin_ui_entry` 把 HTML 放进 opaque-origin iframe，外链资源无法解析，
+> 表现为整个工作台纯白。`vite.config.js` 的 `dbx-ui-single-file` 插件在每次构建
+> （含 watch）后自动内联；`scripts/check-baseline.mjs` 和 `scripts/verify-package.py`
+> 都会强制断言这一点。若 HTML 已加载但 JS 未执行，页面会显示静态占位
+> 「ES Studio / Starting workbench…」而不是无信息纯白。
+
 ## 已知限制
 
 | 项 | 说明 |

@@ -21,8 +21,8 @@
     {
       "type": "connection-provider",
       "id": "local.es.studio.connection",
-      "label": "Elasticsearch",
-      "description": "Elasticsearch / Easysearch / OpenSearch cluster connection.",
+      "label": "ES Studio (Elasticsearch)",
+      "description": "ES Studio - Elasticsearch / Easysearch / OpenSearch cluster connection.",
       "icon": "assets/connection.svg",
       "database_type": "elasticsearch",
       "workbench": "local.es.studio.workbench",
@@ -34,7 +34,7 @@
           "type": "text",
           "binding": "name",
           "required": true,
-          "default": "Elasticsearch cluster"
+          "default": "ES Studio cluster"
         },
         {
           "key": "environment",
@@ -209,8 +209,8 @@
       "description": "DBX 内的 Elasticsearch 专业管理工作台。",
       "contributions": {
         "local.es.studio.connection": {
-          "label": "Elasticsearch",
-          "description": "Elasticsearch / Easysearch / OpenSearch 集群连接。",
+          "label": "ES Studio (Elasticsearch)",
+          "description": "ES Studio —— Elasticsearch / Easysearch / OpenSearch 集群连接。",
           "fields": {
             "display_name": { "label": "连接名称" },
             "environment": { "label": "环境" },
