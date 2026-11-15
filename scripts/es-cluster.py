@@ -157,7 +157,11 @@ def clean_stale():
             print(f"removing stale heap dump {dump.name} ({dump.stat().st_size / 2**20:.0f} MB)", flush=True)
             dump.unlink()
     data = ROOT / "data"
-    if data.exists() and any(data.iterdir()):
+    # Only wipe when the previous bootstrap never got as far as writing cluster
+    # state (`_state` is created by ES 8 on a completed startup). A healthy data
+    # dir must survive restarts, otherwise every `start` loses the seeded data
+    # and a bulk rmtree trips the delete guard for no reason.
+    if data.exists() and any(data.iterdir()) and not (data / "_state").exists():
         shutil.rmtree(data)
         print("cleared incomplete data dir from crashed bootstrap", flush=True)
     data.mkdir(parents=True, exist_ok=True)

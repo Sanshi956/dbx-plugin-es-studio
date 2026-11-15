@@ -13,6 +13,10 @@
 *.log
 *.pyc
 
+# browser-test screenshots are regenerable evidence, not source
+/screenshots/
+.tmp_*
+
 # signing material — never commit, never package
 .dbx-repository-signing-key.env
 *.signed.artifact.json

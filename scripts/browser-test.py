@@ -1,0 +1,233 @@
+#!/usr/bin/env python3
+# Browser test for ES Studio P2 UI WITHOUT the DBX host.
+# Drives the standalone bridge (scripts/browser-bridge.mjs) with Playwright +
+# the system Chrome, clicks through every P2 page against the REAL Elasticsearch
+# cluster (seeded with sample data), and screenshots each one.
+#
+#   python scripts/browser-test.py [--base-url http://localhost:5199] [--out screenshots/rw]
+#   set RO_DELETE=1 to additionally perform a DELETE on the REST Console and
+#   assert the read-only rejection (-32003) is surfaced in the UI.
+import os, sys, json, time, argparse
+from pathlib import Path
+
+from playwright.sync_api import sync_playwright
+
+CHROME = r"C:/Program Files/Google/Chrome/Application/chrome.exe"
+
+PAGES = [
+    # (nav_label, expected_text_in_rendered_page)
+    ("Cluster Overview", "es-studio-test"),
+    ("Nodes", "es-studio-node-1"),
+    ("Shards", "products"),
+    ("Index List", "archived-2023"),
+    ("Aliases", "prod-view"),
+]
+
+
+def wait_text(page, text, timeout=20000):
+    page.wait_for_function(
+        "t => document.body && document.body.innerText.includes(t)",
+        arg=text, timeout=timeout,
+    )
+
+
+def click_nav(page, label):
+    page.click(f'nav button:has-text("{label}")')
+    page.wait_for_timeout(400)
+
+
+def run(base_url, out_dir, ro_delete=False):
+    out = Path(out_dir)
+    out.mkdir(parents=True, exist_ok=True)
+    results = []
+    console_errors = []
+
+    with sync_playwright() as p:
+        browser = p.chromium.launch(
+            executable_path=CHROME, headless=True,
+            args=["--no-sandbox", "--disable-gpu", "--disable-dev-shm-usage"],
+        )
+        page = browser.new_page(viewport={"width": 1440, "height": 1500})
+        page.on("console", lambda m: console_errors.append(f"[{m.type}] {m.text}") if m.type in ("error", "warning") else None)
+        page.on("pageerror", lambda e: console_errors.append(f"[pageerror] {e}"))
+
+        def shot(name):
+            page.screenshot(path=str(out / f"{name}.png"), full_page=True)
+
+        # ---- boot ----
+        rec = {"step": "boot", "ok": False}
+        try:
+            page.goto(base_url + "/", wait_until="domcontentloaded", timeout=30000)
+            # wait for the bridge to boot + first data (connection name in picker)
+            wait_text(page, "Local ES (test)", timeout=30000)
+            time.sleep(0.6)
+            shot("00-boot")
+            rec["ok"] = True
+        except Exception as e:
+            rec["error"] = str(e)
+            try: shot("00-boot-FAIL")
+            except Exception: pass
+        results.append(rec)
+
+        # ---- display pages ----
+        for label, expect in PAGES:
+            rec = {"step": f"nav:{label}", "expect": expect, "ok": False}
+            try:
+                click_nav(page, label)
+                wait_text(page, expect, timeout=20000)
+                time.sleep(0.3)
+                shot("pg-" + label.split()[0].lower())
+                rec["ok"] = True
+            except Exception as e:
+                rec["error"] = str(e)
+                try: shot("pg-" + label.split()[0].lower() + "-FAIL")
+                except Exception: pass
+            results.append(rec)
+
+        # ---- Browser (select products, search) ----
+        rec = {"step": "interact:browser", "expect": "Mechanical Keyboard", "ok": False}
+        try:
+            click_nav(page, "Browser")
+            page.locator('label:has-text("Index") select').select_option("products")
+            page.get_by_role("button", name="Search", exact=True).click()
+            wait_text(page, "Mechanical Keyboard", timeout=20000)
+            time.sleep(0.3)
+            shot("ix-browser-products")
+            rec["ok"] = True
+        except Exception as e:
+            rec["error"] = str(e)
+            try: shot("ix-browser-FAIL")
+            except Exception: pass
+        results.append(rec)
+
+        # ---- Query Builder (match name=Mouse) ----
+        rec = {"step": "interact:querybuilder", "expect": "Wireless Mouse", "ok": False}
+        try:
+            click_nav(page, "Query Builder")
+            page.locator('label:has-text("Index") select').select_option("products")
+            page.locator(".clause select").first.select_option("match")
+            page.locator(".clause .field").first.fill("name")
+            page.locator(".clause .value").first.fill("Mouse")
+            page.get_by_role("button", name="Run query", exact=True).click()
+            wait_text(page, "Wireless Mouse", timeout=20000)
+            time.sleep(0.3)
+            shot("ix-querybuilder-match")
+            rec["ok"] = True
+        except Exception as e:
+            rec["error"] = str(e)
+            try: shot("ix-querybuilder-FAIL")
+            except Exception: pass
+        results.append(rec)
+
+        # ---- DSL Editor (default match_all) ----
+        rec = {"step": "interact:dsleditor", "expect": "total", "ok": False}
+        try:
+            click_nav(page, "DSL Editor")
+            page.get_by_role("button", name="Run", exact=True).click()
+            wait_text(page, "total", timeout=20000)
+            time.sleep(0.3)
+            shot("ix-dsleditor-run")
+            rec["ok"] = True
+        except Exception as e:
+            rec["error"] = str(e)
+            try: shot("ix-dsleditor-FAIL")
+            except Exception: pass
+        results.append(rec)
+
+        # ---- Analyzer ----
+        rec = {"step": "interact:analyzer", "expect": "tokens", "ok": False}
+        try:
+            click_nav(page, "Analyzer")
+            page.get_by_role("button", name="Analyze", exact=True).click()
+            wait_text(page, "tokens", timeout=20000)
+            time.sleep(0.3)
+            shot("ix-analyzer")
+            rec["ok"] = True
+        except Exception as e:
+            rec["error"] = str(e)
+            try: shot("ix-analyzer-FAIL")
+            except Exception: pass
+        results.append(rec)
+
+        # ---- REST Console (GET /_cluster/health) ----
+        rec = {"step": "interact:restconsole", "expect": "cluster_name", "ok": False}
+        try:
+            click_nav(page, "REST Console")
+            page.get_by_role("button", name="Send", exact=True).click()
+            wait_text(page, "cluster_name", timeout=20000)
+            time.sleep(0.3)
+            shot("ix-restconsole-health")
+            rec["ok"] = True
+        except Exception as e:
+            rec["error"] = str(e)
+            try: shot("ix-restconsole-FAIL")
+            except Exception: pass
+        results.append(rec)
+
+        # ---- optional read-only rejection demo ----
+        if ro_delete:
+            rec = {"step": "readonly:delete-rejected", "expect": "-32003", "ok": False}
+            try:
+                click_nav(page, "REST Console")
+                # Two <select> exist on the page (connection picker + method):
+                # target the request bar explicitly.
+                page.locator("section.bar select").select_option("DELETE")
+                page.locator('input.path').fill("/products")
+                page.get_by_role("button", name="Send", exact=True).click()
+                wait_text(page, "-32003", timeout=20000)
+                time.sleep(0.3)
+                shot("ro-restconsole-delete-rejected")
+                rec["ok"] = True
+            except Exception as e:
+                rec["error"] = str(e)
+                try: shot("ro-restconsole-FAIL")
+                except Exception: pass
+            results.append(rec)
+
+        # ---- Index List danger-confirm modal (open, then cancel) ----
+        rec = {"step": "interact:indexlist-danger-modal", "expect": "ES REST", "ok": False}
+        try:
+            click_nav(page, "Index List")
+            page.locator('table.ix tbody tr:has-text("products") button:has-text("Close")').click()
+            wait_text(page, "ES REST", timeout=10000)
+            time.sleep(0.3)
+            shot("ix-indexlist-danger")
+            # dismiss without confirming
+            try:
+                page.get_by_role("button", name="取消", exact=True).click()
+            except Exception:
+                page.keyboard.press("Escape")
+            rec["ok"] = True
+        except Exception as e:
+            rec["error"] = str(e)
+            try: shot("ix-indexlist-danger-FAIL")
+            except Exception: pass
+        results.append(rec)
+
+        browser.close()
+
+    report = {"base_url": base_url, "results": results, "console_errors": console_errors}
+    (out / "report.json").write_text(json.dumps(report, ensure_ascii=False, indent=2), encoding="utf-8")
+    # human summary
+    passed = sum(1 for r in results if r.get("ok"))
+    print(f"\n=== Browser test @ {base_url} -> {out} ===")
+    for r in results:
+        status = "OK " if r.get("ok") else "FAIL"
+        extra = ""
+        if not r.get("ok") and r.get("error"):
+            extra = f"  ({r['error'][:120]})"
+        print(f"  [{status}] {r['step']}{extra}")
+    print(f"  steps passed: {passed}/{len(results)}")
+    print(f"  console errors/warnings captured: {len(console_errors)}")
+    for c in console_errors[:40]:
+        print("    - " + c[:200])
+    return report
+
+
+if __name__ == "__main__":
+    ap = argparse.ArgumentParser()
+    ap.add_argument("--base-url", default=os.environ.get("BASE_URL", "http://localhost:5199"))
+    ap.add_argument("--out", default=os.environ.get("OUT", "screenshots/rw"))
+    ap.add_argument("--ro-delete", action="store_true", default=os.environ.get("RO_DELETE") == "1")
+    args = ap.parse_args()
+    run(args.base_url, args.out, ro_delete=args.ro_delete)

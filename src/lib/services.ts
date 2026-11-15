@@ -24,7 +24,16 @@ function str(value: unknown): string {
 }
 
 function num(value: unknown): number {
-  return typeof value === "number" && Number.isFinite(value) ? value : 0;
+  // `_cat/*` returns every field as a string ("2", "12915", "0.19"), so a
+  // number-only check silently turned docs / store / cpu / heap into 0.
+  if (typeof value === "number") return Number.isFinite(value) ? value : 0;
+  if (typeof value === "string") {
+    const raw = value.trim();
+    if (raw === "") return 0;
+    const parsed = Number(raw);
+    return Number.isFinite(parsed) ? parsed : 0;
+  }
+  return 0;
 }
 
 /** Read a cat-API dotted key or a nested object key without crashing. */
@@ -94,7 +103,10 @@ export async function single(
     return result ?? { status: 0 };
   } catch (cause) {
     const message = cause instanceof Error ? cause.message : String(cause);
-    return { status: 0, error: { code: -32000, message } };
+    // Keep the Sidecar code (-32003 read-only, -32004 unsafe path, ...) so the UI
+    // can tell a permission denial apart from a transport failure.
+    const code = typeof (cause as { code?: unknown })?.code === "number" ? (cause as { code: number }).code : -32000;
+    return { status: 0, error: { code, message } };
   }
 }
 
@@ -213,12 +225,22 @@ export async function fetchShards(bridge: DbxBridge, connectionId: string): Prom
 }
 
 /** Build a node x shard topology matrix for the "cluster topology" view. */
+/**
+ * A single shard chip. `label` is what the user sees ("0r:UNASSIGNED");
+ * `key` is guaranteed unique even when one shard has several replicas in the
+ * same state (Svelte keyed each blocks throw on duplicate keys).
+ */
+export interface ShardTag {
+  key: string;
+  label: string;
+}
+
 export interface TopologyMatrix {
   nodes: string[];
   indices: string[];
-  // matrix[indexName][nodeName] = list of "shard#(p|r):STATE"
-  cells: Record<string, Record<string, string[]>>;
-  unassignedByIndex: Record<string, string[]>;
+  // matrix[indexName][nodeName] = list of shard chips
+  cells: Record<string, Record<string, ShardTag[]>>;
+  unassignedByIndex: Record<string, ShardTag[]>;
 }
 
 export function buildTopology(shards: ShardRow[]): TopologyMatrix {
@@ -230,10 +252,17 @@ export function buildTopology(shards: ShardRow[]): TopologyMatrix {
   }
   const nodes = [...nodeSet].sort();
   const indices = [...indexSet].sort();
-  const cells: Record<string, Record<string, string[]>> = {};
-  const unassignedByIndex: Record<string, string[]> = {};
+  const cells: Record<string, Record<string, ShardTag[]>> = {};
+  const unassignedByIndex: Record<string, ShardTag[]> = {};
+  const seen = new Map<string, number>();
   for (const s of shards) {
-    const tag = `${s.shard}${s.prirep}:${s.state}`;
+    // "/_cat/shards" has one row per copy, so the same shard id + prirep + state
+    // can legitimately repeat (e.g. 2 unassigned replicas of shard 0). Suffix a
+    // counter to keep the render key unique while showing the identical label.
+    const base = `${s.shard}${s.prirep}:${s.state}`;
+    const n = (seen.get(base) ?? 0) + 1;
+    seen.set(base, n);
+    const tag: ShardTag = { key: n === 1 ? `${s.index}|${base}` : `${s.index}|${base}#${n}`, label: base };
     if (!s.node) {
       (unassignedByIndex[s.index] ??= []).push(tag);
       continue;

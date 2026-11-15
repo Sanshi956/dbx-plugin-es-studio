@@ -2,7 +2,7 @@
   import StateBlock from "../components/StateBlock.svelte";
   import DataTable from "../components/DataTable.svelte";
   import PrirepBadge from "../components/PrirepBadge.svelte";
-  import { fetchShards, buildTopology, type ShardRow, type TopologyMatrix } from "../lib/services";
+  import { fetchShards, buildTopology, type ShardRow, type ShardTag, type TopologyMatrix } from "../lib/services";
   import type { DbxBridge } from "../lib/bridge";
   import type { TableColumn } from "../lib/types";
 
@@ -45,6 +45,12 @@
     void load(connectionId);
   });
 
+  // One row per shard copy: index+shard+prirep is NOT unique when an index has
+  // several same-state replicas, so hand DataTable a positional row id.
+  const tableRows = $derived<Record<string, unknown>[]>(
+    shards.map((s, i) => ({ ...s, __rowId: i })),
+  );
+
   const columns: TableColumn[] = [
     { key: "index", label: "Index" },
     { key: "shard", label: "Shard", align: "right", mono: true },
@@ -67,10 +73,9 @@
     return `${n.toFixed(i === 0 ? 0 : 1)} ${units[i]}`;
   }
 
-  function cellTags(index: string, node: string): string[] {
-    return matrix.cells[index]?.[node] ?? [];
+  function cellTags(index: string, node: string): ShardTag[] {    return matrix.cells[index]?.[node] ?? [];
   }
-  function unassignedTags(index: string): string[] {
+  function unassignedTags(index: string): ShardTag[] {
     return matrix.unassignedByIndex[index] ?? [];
   }
   function shardClass(tag: string): string {
@@ -112,14 +117,14 @@
               <th class="rowhead">{index}</th>
               {#each matrix.nodes as node (node)}
                 <td>
-                  {#each cellTags(index, node) as tag (tag)}
-                    <span class="shard {shardClass(tag)}">{tag}</span>
+                  {#each cellTags(index, node) as tag (tag.key)}
+                    <span class="shard {shardClass(tag.label)}">{tag.label}</span>
                   {/each}
                 </td>
               {/each}
               <td class="unassigned-col">
-                {#each unassignedTags(index) as tag (tag)}
-                  <span class="shard unassigned">{tag}</span>
+                {#each unassignedTags(index) as tag (tag.key)}
+                  <span class="shard unassigned">{tag.label}</span>
                 {/each}
               </td>
             </tr>
@@ -131,8 +136,8 @@
     <h2>Shard allocation</h2>
     <DataTable
       columns={columns}
-      rows={shards as unknown as Record<string, unknown>[]}
-      rowKey={(r) => `${r.index}-${r.shard}-${r.prirep}`}
+      rows={tableRows}
+      rowKey={(r) => String(r.__rowId)}
     >
     </DataTable>
   {/if}
