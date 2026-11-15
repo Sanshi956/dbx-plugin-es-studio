@@ -101,9 +101,15 @@ curl -X POST "$ES/archived-2023/_doc?refresh=wait_for" $J -d '{"note":"old data"
 curl -X POST "$ES/archived-2023/_close" $J >/dev/null
 
 echo "== aliases =="
+# prod-eu / orders-hidden exist so the Aliases page can be asserted against
+# REAL filter / routing / is_hidden values instead of empty cells.
 curl -X POST "$ES/_aliases" $J -d '{"actions":[
   {"add":{"index":"products","alias":"prod-view"}},
-  {"add":{"index":"orders","alias":"active-orders"}}
+  {"add":{"index":"orders","alias":"active-orders"}},
+  {"add":{"index":"products","alias":"prod-eu",
+          "filter":{"term":{"category":"display"}},
+          "index_routing":"eu","search_routing":"eu"}},
+  {"add":{"index":"orders","alias":"orders-hidden","is_hidden":true}}
 ]}' >/dev/null
 
 echo "== done; summary =="
