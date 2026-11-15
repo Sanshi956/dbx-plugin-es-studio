@@ -10,12 +10,16 @@ blank screen.
     python scripts/browser-render-check.py --base-url http://127.0.0.1:5199 --expect-version 6.8
 
 Exit code 1 on any page that fails those three properties.
+
+`--gate-out DIR` additionally keeps full-page shots of the gated pages and prints
+the exact sentence they show, so a version's gate evidence is one command away.
 """
 from __future__ import annotations
 
 import argparse
 import json
 import sys
+from pathlib import Path
 
 from playwright.sync_api import sync_playwright
 
@@ -32,6 +36,8 @@ NAV = [
 # Pages whose feature does not exist on 6.x: they must explain themselves.
 # nav label -> API version that introduces the feature
 GATED = {"数据流": "7.9", "组件模板": "7.8", "索引模板": "7.8"}
+# ASCII file stems for the gate evidence shots
+SLUG = {"数据流": "data-streams", "组件模板": "component-templates", "索引模板": "index-templates"}
 
 
 def main() -> int:
@@ -39,7 +45,12 @@ def main() -> int:
     ap.add_argument("--base-url", default="http://127.0.0.1:5199")
     ap.add_argument("--expect-version", default="6.8")
     ap.add_argument("--out", default="/tmp/render")
+    ap.add_argument("--gate-out", default="")
     args = ap.parse_args()
+
+    gate_dir = Path(args.gate_out) if args.gate_out else None
+    if gate_dir:
+        gate_dir.mkdir(parents=True, exist_ok=True)
 
     fails: list[str] = []
     rows: list[dict] = []
@@ -65,10 +76,17 @@ def main() -> int:
             body = page.locator("body").inner_text()
             gate = GATED.get(label)
             gate_ok = True
+            gate_text = ""
             if gate:
                 gate_ok = (gate in body) or ("需要" in body and args.expect_version in body)
                 if not gate_ok:
                     fails.append(f"{label}: 没有出现 {gate}+ 的版本门控说明")
+                # keep the sentence the page actually shows; evidence must be quotable
+                for line in body.splitlines():
+                    if "需要" in line or gate in line:
+                        gate_text = line.strip()
+                        if "需要" in line:
+                            break
             errors_here = errors[before:]
             if errors_here:
                 fails.append(f"{label}: 控制台报错 {errors_here[:2]}")
@@ -77,8 +95,11 @@ def main() -> int:
             if len(body.strip()) < 40:
                 fails.append(f"{label}: 正文几乎为空（{len(body)} 字符）")
             page.screenshot(path=f"{args.out}-{NAV.index(label):02d}.png")
+            if gate and gate_dir:
+                page.screenshot(path=str(gate_dir / f"{args.expect_version}-{SLUG[label]}.png"),
+                                full_page=True)
             rows.append({"page": label, "h1": h1, "gated": bool(gate), "gateOk": gate_ok,
-                         "errors": len(errors_here), "chars": len(body)})
+                         "gateText": gate_text, "errors": len(errors_here), "chars": len(body)})
 
         browser.close()
 
@@ -86,6 +107,13 @@ def main() -> int:
         flag = "OK  " if (r["errors"] == 0 and r["h1"] and r["chars"] >= 40) else "FAIL"
         print(f"  [{flag}] {r['page']:<8} h1={r['h1'][:24]:<26} chars={r['chars']:<5} errors={r['errors']}")
     print()
+    gated = [r for r in rows if r["gated"]]
+    if gated:
+        print(f"版本门控原句（集群 {args.expect_version}）:")
+        for r in gated:
+            mark = "OK" if r["gateOk"] else "FAIL"
+            print(f"  [{mark}] {r['page']}: {r['gateText'] or '(空)'}")
+        print()
     if fails:
         print("FAILURES:")
         for f in fails:

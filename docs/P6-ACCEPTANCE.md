@@ -237,10 +237,13 @@ filter/routing 列正常渲染。
   按版本自动转换并在 toast 里说明改了什么。原文写的"未适配"是错的,已纠正。
 - **7.0–7.7 已实证**(7.0.1 + 7.7.1 两端):接口形状与 UI 渲染均与 7.17 同族,
   三个门限接口返回 400/405、`_mapping` typeless。
-  ⚠️ 7.0.1 的门控**截图**本轮没取到:测试集群在检查途中被环境回收(连接被拒),
-  该次结果作废。门控代码与 6.8/7.7 共用同一 `capabilitiesFor()` 矩阵
-  (7.0 的 `dataStreams/componentTemplates` 均为 false,单测已覆盖该边界),
-  6.8 与 7.7.1 的 25/25 渲染检查已验证文案形态。复现命令见 §7。
+  7.0.1 的门控**截图**已补测(2026-11-15 20:12):真实 7.0.1 集群 + 逐页渲染检查
+  25/25、0 控制台错误,三张门控证据图在 `screenshots/p6/7.0-{index-templates,
+  component-templates,data-streams}.png`,门控原句:
+  「此集群为 7.0.1，组合模板（_index_template）需要 Elasticsearch 7.8 或更高；
+  下方只显示传统模板（_template）。」/「组件模板需要 Elasticsearch 7.8 或更高版本。」
+  /「数据流需要 Elasticsearch 7.9 或更高版本。」索引模板页下方同时正常渲染
+  legacy 模板列表。复现命令见 §7(`--gate-out` 会保存门控页整页图)。
 - **9.x 的传统模板**:`GET /_template` 返回 `{}` 而非 404,说明端点仍在;
   但官方已标注弃用,若未来移除,页面会自动转为"只显示组合模板"(门控文案已就绪)。
 - **Easysearch / OpenSearch**:版本号语义与 ES 不同,矩阵只对 ES 成立;
@@ -270,8 +273,9 @@ ES_URL=http://127.0.0.1:19213 BRIDGE_PORT=5199 DBX_PLUGIN_DATA_DIR=.dbx-dev/plug
 "D:/software/dev/Python/Python313/python.exe" scripts/browser-test.py \
   --base-url http://127.0.0.1:5199
 # 夹具在本版本不成立的集群(6.8/7.0/7.7):改用逐页渲染检查
+# --gate-out 会额外保存门控页整页图并打印门控原句
 "D:/software/dev/Python/Python313/python.exe" scripts/browser-render-check.py \
-  --base-url http://127.0.0.1:5199 --expect-version 6.8
+  --base-url http://127.0.0.1:5199 --expect-version 7.0 --gate-out screenshots/p6
 ```
 
 注意:本机后台起的 ES 会被环境回收,`es-cluster.py start`、`browser-bridge.mjs`
