@@ -131,12 +131,7 @@
   <header>
     <div>
       <h1>Aliases</h1>
-      <p>
-        索引别名来自 <code>/_cat/aliases</code>，增删走 <code>POST /_aliases</code>。
-        <strong>Filter</strong> 是挂在别名上的过滤查询（alias filter）：通过这个别名只能看到
-        匹配该查询的文档，写操作也受其约束；没有过滤条件时该列为空，表示「整个索引都可见」。
-        <strong>Write</strong> 标记该别名指向的索引用作写目标（同一别名指向多个索引时必须唯一）。
-      </p>
+      <p>Aliases from <code>/_cat/aliases</code>; add / remove via <code>POST /_aliases</code>.</p>
     </div>
     <button type="button" onclick={() => load(connectionId)} disabled={loading || !connectionId}>
       {loading ? "Loading…" : "Refresh"}
@@ -178,7 +173,14 @@
     {:else}
       <table class="ax">
         <thead>
-          <tr><th>Alias</th><th>Index</th><th>Write</th><th>Filter（别名过滤条件）</th><th>Routing</th><th></th></tr>
+          <tr>
+            <th>Alias</th>
+            <th>Index</th>
+            <th title="同一别名指向多个索引时，写操作落到被标记的那个">Write</th>
+            <th title="挂在别名上的过滤查询（alias filter）：通过该别名只能命中匹配的文档">Filter</th>
+            <th title="读写使用的 routing 值">Routing</th>
+            <th></th>
+          </tr>
         </thead>
         <tbody>
           {#each visible() as row (row.alias + "::" + row.index)}
@@ -188,10 +190,9 @@
               <td class="center">{#if row.writeIndex}<span class="tag write">write</span>{:else}<span class="muted">—</span>{/if}</td>
               <td class="mono">
                 {#if row.filter}
-                  <span class="tag filtered" title={row.filter}>有过滤条件</span>
                   <code class="expr" title={row.filter}>{row.filter}</code>
                 {:else}
-                  <span class="muted">无（整个索引可见）</span>
+                  <span class="muted">—</span>
                 {/if}
               </td>
               <td class="mono">{row.routing || "—"}</td>
@@ -220,9 +221,8 @@
   .page { max-width: 1100px; }
   header { display: flex; justify-content: space-between; align-items: flex-start; gap: 16px; margin-bottom: 16px; }
   h1 { margin: 0 0 4px; font-size: 18px; }
-  header p { margin: 0; color: var(--es-muted); max-width: 780px; line-height: 1.7; }
+  header p { margin: 0; color: var(--es-muted); }
   header code { font-family: var(--es-mono); font-size: 11px; }
-  header strong { color: var(--es-text); }
   button { padding: 6px 14px; border: 1px solid var(--es-border); border-radius: 6px; background: var(--es-surface); color: var(--es-text); cursor: pointer; white-space: nowrap; }
   button:hover:not(:disabled):not(.primary) { background: var(--es-surface-2); }
   .primary:hover:not(:disabled) { filter: brightness(0.92); }
@@ -250,6 +250,5 @@
   .muted { color: var(--es-muted); }
   .tag { display: inline-block; padding: 1px 6px; border-radius: 4px; font-size: 10px; font-family: var(--es-mono); border: 1px solid var(--es-border); }
   .tag.write { color: var(--es-accent); border-color: var(--es-accent); }
-  .tag.filtered { color: var(--es-yellow); border-color: var(--es-yellow); }
-  .expr { display: inline-block; max-width: 320px; overflow: hidden; text-overflow: ellipsis; vertical-align: bottom; font-size: 11px; color: var(--es-muted); margin-left: 6px; }
+  .expr { display: inline-block; max-width: 420px; overflow: hidden; text-overflow: ellipsis; vertical-align: bottom; font-size: 11px; color: var(--es-muted); }
 </style>

@@ -229,3 +229,47 @@ rollover 数据流、删除数据流、写集群设置、改副本数 / 路由�
   INITIALIZING 已用真实分片验证；要真验 RELOCATING 需 ≥2 个节点（`_cluster/reroute` move）。
 - Query Builder 的 `range` 目前只给 gte/lte 两个输入（gt/lt 在 `buildDsl` 里支持、UI 未暴露）。
 - 快照创建的索引多选没有「全选/反选」按钮，索引特别多时需要按住 Ctrl 多选。
+
+---
+
+## 7. 0.2.2 · 第二轮验收反馈（页面风格统一 + 交互补齐）
+
+第二轮反馈的核心不是「功能缺失」，而是「页面风格被讲解式文案带偏了」+ 几处交互仍是老毛病。
+逐条处理如下，**同类问题一次性扫完**（用户已明确要求不要再提醒同类问题）。
+
+### 7.1 逐条处理
+
+| # | 反馈 | 处理 |
+|---|---|---|
+| 1 | Shards & Topology 介绍太详细，页面风格和其它页不一致；「我之前只是想让你在对话里解释」 | 头部长段讲解删除，只保留一行 `Shard copies from /_cat/shards, plus an index × node matrix.`，与 Nodes / Index List / Tasks 完全同构。四张状态卡去掉每张下面的解释句；在途横幅压成一行数据；未分配提示压成一行。**页面只放数据与操作，语义解释放对话** |
+| 2 | Aliases 同样问题 | 头部同样压成一行；Filter / Write / Routing 的语义改放**表头 tooltip**（`title`），单元格回归「有值就显示、没值显示 —」，「无（整个索引可见）」这类解释文案不再占位置 |
+| 3 | Index List 期望按索引名过滤 | 新增 Filter 输入框 + `n / total` 计数 + 无匹配空态 |
+| 4 | 「已关闭的索引可以点 close 继续关闭，open 的索引也可点 open」 | 这是真 bug：每行同时给了 Close 和 Open，对关闭索引点 Close 会报错。现在**按钮随状态切换**——`status=close` 只给 `Open`，`status=open` 只给 `↻` 与 `Close`；Delete 一直在 |
+| 5 | Templates 点 View 要滚到页尾才看得到，模板多时体验差（Component Templates 一样） | 新增 `src/components/Inspector.svelte` 弹层（固定定位、自身滚动、Esc 关闭），两个页面都用它展示详情。表格行不再被顶下去 |
+| 6 | Query Builder 新 tab 默认选中第一个索引 | `addTab()` 改为始终取 `indices[0]`（之前会「猜一个还没用的索引」，不可预期） |
+| 7 | **REST Console 输入 Tab 光标跳到下面组件**（「死性不改」） | 根因是上轮只修了 DSL Editor 一处。本次抽出 `src/lib/editorKeys.ts::handleEditorKey`，**所有 JSON 编辑器统一走它**：DSL Editor / REST Console / Templates / Component Templates / Lifecycle / Query Profiler 共 6 处。Tab 插 2 空格，Esc 后 Tab 才跳出，`Ctrl/⌘+Enter` 执行。以后新加编辑器不会再漏 |
+| 8 | Snapshots 索引多选的选中效果太烂 | 原生 `select multiple` 换成 chips：胶囊按钮 + 自绘勾选框，选中整颗高亮成强调色，右侧 `全选 / 清空` 与 `选中数 / 总数` |
+| 9 | Tasks 页「任务是哪里来的」 | 空态 detail 改成「异步操作（reindex / restore / forcemerge…）执行时才会出现」；接口来源在头部 `GET /_tasks?group_by=none&detailed=true` 已写明 |
+
+### 7.2 附带的一致性整理
+
+- 页头统一：`h1` + **一行** `接口说明`（Nodes / Index List / Aliases / Shards / Tasks … 全部同构），
+  长解释一律不进页面。
+- 弹层组件 `Inspector` 与危险确认 `ConfirmDanger` 分工明确：前者只读查看，后者写操作确认。
+
+### 7.3 验证矩阵（0.2.2）
+
+| 项 | 结果 |
+|---|---|
+| `npm run check` / `npm run build` | **0 error 0 warning**，单文件 UI |
+| `go vet` / `go test` | 全绿 |
+| 浏览器体验回归 `browser-ux-test.py` | **48/48**，控制台 0 报错（新增 Index List 过滤与开关按钮、模板弹层×2、REST Console Tab、Snapshots chips、QB 新 tab 默认索引、Shards/Aliases 头部风格断言） |
+| 浏览器主回归 `browser-test.py` | **23/23** |
+| 写路径 `browser-write-test.py --only rw` | **8/8**（回查真实 ES 状态） |
+| 只读拒绝 `--only ro` | **6/6** |
+| 真实 ES smoke | **89/89** |
+| 签名 / 包校验 / 包内 exe | `SIGNATURE VALID`、`17/17`、**89/89** |
+
+> 说明：本轮第一次跑只读拒绝时 3 条 FAIL，原因是本地 ES 被外部终止（日志停在 13:46:16、
+> 无 shutdown 记录），只读连接拿不到会话所以错误码不是 -32003。重启 ES 后同一条用例 **6/6** 通过，
+> 属环境问题而非产品回归。

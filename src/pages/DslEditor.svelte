@@ -1,7 +1,7 @@
 <script lang="ts">
-  import { tick } from "svelte";
   import StateBlock from "../components/StateBlock.svelte";
   import JsonView from "../components/JsonView.svelte";
+  import { handleEditorKey } from "../lib/editorKeys";
   import { searchIndex, single, fetchIndices, type DocHit, type IndexRow } from "../lib/services";
   import type { DbxBridge } from "../lib/bridge";
 
@@ -22,7 +22,6 @@
   let showRaw = $state(false);
   let formatError = $state("");
   let history = $state<string[]>([]);
-  let escapeArmed = $state(false);
 
   const HISTORY_KEY = "es.studio.dsls";
 
@@ -52,33 +51,11 @@
   });
 
   /**
-   * A JSON editor without Tab-to-indent is painful: Tab used to move focus into
-   * the results table mid-typing. Now Tab inserts two spaces, and Esc first if
-   * you actually want to leave the editor by keyboard.
+   * Shared editor keys: Tab indents instead of jumping into the results table,
+   * Esc arms one real Tab, Ctrl/⌘+Enter runs.
    */
-  async function onEditorKey(event: KeyboardEvent): Promise<void> {
-    if (event.key === "Escape") {
-      escapeArmed = true;
-      return;
-    }
-    if (event.key === "Enter" && (event.ctrlKey || event.metaKey)) {
-      event.preventDefault();
-      void run();
-      return;
-    }
-    if (event.key !== "Tab") return;
-    if (event.shiftKey || escapeArmed) {
-      escapeArmed = false;
-      return;
-    }
-    event.preventDefault();
-    const el = event.currentTarget as HTMLTextAreaElement;
-    const start = el.selectionStart;
-    const end = el.selectionEnd;
-    const indent = "  ";
-    body = body.slice(0, start) + indent + body.slice(end);
-    await tick();
-    el.selectionStart = el.selectionEnd = start + indent.length;
+  function onEditorKey(event: KeyboardEvent): void {
+    handleEditorKey(event, () => body, (next) => (body = next), () => void run());
   }
 
   function format(): void {

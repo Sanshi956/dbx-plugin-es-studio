@@ -33,6 +33,15 @@
   let renameReplacement = $state("");
   let formError = $state("");
 
+  function toggleIndex(name: string): void {
+    snapIndexList = snapIndexList.includes(name)
+      ? snapIndexList.filter((n) => n !== name)
+      : [...snapIndexList, name];
+  }
+  function selectAllIndices(): void {
+    snapIndexList = indices.map((ix) => ix.index);
+  }
+
   type Pending =
     | { kind: "repo" }
     | { kind: "snapshot" }
@@ -226,13 +235,32 @@
       <h2>Snapshots in <code>{selectedRepo}</code> <span class="count">{snapshots.length}</span></h2>
       <div class="fields">
         <label>快照名<input placeholder={`snap-${new Date().toISOString().slice(0, 10)}`} bind:value={snapName} /></label>
-        <label class="wide">索引（可多选，不选 = 全部 *）
-          <select multiple size="3" bind:value={snapIndexList}>
-            {#each indices as ix (ix.index)}<option value={ix.index}>{ix.index}</option>{/each}
-          </select>
-        </label>
         <label class="check"><input type="checkbox" bind:checked={includeGlobal} /> include_global_state</label>
         <button type="button" class="primary" onclick={askSnapshot}>创建快照</button>
+      </div>
+
+      <div class="ix-picker">
+        <div class="ix-head">
+          <span>索引</span>
+          <span class="muted">不选 = 全部 *</span>
+          <span class="ix-count">{snapIndexList.length} / {indices.length}</span>
+          <button type="button" class="mini" onclick={selectAllIndices}>全选</button>
+          <button type="button" class="mini" onclick={() => (snapIndexList = [])}>清空</button>
+        </div>
+        <div class="ix-chips">
+          {#each indices as ix (ix.index)}
+            <label class="chip" class:on={snapIndexList.includes(ix.index)}>
+              <input
+                type="checkbox"
+                checked={snapIndexList.includes(ix.index)}
+                onchange={() => toggleIndex(ix.index)}
+              />
+              {ix.index}
+            </label>
+          {:else}
+            <span class="muted">（没有可选的索引）</span>
+          {/each}
+        </div>
       </div>
       <div class="fields">
         <label>restore rename_pattern<input placeholder="(.+)" bind:value={renamePattern} /></label>
@@ -308,8 +336,18 @@
   .fields .wide { flex: 1 1 220px; }
   .fields .check { flex-direction: row; align-items: center; gap: 6px; padding-bottom: 6px; }
   .fields input { padding: 6px 10px; border: 1px solid var(--es-border); border-radius: 6px; background: var(--es-surface); color: var(--es-text); width: 100%; }
-  .fields select { padding: 4px 6px; border: 1px solid var(--es-border); border-radius: 6px; background: var(--es-surface); color: var(--es-text); width: 100%; font-family: var(--es-mono); font-size: 11px; }
   .fields .check input { width: auto; }
+
+  .ix-picker { border: 1px solid var(--es-border); border-radius: var(--es-radius); padding: 8px 10px 10px; margin-bottom: 10px; background: var(--es-surface-2); }
+  .ix-head { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; font-size: 11px; color: var(--es-muted); }
+  .ix-head .ix-count { font-family: var(--es-mono); }
+  .ix-head button { padding: 2px 8px; font-size: 11px; }
+  .ix-chips { display: flex; flex-wrap: wrap; gap: 6px; max-height: 112px; overflow: auto; }
+  .chip { display: inline-flex; align-items: center; gap: 5px; padding: 3px 9px 3px 7px; border: 1px solid var(--es-border); border-radius: 999px; background: var(--es-surface); color: var(--es-text); font-family: var(--es-mono); font-size: 11px; cursor: pointer; user-select: none; }
+  .chip:hover { border-color: var(--es-accent); }
+  .chip.on { background: var(--es-accent); border-color: var(--es-accent); color: #fff; }
+  .chip input { appearance: none; width: 12px; height: 12px; margin: 0; border: 1px solid currentColor; border-radius: 3px; background: transparent; flex: 0 0 auto; }
+  .chip.on input { background: #fff; box-shadow: inset 0 0 0 3px var(--es-accent); border-color: #fff; }
   .hint { font-size: 11px; color: var(--es-muted); padding-bottom: 8px; }
   .form-error { margin: 0 0 10px; font-size: 11px; color: var(--es-red); }
   table { width: 100%; border-collapse: collapse; font-size: 12px; }

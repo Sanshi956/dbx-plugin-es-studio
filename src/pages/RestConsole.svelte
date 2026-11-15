@@ -2,6 +2,7 @@
   import StateBlock from "../components/StateBlock.svelte";
   import JsonView from "../components/JsonView.svelte";
   import { restCall, classifyOperation, isError, type EsResult } from "../lib/services";
+  import { handleEditorKey } from "../lib/editorKeys";
   import type { DbxBridge } from "../lib/bridge";
 
   interface Props {
@@ -86,6 +87,7 @@
     </select>
     <input class="path" placeholder="/_cat/indices?format=json" bind:value={path} />
     <button type="button" class="primary" onclick={run} disabled={loading || !connectionId}>{loading ? "Sending…" : "Send"}</button>
+    <span class="keys">Tab 缩进 · Esc 后 Tab 跳出 · Ctrl/⌘+Enter 发送</span>
   </section>
 
   {#if risk.dangerous}
@@ -94,7 +96,13 @@
     </div>
   {/if}
 
-  <textarea class="body" spellcheck="false" placeholder="Request body (JSON, optional)" bind:value={body}></textarea>
+  <textarea
+    class="body"
+    spellcheck="false"
+    placeholder="Request body (JSON, optional)"
+    bind:value={body}
+    onkeydown={(event) => handleEditorKey(event, () => body, (next) => (body = next), () => void run())}
+  ></textarea>
 
   {#if error}
     <StateBlock kind="error" message="Request failed" detail={error} />
@@ -138,6 +146,7 @@
   .bar { display: flex; gap: 8px; margin-bottom: 10px; }
   .bar select, .bar input { padding: 6px 10px; border: 1px solid var(--es-border); border-radius: 6px; background: var(--es-surface); color: var(--es-text); }
   .bar .path { flex: 1; font-family: var(--es-mono); }
+  .keys { align-self: center; font-size: 10px; color: var(--es-muted); font-family: var(--es-mono); white-space: nowrap; }
   .warn-banner { padding: 10px 12px; margin-bottom: 10px; border: 1px solid var(--es-yellow); border-radius: 6px; background: var(--es-surface-2); color: var(--es-yellow); font-size: 12px; line-height: 1.6; }
   .body { width: 100%; min-height: 140px; resize: vertical; padding: 12px 14px; border: 1px solid var(--es-border); border-radius: var(--es-radius); background: var(--es-surface-2); color: var(--es-text); font-family: var(--es-mono); font-size: 12px; box-sizing: border-box; margin-bottom: 14px; }
   .resp-head { display: flex; gap: 12px; align-items: center; margin-bottom: 10px; font-family: var(--es-mono); font-size: 12px; }

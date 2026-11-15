@@ -1,6 +1,7 @@
 <script lang="ts">
   import StateBlock from "../components/StateBlock.svelte";
   import ConfirmDanger from "../components/ConfirmDanger.svelte";
+  import { handleEditorKey } from "../lib/editorKeys";
   import {
     fetchIlmStatus, fetchIlmPolicies, fetchIlmExplain, setIlmStatus, deleteIlmPolicy, putIlmPolicy, isError,
     type IlmStatus, type IlmPolicyRow, type IlmExplainRow,
@@ -142,7 +143,12 @@
         <label>策略名<input placeholder="p3-demo-policy" bind:value={newName} /></label>
         <button type="button" class="primary" onclick={askCreate}>写入</button>
       </div>
-      <textarea spellcheck="false" rows="10" bind:value={draft}></textarea>
+      <textarea
+        spellcheck="false"
+        rows="10"
+        bind:value={draft}
+        onkeydown={(event) => handleEditorKey(event, () => draft, (next) => (draft = next))}
+      ></textarea>
       {#if formError}<p class="form-error">{formError}</p>{/if}
     {/if}
   </section>

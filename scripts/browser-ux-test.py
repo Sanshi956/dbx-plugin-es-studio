@@ -3,8 +3,11 @@
 
 Covers, against the REAL cluster (via scripts/browser-bridge.mjs + real Chrome):
 
-  Shards & Topology   状态摘要（已就绪/分配中/迁移中/未分配）+ 未分配原因列
-  Aliases             筛选框、索引下拉、Filter 列语义、Write 列
+  Shards & Topology   状态摘要（已就绪/分配中/迁移中/未分配）+ 未分配原因列 + 头部只留一行
+  Aliases             筛选框、索引下拉、Filter 列 tooltip、头部只留一行
+  Index List          按索引名过滤、关闭索引只给 Open / 打开索引只给 Close
+  Templates           View 用弹层展示（不再需要滚到页尾），Esc 关闭
+  Snapshots           索引用 chips 多选，选中态与计数正确
   Document Browser    "Search" 语义显式化（会执行什么查询）
   Query Builder       must/must_not/should 组合、按字段类型给操作符、切索引清条件、多 tab
   DSL Editor          索引下拉、Tab 插入缩进不跳焦点、Ctrl+Enter 运行
@@ -70,8 +73,9 @@ def run(base_url, out_dir):
                   cards.count() == 4 and any("INITIALIZING" in t for t in labels)
                   and any("RELOCATING" in t for t in labels) and any("UNASSIGNED" in t for t in labels),
                   labels)
-            body = page.inner_text("div.page")
-            check("Shards 说明里解释了分配中/迁移中", "正在创建副本" in body and "搬到另一个节点" in body, body[:200])
+            header_text = page.inner_text("div.page header")
+            check("Shards 头部只留一行接口说明（与其它页风格统一）",
+                  len(header_text) < 220 and "副本明细" not in header_text, header_text)
             # 我们的夹具里 metrics-daily 有 4 个未分配副本（单节点 + replicas=2）
             unassigned_num = int(page.locator(".summary .card.unassigned .num").inner_text().strip())
             check("Shards 未分配计数来自真实集群 (>0)", unassigned_num > 0, unassigned_num)
@@ -91,7 +95,11 @@ def run(base_url, out_dir):
             opts = page.locator("section.add select option").all_inner_texts()
             check("Aliases 索引下拉里有真实索引", any("products" in o for o in opts), opts[:4])
             alias_head = page.inner_text("div.page header")
-            check("Aliases 说明了 Filter 列含义", "过滤查询" in alias_head and "整个索引都可见" in alias_head, alias_head[:120])
+            check("Aliases 头部只留一行接口说明（与其它页风格统一）",
+                  len(alias_head) < 220 and "alias filter" not in alias_head, alias_head)
+            filter_th = page.locator("table.ax thead th").nth(3)
+            tip = filter_th.get_attribute("title") or ""
+            check("Aliases Filter 列的语义放在表头 tooltip", "过滤查询" in tip, tip)
             total_before = page.locator("table.ax tbody tr").count()
             page.fill('input[placeholder="筛选：别名 / 索引 / 过滤条件"]', "prod")
             page.wait_for_timeout(300)
@@ -106,6 +114,39 @@ def run(base_url, out_dir):
         except Exception as e:
             shot("ux-aliases-FAIL")
             check("Aliases 筛选生效（prod -> 只剩 1 行）", False, e)
+
+        # ------------------------------------------------------------ Index List
+        try:
+            import urllib.request
+            es = os.environ.get("ES_URL", "http://127.0.0.1:19200")
+            # 关闭状态必须由 ES 决定，页面不许自己猜：先真关一个索引再验按钮
+            req = urllib.request.Request(f"{es}/archived-2023/_close", method="POST")
+            urllib.request.urlopen(req, timeout=60).read()
+            click_nav(page, "Index List")
+            wait_text(page, "archived-2023", timeout=20000)
+            page.fill('input[placeholder="按索引名过滤"]', "arch")
+            page.wait_for_timeout(400)
+            rows = page.locator("table.ix tbody tr")
+            check("Index List 按索引名过滤生效（arch -> 1 行）", rows.count() == 1, rows.count())
+            btns = rows.first.locator("button").all_inner_texts()
+            check("关闭的索引只给 Open、不给 Close",
+                  any("Open" in t for t in btns) and not any("Close" in t for t in btns), btns)
+            rows.first.locator('button:has-text("Open")').click()
+            page.wait_for_selector(".overlay .ack input", timeout=10000)
+            page.locator(".overlay .ack input").check()
+            page.locator('.overlay button:has-text("打开索引")').click()
+            page.wait_for_function(
+                "() => { const r = document.querySelector('table.ix tbody tr'); if (!r) return false;"
+                " return [...r.querySelectorAll('button')].some(b => b.innerText.includes('Close')); }",
+                timeout=30000,
+            )
+            btns2 = page.locator("table.ix tbody tr").first.locator("button").all_inner_texts()
+            check("打开的索引只给 Close、不给 Open",
+                  any("Close" in t for t in btns2) and not any("Open" in t for t in btns2), btns2)
+            shot("ux-indexlist")
+        except Exception as e:
+            shot("ux-indexlist-FAIL")
+            check("Index List 按索引名过滤生效（arch -> 1 行）", False, e)
 
         # --------------------------------------------------------------- Browser
         try:
@@ -187,9 +228,14 @@ def run(base_url, out_dir):
 
             # 多 tab：新 tab 独立索引，且切换后条件被清空
             page.click('button:has-text("+ 新 tab")')
-            page.wait_for_timeout(400)
+            page.wait_for_timeout(500)
             check("Query Builder 新 tab 没有继承旧条件", page.locator("div.clause").count() == 0,
                   page.locator("div.clause").count())
+            sel = page.locator("section.bar select").first
+            first_opt = sel.locator("option").first.get_attribute("value")
+            check("Query Builder 新 tab 默认选中第一个索引",
+                  bool(sel.input_value()) and sel.input_value() == first_opt,
+                  f"selected={sel.input_value()} first={first_opt}")
             page.locator("section.bar select").first.select_option("orders")
             page.wait_for_timeout(600)
             check("Query Builder 切索引后条件被清空", page.locator("div.clause").count() == 0)
@@ -248,14 +294,71 @@ def run(base_url, out_dir):
         try:
             click_nav(page, "Snapshots")
             wait_text(page, "p3-fs-repo", timeout=20000)
-            multi = page.locator("select[multiple]")
-            check("Snapshots 索引是多选而不是手填", multi.count() == 1, multi.count())
-            opts = multi.first.locator("option").all_inner_texts() if multi.count() else []
-            check("Snapshots 多选里有真实索引", any("products" in o for o in opts), opts[:4])
+            chips = page.locator(".ix-chips .chip")
+            check("Snapshots 索引用 chips 多选而不是手填", chips.count() >= 5, chips.count())
+            chip = page.locator('.ix-chips .chip:has-text("products")').first
+            chip.click()
+            page.wait_for_timeout(250)
+            check("Snapshots chip 选中后高亮（class 带 on）",
+                  "on" in (chip.get_attribute("class") or "").split(), chip.get_attribute("class"))
+            check("Snapshots 选中计数更新为 1", "1 /" in page.inner_text(".ix-head"), page.inner_text(".ix-head"))
+            page.locator('.ix-head button:has-text("全选")').click()
+            page.wait_for_timeout(250)
+            total = chips.count()
+            check("Snapshots 全选后计数等于索引总数",
+                  f"{total} / {total}" in page.inner_text(".ix-head"), page.inner_text(".ix-head"))
+            page.locator('.ix-head button:has-text("清空")').click()
+            page.wait_for_timeout(250)
+            check("Snapshots 清空后计数归零", "0 /" in page.inner_text(".ix-head"), page.inner_text(".ix-head"))
             shot("ux-snapshots")
         except Exception as e:
             shot("ux-snapshots-FAIL")
-            check("Snapshots 索引是多选而不是手填", False, e)
+            check("Snapshots 索引用 chips 多选而不是手填", False, e)
+
+        # ------------------------------------------ Templates / Component 弹层
+        for nav, marker, shot_name in (
+            ("Templates", "p3-demo-template", "ux-templates"),
+            ("Component Templates", "p3-demo-component", "ux-component"),
+        ):
+            try:
+                click_nav(page, nav)
+                wait_text(page, marker, timeout=20000)
+                rows_n = page.locator("table tbody tr").count()
+                check(f"{nav} 列出了真实模板", rows_n > 5, rows_n)
+                page.locator("table tbody tr").first.locator('button:has-text("View")').click()
+                page.wait_for_selector(".overlay .panel", timeout=20000)
+                check(f"{nav} 的 View 在弹层里展示（不用滚到页尾）",
+                      page.locator(".overlay .panel pre.json").count() == 1)
+                shot(f"{shot_name}-view")
+                page.keyboard.press("Escape")
+                page.wait_for_timeout(300)
+                check(f"{nav} 弹层按 Esc 可关闭", page.locator(".overlay .panel").count() == 0)
+            except Exception as e:
+                shot(f"{shot_name}-FAIL")
+                check(f"{nav} 的 View 在弹层里展示（不用滚到页尾）", False, e)
+
+        # --------------------------------------------------------- REST Console
+        try:
+            click_nav(page, "REST Console")
+            wait_text(page, "Tab 缩进", timeout=20000)
+            page.fill("input.path", "/products/_search")
+            ta = page.locator("textarea.body")
+            ta.click()
+            page.keyboard.type('{"size":1}')
+            before = ta.input_value()
+            page.keyboard.press("Tab")
+            page.wait_for_timeout(250)
+            after = ta.input_value()
+            focused = page.evaluate("document.activeElement && document.activeElement.tagName")
+            check("REST Console Tab 插入缩进", len(after) == len(before) + 2, f"{len(before)} -> {len(after)}")
+            check("REST Console Tab 后光标仍在编辑器", focused == "TEXTAREA", focused)
+            page.keyboard.press("Control+Enter")
+            wait_text(page, "HTTP 200", timeout=20000)
+            check("REST Console Ctrl+Enter 发送并拿到 200", "HTTP 200" in page.inner_text("div.page"), "")
+            shot("ux-rest")
+        except Exception as e:
+            shot("ux-rest-FAIL")
+            check("REST Console Tab 插入缩进", False, e)
 
         browser.close()
 

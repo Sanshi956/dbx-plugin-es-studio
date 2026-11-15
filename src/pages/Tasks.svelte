@@ -79,7 +79,7 @@
   {#if loading && tasks.length === 0}
     <StateBlock kind="loading" message="Reading /_tasks…" />
   {:else if visible().length === 0}
-    <StateBlock kind="empty" message="No matching tasks" detail="集群当前没有符合条件的任务" />
+    <StateBlock kind="empty" message="No matching tasks" detail="异步操作（reindex / restore / forcemerge…）执行时才会出现" />
   {:else}
     <table>
       <thead><tr><th>Action</th><th>Type</th><th>Node</th><th>Running (s)</th><th>Started</th><th>Cancellable</th><th>Task id</th><th></th></tr></thead>

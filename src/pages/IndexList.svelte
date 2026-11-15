@@ -15,6 +15,7 @@
   let loading = $state(true);
   let error = $state("");
   let toast = $state("");
+  let filter = $state("");
   let inflight = false;
 
   let pending = $state<{ index: string; method: string; path: string; label: string; scope: string } | null>(null);
@@ -45,6 +46,15 @@
   $effect(() => {
     void load(connectionId);
   });
+
+  function visible(): IndexRow[] {
+    const q = filter.trim().toLowerCase();
+    return q ? indices.filter((r) => r.index.toLowerCase().includes(q)) : indices;
+  }
+
+  function isClosed(row: IndexRow): boolean {
+    return row.status === "close";
+  }
 
   function formatBytes(value: number): string {
     if (!Number.isFinite(value) || value <= 0) return "0 B";
@@ -111,41 +121,53 @@
   {:else if indices.length === 0}
     <StateBlock kind="empty" message="No indices returned" />
   {:else}
-    <table class="ix">
-      <thead>
-        <tr>
-          <th>Index</th>
-          <th>Health</th>
-          <th>Status</th>
-          <th class="right">Primary</th>
-          <th class="right">Replicas</th>
-          <th class="right">Docs</th>
-          <th class="right">Deleted</th>
-          <th class="right">Store</th>
-          <th>Actions</th>
-        </tr>
-      </thead>
-      <tbody>
-        {#each indices as row (row.index)}
+    <div class="filter-row">
+      <label>Filter<input placeholder="按索引名过滤" bind:value={filter} /></label>
+      <span class="count">{visible().length} / {indices.length}</span>
+    </div>
+
+    {#if visible().length === 0}
+      <StateBlock kind="empty" message="没有匹配的索引" detail="清空过滤条件试试" />
+    {:else}
+      <table class="ix">
+        <thead>
           <tr>
-            <td class="mono">{row.index}</td>
-            <td><HealthBadge health={row.health} /></td>
-            <td class:closed={row.status === "close"}>{row.status}</td>
-            <td class="right mono">{row.primaryShards}</td>
-            <td class="right mono">{row.replicaShards}</td>
-            <td class="right mono">{row.docsCount}</td>
-            <td class="right mono">{row.docsDeleted}</td>
-            <td class="right mono">{formatBytes(row.storeBytes)}</td>
-            <td class="actions">
-              <button type="button" class="mini" onclick={() => refreshIndex(row.index)} title="Refresh">↻</button>
-              <button type="button" class="mini" onclick={() => ask(row.index, "POST", `/${encodeURIComponent(row.index)}/_close`, "关闭索引", `索引 ${row.index}`)} title="Close">Close</button>
-              <button type="button" class="mini" onclick={() => ask(row.index, "POST", `/${encodeURIComponent(row.index)}/_open`, "打开索引", `索引 ${row.index}`)} title="Open">Open</button>
-              <button type="button" class="mini danger" onclick={() => ask(row.index, "DELETE", `/${encodeURIComponent(row.index)}`, "删除索引", `索引 ${row.index} 及其全部数据`)} title="Delete">Delete</button>
-            </td>
+            <th>Index</th>
+            <th>Health</th>
+            <th>Status</th>
+            <th class="right">Primary</th>
+            <th class="right">Replicas</th>
+            <th class="right">Docs</th>
+            <th class="right">Deleted</th>
+            <th class="right">Store</th>
+            <th>Actions</th>
           </tr>
-        {/each}
-      </tbody>
-    </table>
+        </thead>
+        <tbody>
+          {#each visible() as row (row.index)}
+            <tr>
+              <td class="mono">{row.index}</td>
+              <td><HealthBadge health={row.health} /></td>
+              <td class:closed={isClosed(row)}>{row.status}</td>
+              <td class="right mono">{row.primaryShards}</td>
+              <td class="right mono">{row.replicaShards}</td>
+              <td class="right mono">{row.docsCount}</td>
+              <td class="right mono">{row.docsDeleted}</td>
+              <td class="right mono">{formatBytes(row.storeBytes)}</td>
+              <td class="actions">
+                {#if isClosed(row)}
+                  <button type="button" class="mini" onclick={() => ask(row.index, "POST", `/${encodeURIComponent(row.index)}/_open`, "打开索引", `索引 ${row.index}`)} title="Open">Open</button>
+                {:else}
+                  <button type="button" class="mini" onclick={() => refreshIndex(row.index)} title="Refresh">↻</button>
+                  <button type="button" class="mini" onclick={() => ask(row.index, "POST", `/${encodeURIComponent(row.index)}/_close`, "关闭索引", `索引 ${row.index}`)} title="Close">Close</button>
+                {/if}
+                <button type="button" class="mini danger" onclick={() => ask(row.index, "DELETE", `/${encodeURIComponent(row.index)}`, "删除索引", `索引 ${row.index} 及其全部数据`)} title="Delete">Delete</button>
+              </td>
+            </tr>
+          {/each}
+        </tbody>
+      </table>
+    {/if}
   {/if}
 </div>
 
@@ -169,6 +191,10 @@
   button:hover:not(:disabled):not(.primary) { background: var(--es-surface-2); }
   button:disabled { opacity: 0.55; cursor: default; }
   .toast { padding: 8px 12px; margin-bottom: 12px; border: 1px solid var(--es-border); border-radius: 6px; background: var(--es-surface-2); font-size: 12px; }
+  .filter-row { display: flex; gap: 12px; align-items: end; margin-bottom: 14px; }
+  .filter-row label { display: flex; flex-direction: column; gap: 4px; font-size: 11px; color: var(--es-muted); }
+  .filter-row input { padding: 6px 10px; border: 1px solid var(--es-border); border-radius: 6px; background: var(--es-surface); color: var(--es-text); min-width: 240px; }
+  .filter-row .count { font-family: var(--es-mono); font-size: 11px; color: var(--es-muted); padding-bottom: 8px; }
 
   table.ix { width: 100%; border-collapse: collapse; font-size: 12px; border: 1px solid var(--es-border); border-radius: var(--es-radius); overflow: hidden; }
   .ix th, .ix td { padding: 8px 10px; border-bottom: 1px solid var(--es-border); white-space: nowrap; }

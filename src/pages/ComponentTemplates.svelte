@@ -1,7 +1,9 @@
 <script lang="ts">
   import StateBlock from "../components/StateBlock.svelte";
   import JsonView from "../components/JsonView.svelte";
+  import Inspector from "../components/Inspector.svelte";
   import ConfirmDanger from "../components/ConfirmDanger.svelte";
+  import { handleEditorKey } from "../lib/editorKeys";
   import {
     fetchComponentTemplates, getComponentTemplate, putComponentTemplate, deleteComponentTemplate, isError,
     type ComponentTemplateRow,
@@ -122,7 +124,12 @@
         <label>名称<input placeholder="p3-demo-component" bind:value={newName} /></label>
         <button type="button" class="primary" onclick={askCreate}>写入</button>
       </div>
-      <textarea spellcheck="false" rows="10" bind:value={draft}></textarea>
+      <textarea
+        spellcheck="false"
+        rows="10"
+        bind:value={draft}
+        onkeydown={(event) => handleEditorKey(event, () => draft, (next) => (draft = next))}
+      ></textarea>
       {#if formError}<p class="form-error">{formError}</p>{/if}
     </section>
   {/if}
@@ -156,12 +163,13 @@
     </table>
   {/if}
 
-  {#if detail}
-    <section class="detail">
-      <h2>{detail.name}</h2>
-      <JsonView value={detail.body} />
-    </section>
-  {/if}
+  <Inspector
+    open={detail !== null}
+    title={detail?.name ?? ""}
+    onClose={() => (detail = null)}
+  >
+    {#if detail}<JsonView value={detail.body} />{/if}
+  </Inspector>
 </div>
 
 <ConfirmDanger
@@ -198,8 +206,7 @@
   .mini.danger { color: var(--es-red); border-color: var(--es-red); }
   .mini.danger:hover { background: var(--es-red); color: #fff; }
   .toast { padding: 8px 12px; margin-bottom: 12px; border: 1px solid var(--es-border); border-radius: 6px; background: var(--es-surface-2); font-size: 12px; }
-  .editor, .detail { border: 1px solid var(--es-border); border-radius: var(--es-radius); padding: 14px; margin-bottom: 14px; background: var(--es-surface); }
-  .detail h2 { margin: 0 0 10px; font-size: 13px; }
+  .editor { border: 1px solid var(--es-border); border-radius: var(--es-radius); padding: 14px; margin-bottom: 14px; background: var(--es-surface); }
   .fields { display: flex; gap: 12px; align-items: end; flex-wrap: wrap; margin-bottom: 10px; }
   .fields label { display: flex; flex-direction: column; gap: 4px; font-size: 11px; color: var(--es-muted); }
   .fields input, .filter-row input { padding: 6px 10px; border: 1px solid var(--es-border); border-radius: 6px; background: var(--es-surface); color: var(--es-text); }

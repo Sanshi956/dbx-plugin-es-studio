@@ -138,8 +138,9 @@
     if (tab?.index) void ensureFields(tab.index);
   }
   function addTab(): void {
-    const used = new Set(tabs.map((t) => t.index));
-    const next = indices.find((ix) => !used.has(ix.index))?.index ?? indices[0]?.index ?? "";
+    // A new tab always starts on the first index: predictable, and one click
+    // away from switching. Guessing "the next unused index" surprised people.
+    const next = indices[0]?.index ?? "";
     const tab = newTab(next);
     tabs = [...tabs, tab];
     activeId = tab.id;

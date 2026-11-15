@@ -133,11 +133,7 @@
   <header>
     <div>
       <h1>Shards &amp; Topology</h1>
-      <p>
-        分片副本明细来自 <code>/_cat/shards</code>，拓扑矩阵按「索引 × 节点」摆放松弛的分片副本。
-        副本除了「已就绪 / 未分配」，还有两种<strong>正在搬运</strong>的状态：分配中（ES 正在创建副本、
-        补数据）与迁移中（分片正从一个节点搬到另一个节点）。
-      </p>
+      <p>Shard copies from <code>/_cat/shards</code>, plus an index × node matrix.</p>
     </div>
     <div class="head-actions">
       <label class="auto"><input type="checkbox" bind:checked={autoRefresh} />有在途分片时每 2s 自动刷新</label>
@@ -158,38 +154,28 @@
       <div class="card started">
         <span class="num">{summary.started}</span>
         <span class="lbl">已就绪 STARTED</span>
-        <span class="hint">副本可正常读写</span>
       </div>
       <div class="card initializing" class:active={summary.initializing > 0}>
         <span class="num">{summary.initializing}</span>
         <span class="lbl">分配中 INITIALIZING</span>
-        <span class="hint">{summary.initializing > 0 ? "ES 正在创建副本并回放数据" : "当前没有正在分配的分片"}</span>
       </div>
       <div class="card relocating" class:active={summary.relocating > 0}>
         <span class="num">{summary.relocating}</span>
         <span class="lbl">迁移中 RELOCATING</span>
-        <span class="hint">{summary.relocating > 0 ? "分片正从源节点搬到目标节点" : "当前没有迁移中的分片"}</span>
       </div>
       <div class="card unassigned" class:active={summary.unassigned > 0}>
         <span class="num">{summary.unassigned}</span>
         <span class="lbl">未分配 UNASSIGNED</span>
-        <span class="hint">{summary.unassigned > 0 ? "没有节点接收，见下表「未分配原因」" : "全部分片已有归属"}</span>
       </div>
     </section>
 
     {#if summary.inFlight > 0}
       <p class="inflight">
-        集群正在搬运 <strong>{summary.inFlight}</strong> 个分片副本（分配中 {summary.initializing} / 迁移中 {summary.relocating}），
-        {autoRefresh ? "每 2 秒自动刷新；" : "已关闭自动刷新；"}拓扑里的
-        <span class="shard initializing inline">分配中</span> 与
-        <span class="shard relocating inline">迁移中</span> 会随进度变化。
+        正在搬运 <strong>{summary.inFlight}</strong> 个分片副本（分配中 {summary.initializing} · 迁移中 {summary.relocating}）
+        {#if autoRefresh}<span class="muted">· 每 2s 自动刷新</span>{/if}
       </p>
     {:else if summary.unassigned > 0}
-      <p class="inflight note">
-        没有正在搬运的分片，但有 <strong>{summary.unassigned}</strong> 个副本未分配 —— 这通常是单节点集群上的副本数 &gt; 0，
-        或节点/路由规则不满足。点 Shard allocation 表的「未分配原因」看 ES 给的判定依据，
-        需要完整推理时去 Allocation 页用「Explain unassigned shard」。
-      </p>
+      <p class="inflight note"><strong>{summary.unassigned}</strong> 个副本未分配，原因见下表「未分配原因」。</p>
     {/if}
 
     <h2>Topology matrix <span class="asof">{lastUpdated ? `updated ${lastUpdated}` : ""}</span></h2>
@@ -240,9 +226,8 @@
   h1 { margin: 0 0 6px; font-size: 18px; }
   h2 { margin: 22px 0 10px; font-size: 12px; text-transform: uppercase; letter-spacing: 0.08em; color: var(--es-muted); }
   h2 .asof { margin-left: 8px; font-size: 10px; letter-spacing: 0; text-transform: none; font-family: var(--es-mono); }
-  header p { margin: 0; color: var(--es-muted); max-width: 760px; line-height: 1.6; }
+  header p { margin: 0; color: var(--es-muted); }
   header code { font-family: var(--es-mono); font-size: 11px; }
-  header strong { color: var(--es-text); }
   .head-actions { display: flex; align-items: center; gap: 12px; flex: 0 0 auto; }
   .auto { display: flex; align-items: center; gap: 6px; font-size: 11px; color: var(--es-muted); white-space: nowrap; }
   button { padding: 6px 14px; border: 1px solid var(--es-border); border-radius: 6px; background: var(--es-surface); color: var(--es-text); cursor: pointer; }
@@ -254,7 +239,6 @@
   .card { display: flex; flex-direction: column; gap: 3px; padding: 10px 12px; border: 1px solid var(--es-border); border-radius: var(--es-radius); background: var(--es-surface); border-left-width: 3px; }
   .card .num { font-family: var(--es-mono); font-size: 20px; font-weight: 600; line-height: 1.1; }
   .card .lbl { font-size: 11px; color: var(--es-muted); font-family: var(--es-mono); }
-  .card .hint { font-size: 11px; color: var(--es-muted); }
   .card.started { border-left-color: var(--es-green); }
   .card.started .num { color: var(--es-green); }
   .card.initializing { border-left-color: var(--es-accent); }
@@ -268,8 +252,9 @@
   .card.unassigned.active { background: color-mix(in srgb, var(--es-red) 6%, var(--es-surface)); }
   .card.unassigned.active .num { color: var(--es-red); }
 
-  .inflight { margin: 12px 0 0; padding: 8px 12px; font-size: 12px; border: 1px solid var(--es-accent); border-radius: var(--es-radius); background: var(--es-accent-soft); color: var(--es-text); line-height: 1.7; }
-  .inflight.note { border-color: var(--es-border); background: var(--es-surface-2); }
+  .inflight { margin: 12px 0 0; padding: 6px 12px; font-size: 12px; border: 1px solid var(--es-accent); border-radius: var(--es-radius); background: var(--es-accent-soft); color: var(--es-text); }
+  .inflight.note { border-color: var(--es-border); background: var(--es-surface-2); color: var(--es-muted); }
+  .inflight .muted { color: var(--es-muted); }
 
   .matrix-wrap { overflow-x: auto; border: 1px solid var(--es-border); border-radius: var(--es-radius); }
   table.matrix { border-collapse: collapse; font-size: 11px; width: 100%; }

@@ -13,7 +13,7 @@ import (
 
 const (
 	pluginID      = "local.es.studio"
-	pluginVersion = "0.2.1"
+	pluginVersion = "0.2.2"
 )
 
 func main() {

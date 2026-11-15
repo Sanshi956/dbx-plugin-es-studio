@@ -1,6 +1,7 @@
 <script lang="ts">
   import StateBlock from "../components/StateBlock.svelte";
   import JsonView from "../components/JsonView.svelte";
+  import { handleEditorKey } from "../lib/editorKeys";
   import { fetchIndices, runProfile, type IndexRow, type ProfileShard, type ProfileNode } from "../lib/services";
   import type { DbxBridge } from "../lib/bridge";
 
@@ -109,7 +110,12 @@
     </button>
   </section>
 
-  <textarea spellcheck="false" rows="8" bind:value={body}></textarea>
+  <textarea
+    spellcheck="false"
+    rows="8"
+    bind:value={body}
+    onkeydown={(event) => handleEditorKey(event, () => body, (next) => (body = next), () => void run())}
+  ></textarea>
   {#if formError}<p class="form-error">{formError}</p>{/if}
 
   {#if error}
