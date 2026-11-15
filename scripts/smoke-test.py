@@ -23,6 +23,12 @@ import subprocess
 import sys
 import threading
 import time
+
+# The plugin version is not hardcoded here: it must match what the Sidecar
+# reports, and both come from manifest.json / backend/main.go.
+ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+with open(os.path.join(ROOT, "manifest.json"), encoding="utf-8") as fh:
+    EXPECTED_VERSION = json.load(fh).get("version")
 import urllib.request
 from http.server import ThreadingHTTPServer
 
@@ -227,7 +233,8 @@ def main():
         res = r.get("result", {})
         c.check("initialize protocolVersion=1", res.get("protocolVersion") == 1)
         c.check("initialize plugin.id", (res.get("plugin") or {}).get("id") == "local.es.studio")
-        c.check("initialize plugin.version", (res.get("plugin") or {}).get("version") == "0.1.0")
+        c.check("initialize plugin.version", (res.get("plugin") or {}).get("version") == EXPECTED_VERSION,
+                f"got {(res.get('plugin') or {}).get('version')}, manifest says {EXPECTED_VERSION}")
         c.check("es/ping", (s.call("es/ping").get("result") or {}).get("pong") is True)
         c.check("unknown method -> -32601", err_code(s.call("no/such/method")) == -32601)
 
@@ -357,6 +364,52 @@ def main():
                 tokens = (analyze.get("body") or {}).get("tokens") or []
                 c.check("P2 /_analyze returns tokens", isinstance(tokens, list) and len(tokens) >= 1, str(analyze))
 
+                # ---- P3 endpoint coverage: governance / ops pages read these ----
+                settings = real("/_cluster/settings?flat_settings=true")
+                c.check("P3 /_cluster/settings -> 200", settings.get("status") == 200, str(settings))
+                c.check("P3 settings body has persistent key",
+                        "persistent" in (settings.get("body") or {}), str(settings))
+                ilm_status = real("/_ilm/status")
+                c.check("P3 /_ilm/status -> 200", ilm_status.get("status") == 200, str(ilm_status))
+                c.check("P3 ILM status has operation_mode",
+                        bool((ilm_status.get("body") or {}).get("operation_mode")), str(ilm_status))
+                policies = real("/_ilm/policy")
+                c.check("P3 /_ilm/policy -> 200", policies.get("status") == 200, str(policies))
+                # ES returns the policies as a top-level map: {name: {version, policy}}
+                c.check("P3 /_ilm/policy body is a name->policy map",
+                        isinstance(policies.get("body"), dict), str(policies)[:200])
+                explain = real("/_all/_ilm/explain")
+                c.check("P3 /_all/_ilm/explain -> 200", explain.get("status") == 200, str(explain))
+                c.check("P3 ILM explain has indices map",
+                        isinstance((explain.get("body") or {}).get("indices"), dict), str(explain))
+                index_tpl = real("/_index_template")
+                c.check("P3 /_index_template -> 200", index_tpl.get("status") == 200, str(index_tpl))
+                c.check("P3 /_index_template has index_templates list",
+                        isinstance((index_tpl.get("body") or {}).get("index_templates"), list), str(index_tpl))
+                comp_tpl = real("/_component_template")
+                c.check("P3 /_component_template -> 200", comp_tpl.get("status") == 200, str(comp_tpl))
+                c.check("P3 /_component_template has component_templates list",
+                        isinstance((comp_tpl.get("body") or {}).get("component_templates"), list), str(comp_tpl))
+                streams = real("/_data_stream")
+                c.check("P3 /_data_stream -> 200", streams.get("status") == 200, str(streams))
+                c.check("P3 /_data_stream has data_streams list",
+                        isinstance((streams.get("body") or {}).get("data_streams"), list), str(streams))
+                # ES 8.x answers `group_by=none` with a FLAT `tasks` array (the
+                # Workbench parser depends on that shape, so guard it here).
+                tasks = real("/_tasks?group_by=none&detailed=true")
+                c.check("P3 /_tasks?group_by=none -> 200", tasks.get("status") == 200, str(tasks))
+                c.check("P3 /_tasks?group_by=none returns flat tasks array",
+                        isinstance((tasks.get("body") or {}).get("tasks"), list), str(tasks)[:200])
+                alloc = real("/_cat/allocation?format=json")
+                c.check("P3 /_cat/allocation -> 200", alloc.get("status") == 200, str(alloc))
+                # A fully assigned cluster legitimately answers 400 here, so the
+                # Workbench treats "no unassigned shard" as an explained outcome.
+                explain_alloc = real("/_cluster/allocation/explain")
+                c.check("P3 /_cluster/allocation/explain -> 200|400",
+                        explain_alloc.get("status") in (200, 400), str(explain_alloc)[:200])
+                repos = real("/_snapshot")
+                c.check("P3 /_snapshot -> 200", repos.get("status") == 200, str(repos)[:200])
+
                 # ---- P2 write gate: read-only connection must be rejected at the service layer ----
                 s.call("connection/connect", {"connection_id": "real-es-ro", "direct": {"url": args.es_url, "read_only": True}})
 
@@ -377,6 +430,28 @@ def main():
                         err_code(real_ro("/es-studio-smoke-p2/_close", "POST")) == -32003)
                 c.check("P2 read-only allows GET /_cluster/health",
                         (real_ro("/_cluster/health").get("result") or {}).get("status") == 200)
+
+                # ---- P3 write gate: every P3 destructive path is refused too ----
+                # The permission layer rejects before any HTTP call, so the target
+                # resources do not have to exist for these assertions.
+                c.check("P3 read-only rejects POST /_tasks/{id}/_cancel -> -32003",
+                        err_code(real_ro("/_tasks/node:1/_cancel", "POST")) == -32003)
+                c.check("P3 read-only rejects POST /_data_stream/{name}/_rollover -> -32003",
+                        err_code(real_ro("/_data_stream/es-studio-smoke-absent/_rollover", "POST")) == -32003)
+                c.check("P3 read-only rejects PUT /_ilm/policy/{name} -> -32003",
+                        err_code(real_ro("/_ilm/policy/es-studio-smoke-policy", "PUT", {"policy": {"phases": {}}})) == -32003)
+                c.check("P3 read-only rejects DELETE /_index_template/{name} -> -32003",
+                        err_code(real_ro("/_index_template/es-studio-smoke-tpl", "DELETE")) == -32003)
+                c.check("P3 read-only rejects PUT /_component_template/{name} -> -32003",
+                        err_code(real_ro("/_component_template/es-studio-smoke-comp", "PUT", {"template": {}})) == -32003)
+                c.check("P3 read-only rejects PUT /_cluster/settings -> -32003",
+                        err_code(real_ro("/_cluster/settings", "PUT", {"persistent": {"cluster.routing.allocation.enable": "all"}})) == -32003)
+                c.check("P3 read-only rejects PUT /_snapshot/{repo} -> -32003",
+                        err_code(real_ro("/_snapshot/es-studio-smoke-repo", "PUT", {"type": "fs", "settings": {"location": "x"}})) == -32003)
+                c.check("P3 read-only rejects DELETE /_snapshot/{repo}/{snap} -> -32003",
+                        err_code(real_ro("/_snapshot/es-studio-smoke-repo/snap", "DELETE")) == -32003)
+                c.check("P3 read-only allows GET /_tasks",
+                        (real_ro("/_tasks?group_by=none&detailed=true").get("result") or {}).get("status") == 200)
                 s.call("connection/disconnect", {"connection_id": "real-es-ro"})
 
                 s.call("connection/disconnect", {"connection_id": "real-es"})

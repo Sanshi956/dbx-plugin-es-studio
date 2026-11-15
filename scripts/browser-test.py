@@ -21,6 +21,16 @@ PAGES = [
     ("Shards", "products"),
     ("Index List", "archived-2023"),
     ("Aliases", "prod-view"),
+    # P3
+    ("Allocation", "include._name"),
+    ("Cluster Settings", "Persistent"),
+    ("Templates", "p3-demo-template"),
+    ("Component Templates", "p3-demo-component"),
+    ("Data Streams", "logs-p3-demo"),
+    ("Lifecycle", "p3-demo-policy"),
+    ("Query Profiler", "Run profile"),
+    ("Snapshots", "p3-fs-repo"),
+    ("Tasks", "In-flight node tasks"),
 ]
 
 
@@ -235,6 +245,57 @@ def run(base_url, out_dir, ro_delete=False):
             try: shot("ix-indexlist-danger-FAIL")
             except Exception: pass
         results.append(rec)
+
+        # ---- Allocation: explain an unassigned shard (read-only, real reason) ----
+        rec = {"step": "interact:allocation-explain", "expect": "explain panel", "ok": False}
+        try:
+            click_nav(page, "Allocation")
+            page.get_by_role("button", name="Explain unassigned shard").click()
+            page.wait_for_selector(".explain", timeout=20000)
+            text = page.locator(".explain").inner_text()
+            assert ("allocate" in text.lower()) or ("shard" in text.lower()), text
+            time.sleep(0.3)
+            shot("ix-allocation-explain")
+            rec["ok"] = True
+        except Exception as e:
+            rec["error"] = str(e)
+            try: shot("ix-allocation-FAIL")
+            except Exception: pass
+        results.append(rec)
+
+        # ---- Query Profiler: real profile tree on products ----
+        rec = {"step": "interact:profiler", "expect": "Query tree", "ok": False}
+        try:
+            click_nav(page, "Query Profiler")
+            page.locator("section.bar select").select_option("products")
+            page.get_by_role("button", name="Run profile").click()
+            # the <h2> is text-transformed to uppercase, and innerText follows CSS
+            wait_text(page, "QUERY TREE", timeout=20000)
+            time.sleep(0.3)
+            shot("ix-profiler")
+            rec["ok"] = True
+        except Exception as e:
+            rec["error"] = str(e)
+            try: shot("ix-profiler-FAIL")
+            except Exception: pass
+        results.append(rec)
+
+        # ---- Tasks: needs a REAL in-flight task (scripts/es-task-demo.sh start) ----
+        if os.environ.get("TASK_DEMO") == "1":
+            rec = {"step": "interact:tasks-live", "expect": "indices:data/write/reindex", "ok": False}
+            try:
+                click_nav(page, "Tasks")
+                wait_text(page, "indices:data/write/reindex", timeout=20000)
+                row = page.locator("tr", has_text="indices:data/write/reindex").first
+                assert row.locator("button", has_text="Cancel").is_enabled(), "Cancel should be enabled"
+                time.sleep(0.3)
+                shot("ix-tasks-live")
+                rec["ok"] = True
+            except Exception as e:
+                rec["error"] = str(e)
+                try: shot("ix-tasks-live-FAIL")
+                except Exception: pass
+            results.append(rec)
 
         browser.close()
 

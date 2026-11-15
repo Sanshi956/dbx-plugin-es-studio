@@ -132,6 +132,11 @@ const server = createServer((req, res) => {
     res.end(renderPage());
     return;
   }
+  if (req.url === "/favicon.ico") {
+    res.writeHead(204);
+    res.end();
+    return;
+  }
   res.writeHead(404);
   res.end("not found");
 });

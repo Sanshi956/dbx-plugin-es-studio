@@ -3,7 +3,7 @@
   "manifest_version": 1,
   "id": "local.es.studio",
   "name": "ES Studio",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "publisher": "xihonglei",
   "description": "Professional Elasticsearch management workbench for DBX.",
   "icon": "assets/plugin.svg",

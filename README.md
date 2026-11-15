@@ -1,11 +1,13 @@
 # ES Studio
 
-DBX 内的专业 Elasticsearch 管理工作台插件。插件 ID `local.es.studio`，版本 `0.1.0`。
+DBX 内的专业 Elasticsearch 管理工作台插件。插件 ID `local.es.studio`，版本 `0.2.0`。
 
-当前完成 **P1 · 插件基础设施**：官方 Go Sidecar + Svelte 5 工作台骨架 + 真实集群 Overview + 可安装签名包。
-P2–P5 的导航项已在 UI 中列出但禁用并标注阶段，不是装饰性按钮。
+当前完成 **P1 · 插件基础设施**、**P2 · 日常运维**（集群/节点/分片/索引/别名/文档/查询/DSL/Analyzer/REST）与
+**P3 · 治理与运维**（Allocation/Cluster Settings/Templates/Component Templates/Data Streams/Lifecycle/
+Query Profiler/Snapshots/Tasks），共 17 个导航项可用；P4–P5 项仍在 UI 中标注阶段而非装饰性按钮。
 
-> 规格与实施计划见 `docs/00-SPEC.md`、`docs/01-PLAN.md`；P1 验收结论见 `docs/P1-ACCEPTANCE.md`。
+> 规格与实施计划见 `docs/00-SPEC.md`、`docs/01-PLAN.md`；各阶段验收结论见
+> `docs/P1-ACCEPTANCE.md`、`docs/P2-ACCEPTANCE.md`、`docs/P3-ACCEPTANCE.md`。
 
 ## 架构
 
@@ -88,10 +90,10 @@ dbx-plugin package .                     # 产出未签名审核候选包，直�
     --key-id local.es.studio.release      # 产出 .signed.dbxp 并注册本机公钥
 
 "D:/software/dev/Python/Python313/python.exe" scripts/sign-package.py --verify \
-    --package dist/local.es.studio-0.1.0-windows-x64.signed.dbxp
+    --package dist/local.es.studio-0.2.0-windows-x64.signed.dbxp
 "D:/software/dev/Python/Python313/python.exe" scripts/verify-package.py
 "D:/software/dev/Python/Python313/python.exe" scripts/check-manifest.py \
-    --package dist/local.es.studio-0.1.0-windows-x64.signed.dbxp
+    --package dist/local.es.studio-0.2.0-windows-x64.signed.dbxp
 ```
 
 安装 `dist/*.signed.dbxp` 到 DBX 插件中心。签名私钥文件
@@ -105,7 +107,7 @@ dbx-plugin package .                     # 产出未签名审核候选包，直�
 
 DBX 只提供「插件中心 → 设置 → 从 URL 安装」入口（本机无「从文件安装」按钮）；
 本机验证时在 `dist/` 起一个临时 HTTP 服务（`python -m http.server`），把
-`http://127.0.0.1:19321/local.es.studio-0.1.0-windows-x64.signed.dbxp` 填进 URL 框。
+`http://127.0.0.1:19321/local.es.studio-0.2.0-windows-x64.signed.dbxp` 填进 URL 框。
 下载后必须先在「已安装」里卸载旧版（同版本号不允许覆盖），再重装。
 
 **打开工作台有两种路径，结果不同：**

@@ -13,6 +13,15 @@
   import DslEditor from "./pages/DslEditor.svelte";
   import Analyzer from "./pages/Analyzer.svelte";
   import RestConsole from "./pages/RestConsole.svelte";
+  import Allocation from "./pages/Allocation.svelte";
+  import ClusterSettings from "./pages/ClusterSettings.svelte";
+  import Templates from "./pages/Templates.svelte";
+  import ComponentTemplates from "./pages/ComponentTemplates.svelte";
+  import DataStreams from "./pages/DataStreams.svelte";
+  import Lifecycle from "./pages/Lifecycle.svelte";
+  import QueryProfiler from "./pages/QueryProfiler.svelte";
+  import Snapshots from "./pages/Snapshots.svelte";
+  import Tasks from "./pages/Tasks.svelte";
   import { ready } from "./lib/bridge";
   import type { DbxBridge, ConnectionSummary } from "./lib/bridge";
   import { listConnections } from "./lib/api";
@@ -87,7 +96,7 @@
       onchange={changeConnection}
     />
     <div class="spacer"></div>
-    <span class="phase-chip">P2 · Cluster & Data</span>
+    <span class="phase-chip">P3 · Governance & Ops</span>
   </header>
 
   <div class="shell">
@@ -126,6 +135,24 @@
           <Analyzer bridge={bridge} connectionId={activeId} />
         {:else if page === "rest-console"}
           <RestConsole bridge={bridge} connectionId={activeId} />
+        {:else if page === "allocation"}
+          <Allocation bridge={bridge} connectionId={activeId} />
+        {:else if page === "cluster-settings"}
+          <ClusterSettings bridge={bridge} connectionId={activeId} />
+        {:else if page === "templates"}
+          <Templates bridge={bridge} connectionId={activeId} />
+        {:else if page === "component-templates"}
+          <ComponentTemplates bridge={bridge} connectionId={activeId} />
+        {:else if page === "data-streams"}
+          <DataStreams bridge={bridge} connectionId={activeId} />
+        {:else if page === "lifecycle"}
+          <Lifecycle bridge={bridge} connectionId={activeId} />
+        {:else if page === "query-profiler"}
+          <QueryProfiler bridge={bridge} connectionId={activeId} />
+        {:else if page === "snapshots"}
+          <Snapshots bridge={bridge} connectionId={activeId} />
+        {:else if page === "tasks"}
+          <Tasks bridge={bridge} connectionId={activeId} />
         {/if}
       {/if}
     </main>

@@ -612,7 +612,806 @@ export async function restCall(
 // Danger classification (UI confirmation only; Go is authoritative for safety)
 // ---------------------------------------------------------------------------
 
-export type RiskKind = "delete-index" | "delete-doc" | "close-index" | "open-index" | "aliases" | "delete-by-query" | "forcemerge" | "refresh" | "flush" | "create-index" | "bulk" | "reindex" | "other";
+// ---------------------------------------------------------------------------
+// P3 · Allocation (per-index routing rules + explain for unassigned shards)
+// ---------------------------------------------------------------------------
+
+export interface AllocationRow {
+  index: string;
+  primaryShards: number;
+  replicaShards: number;
+  status: string;
+  include: string;
+  exclude: string;
+  require: string;
+  totalShardsPerNode: string;
+}
+
+export async function fetchAllocation(bridge: DbxBridge, connectionId: string): Promise<AllocationRow[]> {
+  const rows = await batch(bridge, connectionId, [
+    { path: "/_cat/indices?format=json&h=index,pri,rep,status" },
+    { path: "/_all/_settings?flat_settings=true" },
+  ]);
+  const list = Array.isArray(rows[0]?.body) ? (rows[0].body as unknown[]) : [];
+  const settings = record(rows[1]?.body);
+  const pick = (s: Record<string, unknown>, ...keys: string[]): string => {
+    for (const key of keys) if (s[key] !== undefined && s[key] !== null) return str(s[key]);
+    return "";
+  };
+  return list.map((entry) => {
+    const i = record(entry);
+    const index = str(i.index);
+    const s = record(record(settings[index]).settings);
+    return {
+      index,
+      primaryShards: num(i.pri),
+      replicaShards: num(i.rep),
+      status: str(i.status),
+      include: pick(s, "index.routing.allocation.include._name", "index.routing.allocation.include._ip"),
+      exclude: pick(s, "index.routing.allocation.exclude._name", "index.routing.allocation.exclude._ip"),
+      require: pick(s, "index.routing.allocation.require._name", "index.routing.allocation.require._ip"),
+      totalShardsPerNode: pick(s, "index.routing.allocation.total_shards_per_node"),
+    };
+  });
+}
+
+export async function setReplicas(
+  bridge: DbxBridge,
+  connectionId: string,
+  index: string,
+  replicas: number,
+): Promise<EsResult> {
+  return single(bridge, connectionId, "PUT", `/${encodeURIComponent(index)}/_settings`, {
+    index: { number_of_replicas: replicas },
+  });
+}
+
+export type AllocationKind = "include" | "exclude" | "require";
+
+/** Empty value removes the rule (`null` in ES settings). */
+export async function setAllocationRule(
+  bridge: DbxBridge,
+  connectionId: string,
+  index: string,
+  kind: AllocationKind,
+  value: string,
+): Promise<EsResult> {
+  const trimmed = value.trim();
+  return single(bridge, connectionId, "PUT", `/${encodeURIComponent(index)}/_settings`, {
+    index: { routing: { allocation: { [kind]: { _name: trimmed === "" ? null : trimmed } } } },
+  });
+}
+
+export interface AllocationDecision {
+  node: string;
+  decision: string;
+  reason: string;
+}
+
+export interface AllocationExplain {
+  ok: boolean;
+  index: string;
+  shard: string;
+  primary: boolean;
+  state: string;
+  canAllocate: string;
+  reason: string;
+  nodes: AllocationDecision[];
+  note: string;
+  error?: string;
+  raw: unknown;
+}
+
+/** `GET /_cluster/allocation/explain` (no args -> first unassigned shard). */
+export async function explainAllocation(bridge: DbxBridge, connectionId: string): Promise<AllocationExplain> {
+  const empty: AllocationExplain = {
+    ok: false, index: "", shard: "", primary: false, state: "", canAllocate: "",
+    reason: "", nodes: [], note: "", raw: null,
+  };
+  const res = await single(bridge, connectionId, "GET", "/_cluster/allocation/explain");
+  if (isError(res)) {
+    return { ...empty, error: res.error?.message ?? `HTTP ${res.status}`, raw: res.error };
+  }
+  const body = record(res.body);
+  const state = record(body.current_state);
+  const decisions = Array.isArray(body.node_allocation_decisions)
+    ? (body.node_allocation_decisions as unknown[]).map((d) => {
+        const node = record(d);
+        const deciders = Array.isArray(node.deciders) ? (node.deciders as unknown[]) : [];
+        const first = record(deciders[0]);
+        return {
+          node: str(node.node_name),
+          decision: str(node.node_decision),
+          reason: str(first.explanation) || str(node.transport_address),
+        };
+      })
+    : [];
+  return {
+    ok: true,
+    index: str(state.index),
+    shard: str(state.shard),
+    primary: state.primary === true,
+    state: str(state.state),
+    canAllocate: str(body.can_allocate),
+    reason: str(body.allocate_explanation),
+    nodes: decisions,
+    note: str(body.note),
+    raw: body,
+  };
+}
+
+// ---------------------------------------------------------------------------
+// P3 · Cluster settings (persistent / transient)
+// ---------------------------------------------------------------------------
+
+export interface ClusterSettingsSnapshot {
+  persistent: Record<string, string>;
+  transient: Record<string, string>;
+  defaults: Record<string, string>;
+}
+
+function flatSettings(value: unknown): Record<string, string> {
+  const out: Record<string, string> = {};
+  const walk = (node: unknown, prefix: string): void => {
+    const obj = record(node);
+    for (const [key, raw] of Object.entries(obj)) {
+      const path = prefix ? `${prefix}.${key}` : key;
+      if (raw !== null && typeof raw === "object" && !Array.isArray(raw)) walk(raw, path);
+      else out[path] = Array.isArray(raw) ? raw.join(",") : str(raw);
+    }
+  };
+  walk(value, "");
+  return out;
+}
+
+export async function fetchClusterSettings(
+  bridge: DbxBridge,
+  connectionId: string,
+  includeDefaults = false,
+): Promise<ClusterSettingsSnapshot> {
+  const path = `/_cluster/settings?flat_settings=true${includeDefaults ? "&include_defaults=true" : ""}`;
+  const res = await single(bridge, connectionId, "GET", path);
+  if (isError(res)) return { persistent: {}, transient: {}, defaults: {} };
+  const body = record(res.body);
+  return {
+    persistent: flatSettings(body.persistent),
+    transient: flatSettings(body.transient),
+    defaults: flatSettings(body.defaults),
+  };
+}
+
+function coerceSettingValue(raw: string): unknown {
+  const t = raw.trim();
+  if (t === "" || t === "null") return null;
+  if (t === "true") return true;
+  if (t === "false") return false;
+  if (/^-?\d+(\.\d+)?$/.test(t)) return Number(t);
+  if ((t.startsWith("{") && t.endsWith("}")) || (t.startsWith("[") && t.endsWith("]"))) {
+    try {
+      return JSON.parse(t);
+    } catch {
+      return t;
+    }
+  }
+  return t;
+}
+
+/** Passing an empty value removes the key (ES semantics: `null`). */
+export async function updateClusterSettings(
+  bridge: DbxBridge,
+  connectionId: string,
+  scope: "persistent" | "transient",
+  key: string,
+  value: string,
+): Promise<EsResult> {
+  return single(bridge, connectionId, "PUT", "/_cluster/settings", {
+    [scope]: { [key.trim()]: coerceSettingValue(value) },
+  });
+}
+
+// ---------------------------------------------------------------------------
+// P3 · Index templates / component templates
+// ---------------------------------------------------------------------------
+
+export type TemplateKind = "composable" | "legacy";
+
+export interface TemplateRow {
+  name: string;
+  kind: TemplateKind;
+  patterns: string[];
+  priority: number;
+  composedOf: string[];
+  version: number;
+}
+
+export interface ComponentTemplateRow {
+  name: string;
+  version: number;
+  hasSettings: boolean;
+  hasMappings: boolean;
+  hasAliases: boolean;
+}
+
+export async function fetchTemplates(bridge: DbxBridge, connectionId: string): Promise<TemplateRow[]> {
+  const rows = await batch(bridge, connectionId, [{ path: "/_index_template" }, { path: "/_template" }]);
+  const out: TemplateRow[] = [];
+  const composable = record(rows[0]?.body);
+  for (const entry of Array.isArray(composable.index_templates) ? (composable.index_templates as unknown[]) : []) {
+    const item = record(entry);
+    const def = record(item.index_template);
+    out.push({
+      name: str(item.name),
+      kind: "composable",
+      patterns: Array.isArray(def.index_patterns) ? (def.index_patterns as unknown[]).map(str) : [],
+      priority: num(def.priority),
+      composedOf: Array.isArray(def.composed_of) ? (def.composed_of as unknown[]).map(str) : [],
+      version: num(def.version),
+    });
+  }
+  const legacy = record(rows[1]?.body);
+  for (const [name, raw] of Object.entries(legacy)) {
+    const def = record(raw);
+    out.push({
+      name,
+      kind: "legacy",
+      patterns: Array.isArray(def.index_patterns) ? (def.index_patterns as unknown[]).map(str) : [],
+      priority: num(def.order),
+      composedOf: [],
+      version: num(def.version),
+    });
+  }
+  return out.sort((a, b) => a.name.localeCompare(b.name));
+}
+
+export async function getTemplate(
+  bridge: DbxBridge,
+  connectionId: string,
+  name: string,
+  kind: TemplateKind,
+): Promise<{ ok: boolean; body: unknown; error?: string }> {
+  const res = kind === "composable"
+    ? await single(bridge, connectionId, "GET", `/_index_template/${encodeURIComponent(name)}`)
+    : await single(bridge, connectionId, "GET", `/_template/${encodeURIComponent(name)}`);
+  if (isError(res)) return { ok: false, body: null, error: res.error?.message ?? `HTTP ${res.status}` };
+  if (kind === "legacy") return { ok: true, body: record(res.body)[name] ?? res.body };
+  const body = record(res.body);
+  const first = Array.isArray(body.index_templates) ? record((body.index_templates as unknown[])[0]) : {};
+  return { ok: true, body: first.index_template ?? res.body };
+}
+
+export async function putTemplate(
+  bridge: DbxBridge,
+  connectionId: string,
+  name: string,
+  body: unknown,
+  kind: TemplateKind = "composable",
+): Promise<EsResult> {
+  const path = kind === "composable"
+    ? `/_index_template/${encodeURIComponent(name)}`
+    : `/_template/${encodeURIComponent(name)}`;
+  return single(bridge, connectionId, "PUT", path, body);
+}
+
+export async function deleteTemplate(
+  bridge: DbxBridge,
+  connectionId: string,
+  name: string,
+  kind: TemplateKind,
+): Promise<EsResult> {
+  const path = kind === "composable"
+    ? `/_index_template/${encodeURIComponent(name)}`
+    : `/_template/${encodeURIComponent(name)}`;
+  return single(bridge, connectionId, "DELETE", path);
+}
+
+export async function fetchComponentTemplates(
+  bridge: DbxBridge,
+  connectionId: string,
+): Promise<ComponentTemplateRow[]> {
+  const res = await single(bridge, connectionId, "GET", "/_component_template");
+  if (isError(res)) return [];
+  const body = record(res.body);
+  const list = Array.isArray(body.component_templates) ? (body.component_templates as unknown[]) : [];
+  return list
+    .map((entry) => {
+      const item = record(entry);
+      const def = record(item.component_template);
+      const template = record(def.template);
+      return {
+        name: str(item.name),
+        version: num(def.version),
+        hasSettings: Object.keys(record(template.settings)).length > 0,
+        hasMappings: Object.keys(record(template.mappings)).length > 0,
+        hasAliases: Object.keys(record(template.aliases)).length > 0,
+      };
+    })
+    .sort((a, b) => a.name.localeCompare(b.name));
+}
+
+export async function getComponentTemplate(
+  bridge: DbxBridge,
+  connectionId: string,
+  name: string,
+): Promise<{ ok: boolean; body: unknown; error?: string }> {
+  const res = await single(bridge, connectionId, "GET", `/_component_template/${encodeURIComponent(name)}`);
+  if (isError(res)) return { ok: false, body: null, error: res.error?.message ?? `HTTP ${res.status}` };
+  const body = record(res.body);
+  const first = Array.isArray(body.component_templates) ? record((body.component_templates as unknown[])[0]) : {};
+  return { ok: true, body: first.component_template ?? res.body };
+}
+
+export async function putComponentTemplate(
+  bridge: DbxBridge,
+  connectionId: string,
+  name: string,
+  body: unknown,
+): Promise<EsResult> {
+  return single(bridge, connectionId, "PUT", `/_component_template/${encodeURIComponent(name)}`, body);
+}
+
+export async function deleteComponentTemplate(
+  bridge: DbxBridge,
+  connectionId: string,
+  name: string,
+): Promise<EsResult> {
+  return single(bridge, connectionId, "DELETE", `/_component_template/${encodeURIComponent(name)}`);
+}
+
+// ---------------------------------------------------------------------------
+// P3 · Data streams
+// ---------------------------------------------------------------------------
+
+export interface DataStreamRow {
+  name: string;
+  status: string;
+  template: string;
+  ilmPolicy: string;
+  generation: number;
+  indices: string[];
+}
+
+export async function fetchDataStreams(bridge: DbxBridge, connectionId: string): Promise<DataStreamRow[]> {
+  const res = await single(bridge, connectionId, "GET", "/_data_stream");
+  if (isError(res)) return [];
+  const body = record(res.body);
+  const list = Array.isArray(body.data_streams) ? (body.data_streams as unknown[]) : [];
+  return list
+    .map((entry) => {
+      const item = record(entry);
+      return {
+        name: str(item.name),
+        status: str(item.status),
+        template: str(item.template),
+        ilmPolicy: str(item.ilm_policy),
+        generation: num(item.generation),
+        indices: Array.isArray(item.indices)
+          ? (item.indices as unknown[]).map((i) => str(record(i).index_name))
+          : [],
+      };
+    })
+    .sort((a, b) => a.name.localeCompare(b.name));
+}
+
+export async function rolloverDataStream(
+  bridge: DbxBridge,
+  connectionId: string,
+  name: string,
+): Promise<EsResult> {
+  return single(bridge, connectionId, "POST", `/${encodeURIComponent(name)}/_rollover`);
+}
+
+export async function createDataStream(
+  bridge: DbxBridge,
+  connectionId: string,
+  name: string,
+): Promise<EsResult> {
+  return single(bridge, connectionId, "PUT", `/_data_stream/${encodeURIComponent(name)}`);
+}
+
+export async function deleteDataStream(
+  bridge: DbxBridge,
+  connectionId: string,
+  name: string,
+): Promise<EsResult> {
+  return single(bridge, connectionId, "DELETE", `/_data_stream/${encodeURIComponent(name)}`);
+}
+
+// ---------------------------------------------------------------------------
+// P3 · ILM (Index Lifecycle Management)
+// ---------------------------------------------------------------------------
+
+export interface IlmStatus {
+  mode: string;
+  error?: string;
+}
+
+export async function fetchIlmStatus(bridge: DbxBridge, connectionId: string): Promise<IlmStatus> {
+  const res = await single(bridge, connectionId, "GET", "/_ilm/status");
+  if (isError(res)) return { mode: "unknown", error: res.error?.message ?? `HTTP ${res.status}` };
+  return { mode: str(record(res.body).operation_mode) || "unknown" };
+}
+
+export interface IlmPolicyRow {
+  name: string;
+  version: number;
+  modified: string;
+  phases: string[];
+  minAges: string[];
+}
+
+export async function fetchIlmPolicies(bridge: DbxBridge, connectionId: string): Promise<IlmPolicyRow[]> {
+  const res = await single(bridge, connectionId, "GET", "/_ilm/policy");
+  if (isError(res)) return [];
+  const body = record(res.body);
+  const out: IlmPolicyRow[] = [];
+  for (const [name, raw] of Object.entries(body)) {
+    const policy = record(record(raw).policy);
+    const phases = record(policy.phases);
+    const entries = Object.entries(phases);
+    out.push({
+      name,
+      version: num(record(raw).version),
+      modified: str(record(raw).modified_date),
+      phases: entries.map(([phase]) => phase),
+      minAges: entries.map(([, v]) => str(record(v).min_age) || "-"),
+    });
+  }
+  return out.sort((a, b) => a.name.localeCompare(b.name));
+}
+
+export interface IlmExplainRow {
+  index: string;
+  managed: boolean;
+  policy: string;
+  phase: string;
+  action: string;
+  step: string;
+  error: string;
+}
+
+export async function fetchIlmExplain(bridge: DbxBridge, connectionId: string): Promise<IlmExplainRow[]> {
+  // ES 8.x has no bare `/_ilm/explain` handler (405/404); the target form is
+  // required and `_all` covers every index in one read-only GET.
+  const res = await single(bridge, connectionId, "GET", "/_all/_ilm/explain");
+  if (isError(res)) return [];
+  const body = record(res.body);
+  const indices = record(body.indices);
+  return Object.entries(indices)
+    .map(([index, raw]) => {
+      const item = record(raw);
+      const stepInfo = record(item.step_info);
+      return {
+        index,
+        managed: item.managed === true,
+        policy: str(item.policy),
+        phase: str(item.phase),
+        action: str(item.action),
+        step: str(item.step),
+        error: str(stepInfo.reason) || str(item.error),
+      };
+    })
+    .sort((a, b) => a.index.localeCompare(b.index));
+}
+
+export async function setIlmStatus(
+  bridge: DbxBridge,
+  connectionId: string,
+  mode: "start" | "stop",
+): Promise<EsResult> {
+  return single(bridge, connectionId, "POST", `/_ilm/${mode}`);
+}
+
+export async function deleteIlmPolicy(
+  bridge: DbxBridge,
+  connectionId: string,
+  name: string,
+): Promise<EsResult> {
+  return single(bridge, connectionId, "DELETE", `/_ilm/policy/${encodeURIComponent(name)}`);
+}
+
+export async function putIlmPolicy(
+  bridge: DbxBridge,
+  connectionId: string,
+  name: string,
+  body: unknown,
+): Promise<EsResult> {
+  return single(bridge, connectionId, "PUT", `/_ilm/policy/${encodeURIComponent(name)}`, body);
+}
+
+// ---------------------------------------------------------------------------
+// P3 · Query profiler
+// ---------------------------------------------------------------------------
+
+export interface ProfileNode {
+  type: string;
+  description: string;
+  timeNanos: number;
+  depth: number;
+}
+
+export interface ProfileShard {
+  node: string;
+  index: string;
+  shard: string;
+  queryNanos: number;
+  rewriteNanos: number;
+  collectorNanos: number;
+  nodes: ProfileNode[];
+}
+
+/** Walks the ES 7/8/9 profile query tree (`{type, description, time_in_nanos, children}`). */
+function flattenProfile(entries: unknown, depth: number, out: ProfileNode[]): void {
+  for (const entry of Array.isArray(entries) ? entries : []) {
+    const node = record(entry);
+    const type = str(node.type) || Object.keys(node).find((k) => !["children", "description"].includes(k)) || "query";
+    const inner = node.type === undefined ? record(node[type]) : {};
+    out.push({
+      type,
+      description: str(node.description) || str(inner.description),
+      timeNanos: num(node.time_in_nanos) || num(inner.time_in_nanos),
+      depth,
+    });
+    if (depth < 24) flattenProfile(node.children ?? inner.children, depth + 1, out);
+  }
+}
+
+export async function runProfile(
+  bridge: DbxBridge,
+  connectionId: string,
+  index: string,
+  body: Record<string, unknown>,
+): Promise<{ ok: boolean; took: number; hits: number; shards: ProfileShard[]; error?: string; raw: unknown }> {
+  const res = await single(
+    bridge,
+    connectionId,
+    "POST",
+    `/${encodeURIComponent(index)}/_search`,
+    { ...body, profile: true },
+  );
+  if (isError(res)) {
+    return { ok: false, took: 0, hits: 0, shards: [], error: res.error?.message ?? `HTTP ${res.status}`, raw: res.error };
+  }
+  const payload = record(res.body);
+  const profile = record(payload.profile);
+  const rawShards = Array.isArray(profile.shards) ? (profile.shards as unknown[]) : [];
+  const shards: ProfileShard[] = rawShards.map((entry, i) => {
+    // ES 8.x: profile.shards[i] is flat -> {id, node_id, shard_id, index, searches, ...}
+    // ES 7.x: profile.shards[i] = { "<nodeId>": { searches: [...] } }
+    const wrapped = record(entry);
+    let nodeId = str(wrapped.node_id);
+    let node = wrapped;
+    if (!nodeId) {
+      const key = Object.keys(wrapped)[0] ?? "";
+      nodeId = key;
+      node = record(wrapped[key]);
+    }
+    const searches = Array.isArray(node.searches) ? (node.searches as unknown[]) : [];
+    const first = record(searches[0]);
+    const nodes: ProfileNode[] = [];
+    flattenProfile(first.query, 0, nodes);
+    const collectorList = Array.isArray(first.collector) ? (first.collector as unknown[]) : [];
+    const rootCollector = record(collectorList[0]);
+    const shardId = wrapped.shard_id !== undefined ? num(wrapped.shard_id) : i;
+    return {
+      node: nodeId,
+      index: str(wrapped.index),
+      shard: `#${shardId}`,
+      // The root query node's time already includes its children.
+      queryNanos: nodes.length ? nodes[0].timeNanos : 0,
+      rewriteNanos: num(first.rewrite_time),
+      collectorNanos: num(rootCollector.time_in_nanos),
+      nodes,
+    };
+  });
+  const hitsTotal = record(record(payload.hits).total).value ?? record(payload.hits).total ?? 0;
+  return { ok: true, took: num(payload.took), hits: num(hitsTotal), shards, raw: payload };
+}
+
+// ---------------------------------------------------------------------------
+// P3 · Snapshots
+// ---------------------------------------------------------------------------
+
+export interface RepositoryRow {
+  name: string;
+  type: string;
+  settings: Record<string, unknown>;
+}
+
+export async function fetchRepositories(bridge: DbxBridge, connectionId: string): Promise<RepositoryRow[]> {
+  const res = await single(bridge, connectionId, "GET", "/_snapshot");
+  if (isError(res)) return [];
+  const body = record(res.body);
+  return Object.entries(body)
+    .filter(([name]) => name !== "error")
+    .map(([name, raw]) => {
+      const item = record(raw);
+      return { name, type: str(item.type), settings: record(item.settings) };
+    })
+    .sort((a, b) => a.name.localeCompare(b.name));
+}
+
+export interface SnapshotRow {
+  repository: string;
+  snapshot: string;
+  state: string;
+  indices: string[];
+  startTime: string;
+  duration: string;
+  total: number;
+  successful: number;
+  failed: number;
+}
+
+export async function fetchSnapshots(
+  bridge: DbxBridge,
+  connectionId: string,
+  repository: string,
+): Promise<SnapshotRow[]> {
+  const res = await single(bridge, connectionId, "GET", `/_snapshot/${encodeURIComponent(repository)}/_all`);
+  if (isError(res)) return [];
+  const body = record(res.body);
+  return (Array.isArray(body.snapshots) ? (body.snapshots as unknown[]) : [])
+    .map((entry) => {
+      const item = record(entry);
+      const shards = record(item.shards);
+      return {
+        repository,
+        snapshot: str(item.snapshot),
+        state: str(item.state),
+        indices: Array.isArray(item.indices) ? (item.indices as unknown[]).map(str) : [],
+        startTime: str(item.start_time_in_millis),
+        duration: str(item.duration_in_millis),
+        total: num(shards.total),
+        successful: num(shards.successful),
+        failed: num(shards.failed),
+      };
+    })
+    .sort((a, b) => a.snapshot.localeCompare(b.snapshot));
+}
+
+export async function createRepository(
+  bridge: DbxBridge,
+  connectionId: string,
+  name: string,
+  type: string,
+  settings: Record<string, unknown>,
+): Promise<EsResult> {
+  return single(bridge, connectionId, "PUT", `/_snapshot/${encodeURIComponent(name)}`, { type, settings });
+}
+
+export async function deleteRepository(
+  bridge: DbxBridge,
+  connectionId: string,
+  name: string,
+): Promise<EsResult> {
+  return single(bridge, connectionId, "DELETE", `/_snapshot/${encodeURIComponent(name)}`);
+}
+
+export async function createSnapshot(
+  bridge: DbxBridge,
+  connectionId: string,
+  repository: string,
+  snapshot: string,
+  indices: string,
+  includeGlobalState: boolean,
+): Promise<EsResult> {
+  const list = indices.split(",").map((s) => s.trim()).filter(Boolean);
+  return single(
+    bridge,
+    connectionId,
+    "PUT",
+    `/_snapshot/${encodeURIComponent(repository)}/${encodeURIComponent(snapshot)}?wait_for_completion=true`,
+    { indices: list.length ? list.join(",") : "*", include_global_state: includeGlobalState },
+  );
+}
+
+export async function deleteSnapshot(
+  bridge: DbxBridge,
+  connectionId: string,
+  repository: string,
+  snapshot: string,
+): Promise<EsResult> {
+  return single(
+    bridge,
+    connectionId,
+    "DELETE",
+    `/_snapshot/${encodeURIComponent(repository)}/${encodeURIComponent(snapshot)}`,
+  );
+}
+
+export async function restoreSnapshot(
+  bridge: DbxBridge,
+  connectionId: string,
+  repository: string,
+  snapshot: string,
+  indices: string,
+  renamePattern: string,
+  renameReplacement: string,
+): Promise<EsResult> {
+  const list = indices.split(",").map((s) => s.trim()).filter(Boolean);
+  const body: Record<string, unknown> = { include_global_state: false, ignore_unavailable: true };
+  if (list.length) body.indices = list.join(",");
+  if (renamePattern.trim()) {
+    body.rename_pattern = renamePattern.trim();
+    body.rename_replacement = renameReplacement.trim() || "restored_$1";
+  }
+  return single(
+    bridge,
+    connectionId,
+    "POST",
+    `/_snapshot/${encodeURIComponent(repository)}/${encodeURIComponent(snapshot)}/_restore?wait_for_completion=false`,
+    body,
+  );
+}
+
+// ---------------------------------------------------------------------------
+// P3 · Tasks
+// ---------------------------------------------------------------------------
+
+export interface TaskRow {
+  taskId: string;
+  action: string;
+  type: string;
+  node: string;
+  startTime: number;
+  runningNanos: number;
+  cancellable: boolean;
+  description: string;
+}
+
+export async function fetchTasks(bridge: DbxBridge, connectionId: string): Promise<TaskRow[]> {
+  const res = await single(bridge, connectionId, "GET", "/_tasks?group_by=none&detailed=true");
+  if (isError(res)) return [];
+  const body = record(res.body);
+  const out: TaskRow[] = [];
+
+  const push = (taskId: string, task: Record<string, unknown>, nodeFallback: string): void => {
+    const action = str(task.action);
+    // `cluster:monitor/tasks/lists` is created by this very request, so it is
+    // always present and always noise.
+    if (action.startsWith("cluster:monitor/tasks/lists")) return;
+    out.push({
+      taskId,
+      action,
+      type: str(task.type),
+      node: str(task.node) || nodeFallback,
+      startTime: num(task.start_time_in_millis) || num(task.start_time),
+      runningNanos: num(task.running_time_in_nanos),
+      cancellable: task.cancellable === true,
+      description: str(task.description),
+    });
+  };
+
+  // ES 8.x answers `?group_by=none` with a flat `tasks` array; the default
+  // (`group_by=nodes`) nests them under `nodes.<nodeId>.tasks`. Accept both.
+  if (Array.isArray(body.tasks)) {
+    for (const raw of body.tasks as unknown[]) {
+      const task = record(raw);
+      const node = str(task.node);
+      const id = task.id === undefined ? "" : String(task.id);
+      push(id ? `${node}:${id}` : str(task.task_id), task, node);
+    }
+    return out.sort((a, b) => b.runningNanos - a.runningNanos);
+  }
+
+  for (const [nodeId, raw] of Object.entries(record(body.nodes))) {
+    const node = record(raw);
+    for (const [taskId, taskRaw] of Object.entries(record(node.tasks))) {
+      push(taskId, record(taskRaw), nodeId);
+    }
+  }
+  return out.sort((a, b) => b.runningNanos - a.runningNanos);
+}
+
+export async function cancelTask(
+  bridge: DbxBridge,
+  connectionId: string,
+  taskId: string,
+): Promise<EsResult> {
+  return single(bridge, connectionId, "POST", `/_tasks/${encodeURIComponent(taskId)}/_cancel`);
+}
+
+export type RiskKind = "delete-index" | "delete-doc" | "close-index" | "open-index" | "aliases" | "delete-by-query" | "forcemerge" | "refresh" | "flush" | "create-index" | "bulk" | "reindex" | "settings" | "template" | "data-stream" | "ilm" | "snapshot" | "task" | "allocation" | "other";
 
 export interface OperationRisk {
   dangerous: boolean;
@@ -633,6 +1432,49 @@ export function classifyOperation(method: string, path: string): OperationRisk {
   const m = method.toUpperCase();
   const p = path.trim();
   const segs = p.split("/").filter(Boolean);
+
+  if (m === "POST" || m === "PUT" || m === "DELETE") {
+    const has = (token: string): boolean => segs.includes(token);
+    const scopeOf = (fallback: string): string => segs.filter((s) => !s.startsWith("_")).join("/") || fallback;
+
+    if (has("_cluster") && has("settings")) {
+      return { dangerous: true, kind: "settings", label: "修改集群设置", scope: "整个集群（所有节点与索引）" };
+    }
+    if (has("_snapshot")) {
+      if (has("_restore")) return { dangerous: true, kind: "snapshot", label: "恢复快照", scope: `快照 ${scopeOf("")}` };
+      if (m === "DELETE") return { dangerous: true, kind: "snapshot", label: "删除快照 / 仓库", scope: scopeOf("未指定") };
+      return { dangerous: true, kind: "snapshot", label: "创建仓库 / 快照", scope: scopeOf("未指定") };
+    }
+    if (has("_data_stream")) {
+      return m === "DELETE"
+        ? { dangerous: true, kind: "data-stream", label: "删除数据流", scope: `数据流 ${scopeOf("")} 及其背后全部索引` }
+        : { dangerous: true, kind: "data-stream", label: "数据流滚动", scope: `数据流 ${scopeOf("")} 生成新后备索引` };
+    }
+    if (has("_ilm")) {
+      if (has("_start") || has("_stop")) {
+        return { dangerous: false, kind: "ilm", label: "切换 ILM 运行状态", scope: "全局生命周期管理" };
+      }
+      return m === "DELETE"
+        ? { dangerous: true, kind: "ilm", label: "删除 ILM 策略", scope: `策略 ${scopeOf("未指定")}` }
+        : { dangerous: true, kind: "ilm", label: "写入 ILM 策略", scope: `策略 ${scopeOf("未指定")}` };
+    }
+    if (has("_index_template")) {
+      return m === "DELETE"
+        ? { dangerous: true, kind: "template", label: "删除索引模板", scope: `模板 ${scopeOf("未指定")}` }
+        : { dangerous: true, kind: "template", label: "写入索引模板", scope: `模板 ${scopeOf("未指定")}` };
+    }
+    if (has("_component_template")) {
+      return m === "DELETE"
+        ? { dangerous: true, kind: "template", label: "删除组件模板", scope: `组件模板 ${scopeOf("未指定")}` }
+        : { dangerous: true, kind: "template", label: "写入组件模板", scope: `组件模板 ${scopeOf("未指定")}` };
+    }
+    if (has("_tasks") && has("_cancel")) {
+      return { dangerous: true, kind: "task", label: "取消任务", scope: `任务 ${segs[1] ?? ""}` };
+    }
+    if (has("_settings")) {
+      return { dangerous: true, kind: "settings", label: "修改索引设置", scope: `索引 ${segs[0] ?? "*"}` };
+    }
+  }
 
   if (m === "DELETE") {
     // DELETE /{index}/_doc/{id} or /{index}/_doc/{id}/_create etc.

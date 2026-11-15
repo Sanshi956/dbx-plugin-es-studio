@@ -120,3 +120,71 @@ import sys,json,collections
 rows=json.load(sys.stdin)
 c=collections.Counter(f\"{r['shard']}{r['prirep']}:{r['state']}\" for r in rows)
 for k,v in sorted(c.items()): print(f'  {k:20s} x{v}')"
+
+# ---------------------------------------------------------------------------
+# P3 governance & operations fixtures (templates / data stream / ILM / snapshot)
+# ---------------------------------------------------------------------------
+
+echo "== P3: component template =="
+curl -X PUT "$ES/_component_template/p3-demo-component" $J -d '{
+  "template":{
+    "settings":{"index.refresh_interval":"5s"},
+    "mappings":{"properties":{"host":{"type":"keyword"},"@timestamp":{"type":"date"}}}
+  }
+}'
+
+echo "== P3: composable index template (composed_of the component above) =="
+curl -X PUT "$ES/_index_template/p3-demo-template" $J -d '{
+  "index_patterns":["p3-demo-*"],
+  "priority":100,
+  "composed_of":["p3-demo-component"],
+  "template":{"settings":{"number_of_shards":1,"number_of_replicas":0}}
+}'
+
+echo "== P3: data stream (+ 2 backing indices via rollover) =="
+curl -X PUT "$ES/_index_template/logs-p3-ds-template" $J -d '{
+  "index_patterns":["logs-p3-demo*"],
+  "priority":200,
+  "data_stream":{},
+  "template":{"settings":{"number_of_shards":1,"number_of_replicas":0}}
+}'
+curl -X PUT "$ES/_data_stream/logs-p3-demo" $J
+curl -X POST "$ES/logs-p3-demo/_doc?refresh=wait_for" $J -d '{"@timestamp":"2026-11-15T10:00:00Z","level":"info","message":"before rollover"}'
+curl -X POST "$ES/logs-p3-demo/_rollover" $J
+curl -X POST "$ES/logs-p3-demo/_doc?refresh=wait_for" $J -d '{"@timestamp":"2026-11-15T10:05:00Z","level":"warn","message":"after rollover"}'
+
+echo "== P3: ILM policy + attach to logs-app =="
+curl -X PUT "$ES/_ilm/policy/p3-demo-policy" $J -d '{
+  "policy":{"phases":{
+    "hot":{"min_age":"0ms","actions":{"set_priority":{"priority":100}}},
+    "warm":{"min_age":"1d","actions":{"set_priority":{"priority":50}}},
+    "delete":{"min_age":"7d","actions":{"delete":{}}}
+  }}
+}'
+curl -X PUT "$ES/logs-app/_settings" $J -d '{"index.lifecycle.name":"p3-demo-policy"}'
+
+echo "== P3: snapshot repository + one snapshot =="
+curl -X PUT "$ES/_snapshot/p3-fs-repo" $J -d '{"type":"fs","settings":{"location":"D:/tmp/es-studio/snapshots","compress":true}}'
+curl -X PUT "$ES/_snapshot/p3-fs-repo/snap-p3-demo?wait_for_completion=true" $J -d '{"indices":"products","include_global_state":false}'
+
+echo "== P3 summary =="
+curl -s "$ES/_data_stream" | D:/software/dev/Python/Python313/python.exe -c "
+import sys,json
+for d in json.load(sys.stdin).get('data_streams', []):
+    print(f\"  stream {d['name']:16s} gen={d['generation']} status={d['status']} idx={[i['index_name'] for i in d['indices']]}\")"
+curl -s "$ES/_ilm/policy" | D:/software/dev/Python/Python313/python.exe -c "
+import sys,json
+for name, p in json.load(sys.stdin).items():
+    print(f\"  ilm    {name:16s} phases={list(p['policy']['phases'].keys())}\")"
+curl -s "$ES/_snapshot/_all" | D:/software/dev/Python/Python313/python.exe -c "
+import sys,json
+for name, r in json.load(sys.stdin).items():
+    print(f\"  repo   {name:16s} type={r.get('type')} location={r.get('settings',{}).get('location')}\")"
+curl -s "$ES/_snapshot/p3-fs-repo/_all" | D:/software/dev/Python/Python313/python.exe -c "
+import sys,json
+for s in json.load(sys.stdin).get('snapshots', []):
+    print(f\"  snap   {s['snapshot']:16s} state={s['state']} indices={s['indices']}\")"
+curl -s "$ES/_index_template" | D:/software/dev/Python/Python313/python.exe -c "
+import sys,json
+for t in json.load(sys.stdin).get('index_templates', []):
+    print(f\"  tpl    {t['name']:22s} patterns={t['index_template'].get('index_patterns')}\")"

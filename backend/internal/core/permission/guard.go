@@ -96,9 +96,24 @@ func DescribeRisk(req es.Request) (Risk, bool) {
 	case strings.Contains(clean, "/_cluster/settings"):
 		name, scope, reason = "Update Cluster Settings", "entire cluster",
 			"Cluster-level settings affect every node and index."
-	case strings.Contains(clean, "/_snapshot/") && method == "POST":
-		name, scope, reason = "Restore Snapshot", "indices selected for restore",
-			"Restoring can overwrite existing indices and aliases."
+	case strings.Contains(clean, "/_snapshot/"):
+		name, scope, reason = "Snapshot Operation", "snapshot repository / selected indices",
+			"Snapshot and restore change cluster state and restore can overwrite index data."
+	case strings.Contains(clean, "/_index_template") || strings.Contains(clean, "/_component_template"):
+		name, scope, reason = "Modify Index Template", "future indices matching index_patterns",
+			"Templates are inherited by new indices; a broken template makes index creation fail."
+	case strings.Contains(clean, "/_data_stream") || strings.Contains(clean, "/_rollover"):
+		name, scope, reason = "Modify Data Stream", "the data stream and its backing indices",
+			"Deleting a data stream removes every backing index; rollover switches the write index."
+	case strings.Contains(clean, "/_ilm"):
+		name, scope, reason = "Lifecycle Operation", "ILM policies or global ILM state",
+			"ILM actions can roll over, shrink, force-merge and delete indices automatically."
+	case strings.Contains(clean, "/_tasks/"):
+		name, scope, reason = "Cancel Task", "the running cluster task",
+			"Cancelling a task aborts it mid-flight and can leave partially applied state."
+	case strings.Contains(clean, "/_settings"):
+		name, scope, reason = "Update Index Settings", "the target index",
+			"Changing replicas or allocation rules triggers shard reallocation."
 	case strings.Contains(clean, "/_forcemerge") || strings.Contains(clean, "/_optimize"):
 		name, scope, reason = "Force Merge", "segments of the target index",
 			"Force merge is I/O intensive and can block indexing."

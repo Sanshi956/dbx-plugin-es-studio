@@ -41,6 +41,20 @@ def es_get(path):
         return r.status, r.read().decode("utf-8", "replace")
 
 
+def es_json(path):
+    code, body = es_get(path)
+    return json.loads(body) if body.strip() else {}
+
+
+def ds_generation(name):
+    """Generation of a data stream, or -1 when it does not exist."""
+    try:
+        streams = es_json(f"/_data_stream/{name}").get("data_streams") or []
+        return int(streams[0]["generation"]) if streams else -1
+    except Exception:
+        return -1
+
+
 def es_exists(index):
     try:
         code, _ = es_get(f"/{index}")
@@ -169,6 +183,63 @@ def run_rw(base_url, out_dir):
             shot("wr-05-delete-FAIL")
             check("Index List Delete ui-tmp-idx (real ES state)", False, str(e))
 
+        # ---- 6. P3: rollover the data stream, verify generation on the cluster ----
+        try:
+            before = ds_generation("logs-p3-demo")
+            click_nav(page, "Data Streams")
+            wait_text(page, "logs-p3-demo", timeout=15000)
+            page.locator('tbody tr:has-text("logs-p3-demo") button:has-text("Rollover")').click()
+            confirm_danger(page)
+            wait_text(page, "rollover", timeout=20000)
+            time.sleep(1.0)
+            after = ds_generation("logs-p3-demo")
+            shot("wr-06-datastream-rollover")
+            check("Data Streams Rollover logs-p3-demo (real ES generation)",
+                  after == before + 1, f"generation {before} -> {after}")
+        except Exception as e:
+            shot("wr-06-rollover-FAIL")
+            check("Data Streams Rollover logs-p3-demo (real ES generation)", False, str(e))
+
+        # ---- 7. P3: cluster settings write is visible on re-read ----
+        try:
+            click_nav(page, "Cluster Settings")
+            page.wait_for_selector("section.writer input", timeout=10000)
+            inputs = page.locator("section.writer input")
+            inputs.nth(0).fill("cluster.routing.allocation.enable")
+            inputs.nth(1).fill("all")
+            page.locator('section.writer button:has-text("应用")').click()
+            confirm_danger(page)
+            wait_text(page, "cluster.routing.allocation.enable", timeout=20000)
+            shot("wr-07-cluster-settings")
+            check("Cluster Settings write cluster.routing.allocation.enable=all",
+                  es_json("/_cluster/settings?flat_settings=true").get("persistent", {}).get(
+                      "cluster.routing.allocation.enable") == "all")
+        except Exception as e:
+            shot("wr-07-cluster-settings-FAIL")
+            check("Cluster Settings write cluster.routing.allocation.enable=all", False, str(e))
+
+        # ---- 8. P3: cancel a REAL in-flight task (needs scripts/es-task-demo.sh start) ----
+        if os.environ.get("TASK_DEMO") == "1":
+            try:
+                click_nav(page, "Tasks")
+                wait_text(page, "indices:data/write/reindex", timeout=25000)
+                row = page.locator("tr", has_text="indices:data/write/reindex").first
+                row.locator("button", has_text="Cancel").click()
+                confirm_danger(page)
+                wait_text(page, "已请求取消", timeout=15000)
+                shot("wr-08-task-cancel")
+                gone = False
+                for _ in range(20):
+                    code, body = es_get("/_tasks?group_by=none&detailed=true")
+                    if "indices:data/write/reindex" not in body:
+                        gone = True
+                        break
+                    time.sleep(0.5)
+                check("Tasks Cancel reindex (real ES task gone)", gone, "task still listed")
+            except Exception as e:
+                shot("wr-08-task-cancel-FAIL")
+                check("Tasks Cancel reindex (real ES task gone)", False, str(e))
+
         browser.close()
 
     report = {"pass": "rw", "base_url": base_url, "results": results, "console": console}
@@ -229,6 +300,41 @@ def run_ro(base_url, out_dir):
         except Exception as e:
             shot("ro-02-rest-delete-FAIL")
             check("REST Console DELETE denied on read-only", False, str(e))
+
+        # ---- P3: data stream rollover must be rejected on a read-only connection ----
+        try:
+            before = ds_generation("logs-p3-demo")
+            click_nav(page, "Data Streams")
+            wait_text(page, "logs-p3-demo", timeout=15000)
+            page.locator('tbody tr:has-text("logs-p3-demo") button:has-text("Rollover")').click()
+            confirm_danger(page)
+            wait_text(page, "失败", timeout=20000)
+            shot("ro-03-rollover-denied")
+            check("Data Streams Rollover denied on read-only (-32003)",
+                  ds_generation("logs-p3-demo") == before,
+                  f"generation changed to {ds_generation('logs-p3-demo')}")
+        except Exception as e:
+            shot("ro-03-rollover-FAIL")
+            check("Data Streams Rollover denied on read-only (-32003)", False, str(e))
+
+        # ---- P3: cancelling a cluster task must be rejected on read-only ----
+        if os.environ.get("TASK_DEMO") == "1":
+            try:
+                click_nav(page, "Tasks")
+                wait_text(page, "indices:data/write/reindex", timeout=25000)
+                row = page.locator("tr", has_text="indices:data/write/reindex").first
+                row.locator("button", has_text="Cancel").click()
+                confirm_danger(page)
+                wait_text(page, "取消失败", timeout=20000)
+                shot("ro-04-task-cancel-denied")
+                body = page.inner_text("body")
+                check("Tasks Cancel denied on read-only (-32003)", "read-only" in body, body[:200])
+                check("reindex task survived the denied cancel",
+                      "indices:data/write/reindex" in es_get("/_tasks?group_by=none&detailed=true")[1],
+                      "task disappeared")
+            except Exception as e:
+                shot("ro-04-task-cancel-FAIL")
+                check("Tasks Cancel denied on read-only (-32003)", False, str(e))
 
         browser.close()
 

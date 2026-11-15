@@ -82,8 +82,12 @@ def main():
     exe_name = executable if executable.endswith(".exe") else executable + ".exe"
     candidates_for_exe = [name for name in entries if name.endswith(".exe")]
     check("backend binary exists in package", exe_name in entries, f"declared={exe_name} present={candidates_for_exe}")
-    check("packaged manifest id/version", packaged_manifest.get("id") == "local.es.studio" and packaged_manifest.get("version") == "0.1.0",
-          f"{packaged_manifest.get('id')} {packaged_manifest.get('version')}")
+    source_manifest = json.loads((ROOT / "manifest.json").read_text(encoding="utf-8"))
+    check("packaged manifest id/version matches source",
+          packaged_manifest.get("id") == source_manifest.get("id")
+          and packaged_manifest.get("version") == source_manifest.get("version"),
+          f"package={packaged_manifest.get('id')} {packaged_manifest.get('version')} "
+          f"source={source_manifest.get('id')} {source_manifest.get('version')}")
 
     local_ui = ROOT / "ui"
     ui_files = [name for name in entries if name.startswith("ui/")]

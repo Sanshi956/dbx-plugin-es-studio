@@ -57,6 +57,8 @@ network.host: 127.0.0.1
 http.port: {port}
 path.data: {data}
 path.logs: {logs}
+# Snapshot repositories (P3 Snapshots page) must live under an allowed path.
+path.repo: ["{repo}"]
 xpack.security.enabled: false
 xpack.security.enrollment.enabled: false
 xpack.ml.enabled: false
@@ -87,10 +89,15 @@ def prepare_config() -> Path:
     (cfg / "jvm.options.d").mkdir(parents=True, exist_ok=True)
     (cfg / "jvm.options.d" / "es-studio.options").write_text(JVM_OPTIONS, encoding="utf-8")
     (cfg / "elasticsearch.yml").write_text(
-        YML.format(port=PORT, data=(ROOT / "data").as_posix(), logs=(ROOT / "logs").as_posix()),
+        YML.format(
+            port=PORT,
+            data=(ROOT / "data").as_posix(),
+            logs=(ROOT / "logs").as_posix(),
+            repo=(ROOT / "snapshots").as_posix(),
+        ),
         encoding="utf-8",
     )
-    for name in ("data", "logs", "tmp"):
+    for name in ("data", "logs", "tmp", "snapshots"):
         (ROOT / name).mkdir(parents=True, exist_ok=True)
     return cfg
 
