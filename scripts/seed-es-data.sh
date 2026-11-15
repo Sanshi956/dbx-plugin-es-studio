@@ -4,6 +4,10 @@
 # have something to show. Idempotent: drops and recreates each index.
 set -u
 ES="${ES_URL:-http://127.0.0.1:19200}"
+# Must sit under the target cluster's own path.repo, otherwise the repository PUT
+# fails with 500 "location does not match any of the locations specified by
+# path.repo". Override when seeding a second instance (other port / other major).
+SNAPDIR="${ES_SNAPSHOT_DIR:-D:/tmp/es-studio/snapshots}"
 J="-H Content-Type:application/json -s -o /dev/null -w %{http_code}"
 
 drop() { curl -X DELETE "$ES/$1" $J 2>/dev/null | tail -1 >/dev/null; }
@@ -103,12 +107,17 @@ curl -X POST "$ES/archived-2023/_close" $J >/dev/null
 echo "== aliases =="
 # prod-eu / orders-hidden exist so the Aliases page can be asserted against
 # REAL filter / routing / is_hidden values instead of empty cells.
+# Split in two requests: `is_hidden` on an alias only exists from 7.11, and an
+# unknown field rejects the WHOLE actions array (7.0 would end up with no
+# aliases at all).
 curl -X POST "$ES/_aliases" $J -d '{"actions":[
   {"add":{"index":"products","alias":"prod-view"}},
   {"add":{"index":"orders","alias":"active-orders"}},
   {"add":{"index":"products","alias":"prod-eu",
           "filter":{"term":{"category":"display"}},
-          "index_routing":"eu","search_routing":"eu"}},
+          "index_routing":"eu","search_routing":"eu"}}
+]}' >/dev/null
+curl -X POST "$ES/_aliases" $J -d '{"actions":[
   {"add":{"index":"orders","alias":"orders-hidden","is_hidden":true}}
 ]}' >/dev/null
 
@@ -170,7 +179,7 @@ curl -X PUT "$ES/_ilm/policy/p3-demo-policy" $J -d '{
 curl -X PUT "$ES/logs-app/_settings" $J -d '{"index.lifecycle.name":"p3-demo-policy"}'
 
 echo "== P3: snapshot repository + one snapshot =="
-curl -X PUT "$ES/_snapshot/p3-fs-repo" $J -d '{"type":"fs","settings":{"location":"D:/tmp/es-studio/snapshots","compress":true}}'
+curl -X PUT "$ES/_snapshot/p3-fs-repo" $J -d "{\"type\":\"fs\",\"settings\":{\"location\":\"$SNAPDIR\",\"compress\":true}}"
 curl -X PUT "$ES/_snapshot/p3-fs-repo/snap-p3-demo?wait_for_completion=true" $J -d '{"indices":"products","include_global_state":false}'
 
 echo "== P3 summary =="

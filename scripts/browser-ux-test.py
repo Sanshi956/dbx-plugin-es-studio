@@ -249,7 +249,10 @@ def _run(base_url, out_dir, mirror_url):
             shot("ux-aliases")
         except Exception as e:
             shot("ux-aliases-FAIL")
-            check("Aliases 筛选生效（prod-view -> 只剩 1 行）", False, e)
+            # Do NOT reuse an earlier label here: a copy-pasted label once sent me
+            # hunting a "filter is broken" bug that was really a missing
+            # `orders-hidden` fixture (7.0 rejects is_hidden on alias add).
+            check("Aliases 段整体跑通（筛选/隐藏标记/非法 filter 拦截）", False, e)
 
         # ------------------------------------------------------------ Index List
         try:

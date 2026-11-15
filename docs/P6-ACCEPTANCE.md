@@ -57,10 +57,32 @@
 | `_ilm/status` | 200 | 200 | 200 |
 | `_tasks?group_by=none` | 扁平 `tasks[]` | 扁平 | 扁平 |
 | `_cluster/stats` 的 `nodes.fs.total_in_bytes` | 有 | 有 | 有 |
-| `_cat/nodes` 的 `node.role`+`master` 列 | 有 | 有 | 有 |
+| `_cat/nodes` 的 `name` / `node.role` / `master` 键(默认列与显式 `h=` 两种形态) | 有(`name`) | 有(`name`) | 有(`name`) |
 | 写已关闭索引 | 400 `reason=closed` | 同 | 同 |
 
-原始报告:`D:/tmp/es-probe/elasticsearch-*/probe.json`。
+**7.0–7.7 这一档(2026-11-15 18:2x 补测,7.0.1 与 7.7.1 两端各一台):**
+
+| 项目 | 7.0.1 | 7.7.1 |
+|---|---|---|
+| `_mapping` 布局 | typeless | typeless |
+| `_data_stream` / `_index_template` / `_component_template` | **400**(GET)/**405**(PUT) | 同 |
+| `_cat/nodes` 的 `name`/`node.role`/`master` | 有 | 有 |
+| `_tasks?group_by=none` | 扁平 `tasks[]` | 扁平 |
+| typeless 建索引(`mappings.properties`) | 200 | 200 |
+
+两端形状完全一致 ⇒ `TypedAPI = major<8` 对整段 7.x 成立,
+先前"7.0–7.6 的 `_mapping` 可能带回类型层"的担心**不成立**(`include_type_name`
+只影响写侧,7.0 起 typeless body 已默认接受)。
+
+节点名的原始键已落盘(`catNodes.*.keys`):`name` 是唯一的节点名列键,
+默认列与显式 `h=` 两种形态在 6.8 / 7.0 / 7.7 / 7.17 / 8.19 / 9.5 上一致,
+因此 `parseNodes()` 与 `fetchNodes()` 只认 `name` 是安全的,**不需要 `node.name` 兜底**。
+
+原始报告:`D:/tmp/es-probe/recheck-6.8.23/probe.json`、`D:/tmp/es-probe/recheck-9.5.4/probe.json`、
+`D:/tmp/es-probe/elasticsearch-7.17.29/probe.json`(2026-11-15 18:01 复跑)。
+⚠️ `D:/tmp/es-probe/elasticsearch-6.8.23/probe.json` 与 `elasticsearch-9.5.4/probe.json`
+是 16:15 旧版脚本的产物,其 `_cat/nodes` 行恒为 FAIL(旧 `must` 写成 `["name"]`,
+对数组响应永远取不到,与真实形状无关),**不可作证据**。
 
 ### 代码改动
 
@@ -95,7 +117,46 @@ requires an index")。P3 验收用例恰好没带字段所以没暴露。已修:
 
 ---
 
-## 4. 全量验证
+## 4. 跨版本 UI 验证(2026-11-15 18:0x 补测)
+
+此前只有 8.19 跑过 UI,其余版本停留在接口形状探测。本轮用同一套夹具与脚本,
+把 UI 真正跑到五个非 8.x 集群上(每集群一个真实 ES + `browser-bridge.mjs`):
+
+| 版本 | 主回归 | UX 套件 | 写路径 | 只读拒绝 | 控制台报错 | 说明 |
+|---|---|---|---|---|---|---|
+| 7.0.1 | 20/23* | 95/98* | 6/7* | 未跑 | 0 | 渲染 25/25;*失败项均为 7.8/7.9/7.11 夹具或能力缺失 |
+| 7.7.1 | 20/23* | 未跑 | 未跑 | 未跑 | 0 | 渲染 25/25;*同为三个门控页 |
+| 7.17.29 | 23/23 | 106/106 | 7/7 | 4/4 | 0 | 全夹具(数据流/组件模板/快照)可用 |
+| 9.5.4 | 23/23 | 106/106 | 7/7 | 4/4 | 0 | 同上;9.x 移除项未触发回归 |
+| 6.8.23 | 25/25 页渲染+门控 | 不适用 | 不适用 | 不适用 | 0 | 数据流/组件模板应门控,见下 |
+
+7.0.1 的 3 项失败逐条定性(均已手工复现确认非插件缺陷):
+① 索引模板 / 组件模板的 View 弹层 —— `p3-demo-*` 夹具需 7.8,建不出来;
+② Aliases 的 hidden 标记 —— `is_hidden` 建别名需 7.11,`orders-hidden` 不存在。
+别名筛选本身在 7.0.1 上可用:手工复现 3 行 → 筛选 `prod-eu` → 1 行,
+filter/routing 列正常渲染。
+
+- 6.8 的"不适用":三套套件的期望文本(`p3-demo-*` 夹具)在 6.8 上物理不成立,
+  失败只说明夹具没有,不代表缺陷。改用逐页渲染检查(临时脚本,未入库):
+  25 页全部渲染出 `h1`、0 控制台错误;数据流页实测显示
+  「此集群为 6.8.23,数据流需要 Elasticsearch 7.9 或更高版本。」
+  组件模板页同理(7.8)。截图 `/tmp/render68-*.png`。
+- 7.x 的门控切换点(7.8/7.9)现在两端都有实证:7.0.1 / 7.7.1 在门限之下(三个接口
+  400 且页面显示"需要 7.9/7.8 或更高版本"),7.17.29 在门限之上(全功能)。
+  7.7.1 主回归失败的 3 项同样是这三个门控页,与设计一致,不是缺陷。
+
+### 顺带修掉的工具链问题(为跨版本复用)
+
+- `es-cluster.py` 配置模板按主版本生成:7.x 拒绝 `xpack.security.enrollment.enabled`
+  (unknown setting,拒绝启动);6.x 无 `discovery.type`,需 zen discovery;
+  6.x 发行包不带 JDK,`ES_JAVA_HOME` 改为仅在 bundled `jdk/` 存在时设置,
+  否则回退 `ES_STUDIO_JAVA_HOME`/`JAVA_HOME`(Java 8-11)。
+- `seed-es-data.sh` 快照仓库路径原硬编码 `D:/tmp/es-studio/snapshots`,
+  第二实例上 PUT 500(location 不在 `path.repo`);改 `ES_SNAPSHOT_DIR` 可覆盖。
+
+---
+
+## 5. 全量基线(ES 8.19.23,0.5.0 签名包)
 
 | 项 | 结果 |
 |---|---|
@@ -115,17 +176,20 @@ requires an index")。P3 验收用例恰好没带字段所以没暴露。已修:
 
 ---
 
-## 5. 已知限制
+## 6. 已知限制
 
 - **6.x / 7.0–7.7 传统 `_template` 未适配**:模板页只支持组合模板,这些版本
   会看到"接口不可用"。传统模板形状(`template`+`order`)未实证,不凭猜写。
+- **7.0–7.7 已实证**(7.0.1 + 7.7.1 两端):接口形状与 UI 渲染均与 7.17 同族,
+  三个门限接口返回 400/405、`_mapping` typeless,门控文案正确。
+  仍不支持的只有 7.8 之前的传统 `_template`(上一行)。
 - **Easysearch / OpenSearch**:版本号语义与 ES 不同,矩阵只对 ES 成立;
   `engine` 随矩阵返回,页面文案按 ES 版本表述。
 - **新增 MCP 工具若忘补英文**,英文界面回退中文说明(不空白,可发现)。
 - 语言/字号跟随依赖宿主 `env` 消息与 theme tokens;若宿主不发 `env`,
   语言在下次打开时生效。
 
-## 6. 如何复现
+## 7. 如何复现
 
 ```bash
 npm run build && npx svelte-check --tsconfig ./tsconfig.json
@@ -135,6 +199,14 @@ export PATH=/d/software/dev/Go/go/bin:$PATH && (cd backend && go test ./...)
 node scripts/browser-bridge.mjs &   # BRIDGE_LOCALE / BRIDGE_TOKENS 见脚本头部
 "D:/software/dev/Python/Python313/python.exe" scripts/browser-i18n-test.py --port 5210 --locale en --expect-font 15px
 "D:/software/dev/Python/Python313/python.exe" scripts/browser-i18n-test.py --port 5211 --locale zh-CN --expect-font 13px
-# 多版本实证(一次一台)
+# 多版本实证(一次一台;6.8 发行包不带 JDK,用 ES_STUDIO_JAVA_HOME 指 Java 8)
 python scripts/version-probe.py --home D:/tmp/es-versions/elasticsearch-6.8.23 --port 19202
+# 跨版本 UI(每台独立 root/端口/数据目录,夹具路径要跟 path.repo 对齐)
+ES_HOME=D:/tmp/es-versions/elasticsearch-7.7.1 ES_STUDIO_TEST_ROOT=D:/tmp/es-771 \
+  ES_STUDIO_TEST_PORT=19213 python scripts/es-cluster.py start
+ES_URL=http://127.0.0.1:19213 ES_SNAPSHOT_DIR=D:/tmp/es-771/snapshots bash scripts/seed-es-data.sh
+ES_URL=http://127.0.0.1:19213 BRIDGE_PORT=5199 DBX_PLUGIN_DATA_DIR=.dbx-dev/plugin-data-771 \
+  node scripts/browser-bridge.mjs
+"D:/software/dev/Python/Python313/python.exe" scripts/browser-test.py \
+  --base-url http://127.0.0.1:5199
 ```

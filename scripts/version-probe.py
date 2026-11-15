@@ -90,6 +90,14 @@ def start(home: pathlib.Path, port: int, root: pathlib.Path, major: int) -> subp
     if major <= 6:
         # 6.8 ships without a bundled JDK; it needs Java 8-11.
         env["JAVA_HOME"] = "D:/software/dev/Java/jdk8"
+    else:
+        # 7.7 dies with "The Security Manager is deprecated" when an inherited
+        # JAVA_HOME (this host has JDK 21) wins over the bundled JDK. Pin the
+        # bundled one and drop the inherited variable.
+        env.pop("JAVA_HOME", None)
+        bundled = home / "jdk"
+        if bundled.is_dir():
+            env["ES_JAVA_HOME"] = str(bundled)
     exe = home / "bin" / "elasticsearch.bat"
     print(f"starting {home.name} on :{port} (logs in {logs})", flush=True)
     return subprocess.Popen([str(exe)], env=env, cwd=str(home), stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
@@ -151,7 +159,9 @@ def main() -> int:
         assert isinstance(checks, list)
 
         def add(*a, **kw):
-            checks.append(check(*a, **kw))
+            result = check(*a, **kw)
+            checks.append(result)
+            return result
 
         st, body = http("GET", base + "/_cluster/health")
         add("GET /_cluster/health", st, body, ["status", "number_of_nodes", "active_shards", "unassigned_shards"])
@@ -162,11 +172,26 @@ def main() -> int:
         st, body = http("GET", base + "/_cluster/settings?flat_settings=true")
         add("GET /_cluster/settings", st, body, ["persistent", "transient"])
 
-        st, body = http("GET", base + "/_cat/nodes?format=json&h=name,node.role,master,heap.percent,cpu,disk.used_percent")
-        role_ok = isinstance(body, list) and body and "node.role" in body[0]
-        master_ok = isinstance(body, list) and body and "master" in body[0]
-        add("GET /_cat/nodes (role+master)", st if role_ok and master_ok else 599, body if role_ok and master_ok else {},
-            ["0.name"], "node.role/master columns present" if role_ok and master_ok else "column missing")
+        # The node-name JSON key is not identical across versions: 8.x reports
+        # `name`, others may report `node.name`. Both shapes matter, because the
+        # callers differ — fetchNodes() uses the default column set, while the
+        # collector / compare / diagnostics pass an explicit h= list. Record the
+        # raw keys so a FAIL explains itself instead of needing another live
+        # server to diagnose it a second time.
+        report["catNodes"] = {}
+        for label, query in (
+            ("GET /_cat/nodes (default columns)", "format=json"),
+            ("GET /_cat/nodes (explicit h=)", "format=json&h=name,node.role,master,heap.percent,cpu,disk.used_percent"),
+        ):
+            st, body = http("GET", base + "/_cat/nodes?" + query)
+            row = body[0] if isinstance(body, list) and body and isinstance(body[0], dict) else {}
+            keys = sorted(row)
+            name_key = "name" if "name" in row else ("node.name" if "node.name" in row else "")
+            entry = add(label, st, body, ["0.name"], f"nameKey='{name_key or 'MISSING'}' keys={keys}")
+            entry["nameKey"] = name_key
+            entry["keys"] = keys
+            entry["ok"] = st < 300 and bool(name_key) and "node.role" in row and "master" in row
+            report["catNodes"][label] = {"nameKey": name_key, "keys": keys}
 
         st, body = http("GET", base + "/_cat/shards?format=json&h=index,shard,prirep,state,unassigned.reason")
         add("GET /_cat/shards (unassigned.reason)", st, body, [], "request accepted")
