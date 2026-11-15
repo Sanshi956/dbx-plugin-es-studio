@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"net/http"
 	"net/url"
 	"strings"
@@ -74,6 +75,8 @@ func (h *Handler) Handle(
 		return h.connectionConnect(params, p)
 	case "connection/disconnect":
 		return h.connectionDisconnect(params, p)
+	case "connection/action":
+		return h.connectionAction(params)
 	default:
 		return nil, dbxpluginsdk.MethodNotFound(method)
 	}
@@ -228,6 +231,13 @@ func (h *Handler) connectionTest(raw json.RawMessage, p callParams) (any, *dbxpl
 	if perr != nil {
 		return nil, perr
 	}
+	return h.testWith(cfg, client)
+}
+
+// testWith is shared by connection/test and connection/action's test action.
+// The extra success/ok/message fields keep the result compatible with DBX's
+// connection dialog regardless of which field it inspects.
+func (h *Handler) testWith(cfg connection.Config, client *es.Client) (any, *dbxpluginsdk.PluginError) {
 	resp, err := client.Do(context.Background(), es.Request{Method: http.MethodGet, Path: "/"})
 	if err != nil {
 		return nil, dbxpluginsdk.NewError(-32001, "connection failed: "+err.Error())
@@ -243,8 +253,11 @@ func (h *Handler) connectionTest(raw json.RawMessage, p callParams) (any, *dbxpl
 		}
 	}
 	engine := string(es.DetectEngine(root))
+	connected := resp.Status >= 200 && resp.Status < 300
 	result := map[string]any{
-		"connected":    resp.Status >= 200 && resp.Status < 300,
+		"success":      connected,
+		"ok":           connected,
+		"connected":    connected,
 		"status":       resp.Status,
 		"version":      version,
 		"engine":       engine,
@@ -253,6 +266,7 @@ func (h *Handler) connectionTest(raw json.RawMessage, p callParams) (any, *dbxpl
 		"node_name":    root["name"],
 		"endpoint":     cfg.BaseURL(),
 		"readonly":     cfg.ReadOnly,
+		"message":      fmt.Sprintf("ES %s at %s", version, cfg.BaseURL()),
 	}
 	if parsed, err := es.ParseVersion(version); err == nil {
 		if caps, err := es.Capabilities(parsed); err == nil {

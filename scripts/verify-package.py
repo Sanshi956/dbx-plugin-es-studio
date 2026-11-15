@@ -103,6 +103,15 @@ def main():
           and not re.search(rb"<script\b[^>]*\ssrc=|<link\b[^>]*\shref=", ui_html, re.I)
           and b"<script>\n" in ui_html and b"<style>\n" in ui_html)
     check("no external UI assets in package", ui_files == ["ui/index.html"], ", ".join(ui_files))
+    # A plain inline <script> in <head> executes before #app is parsed and the
+    # workbench never mounts in DBX's iframe. Enforce end-of-body placement.
+    body_at = re.search(rb"<body\b", ui_html, re.I)
+    app_at = ui_html.find(b'id="app"')
+    script_at = ui_html.find(b"<script>\n")
+    body_end_at = re.search(rb"</body>", ui_html, re.I)
+    check("inline script runs after #app exists (end of <body>)",
+          bool(body_at) and bool(body_end_at)
+          and body_at.start() < app_at < script_at < body_end_at.start())
 
     signature_doc = json.loads(entries[SIGNATURE])
     trust_store = default_trust_store()

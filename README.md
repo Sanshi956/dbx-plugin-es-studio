@@ -103,21 +103,30 @@ dbx-plugin package .                     # 产出未签名审核候选包，直�
 
 ## 在 DBX 中打开工作台
 
-安装 `dist/*.signed.dbxp` 后，工作台入口来自 manifest 的 command / menus 贡献点：
-顶部「更多」菜单、命令面板或插件中心的「打开 ES Studio」。标签标题取命令名
-「打开 ES Studio」，插件与工作台名是「ES Studio」。
+DBX 只提供「插件中心 → 设置 → 从 URL 安装」入口（本机无「从文件安装」按钮）；
+本机验证时在 `dist/` 起一个临时 HTTP 服务（`python -m http.server`），把
+`http://127.0.0.1:19321/local.es.studio-0.1.0-windows-x64.signed.dbxp` 填进 URL 框。
+下载后必须先在「已安装」里卸载旧版（同版本号不允许覆盖），再重装。
 
-连接树里的 `elasticsearch` 是 **DBX 内置的 Elasticsearch 连接类型**
-（`db_type=elasticsearch`，无 `plugin_id`），不是插件名，也不是本项目的名字；
-本插件的连接提供方在「新建连接」里显示为 **ES Studio (Elasticsearch)**，与内置项区分。
-要连本地测试集群，新建时填 `127.0.0.1:19200`、`http`、认证 `none`。
+**打开工作台有两种路径，结果不同：**
 
-> **UI 必须是单文件。** `ui/index.html` 内联 CSS + JS，不能有 `./assets/*.js` 外链。
-> DBX 通过 `read_plugin_ui_entry` 把 HTML 放进 opaque-origin iframe，外链资源无法解析，
-> 表现为整个工作台纯白。`vite.config.js` 的 `dbx-ui-single-file` 插件在每次构建
-> （含 watch）后自动内联；`scripts/check-baseline.mjs` 和 `scripts/verify-package.py`
-> 都会强制断言这一点。若 HTML 已加载但 JS 未执行，页面会显示静态占位
-> 「ES Studio / Starting workbench…」而不是无信息纯白。
+1. 从插件中心点「打开」、或顶部「更多」菜单 → 工作台 frame **没有绑定连接上下文**，
+   Overview 会一直 `connection is not connected`。这是 DBX 的机制，不是 bug。
+2. **正确路径（推荐）**：在左侧连接树「新建连接」→ 搜索并选 `ES Studio (Elasticsearch)`
+   → 填 `127.0.0.1:19200`、`http`、认证 `none`、超时 10s → 点 **Test Connection**
+   （走标准 `connection/action` RPC，绿字 `ES 8.19.23 at http://127.0.0.1:19200`）
+   → 保存 → 在连接树里**点该连接节点**打开工作台，Overview 即显示真实集群指标。
+
+> 连接树里的 `elasticsearch`（`192.168.1.240:9200`，内置驱动，无 `plugin_id`）是
+> **DBX 自带**的 Elasticsearch 类型，不是插件名，也不是本项目的测试集群。
+> 本插件的连接类型显示为 **ES Studio (Elasticsearch)**，与内置项区分。
+
+> **UI 必须是单文件，且内联 `<script>` 必须位于 `<body>` 末尾 `#app` 之后。**
+> `ui/index.html` 内联 CSS + JS，不能有 `./assets/*.js` 外链（DBX 用 `read_plugin_ui_entry`
+> 把 HTML 放进 opaque-origin iframe，外链解析不到会整页纯白；内联若落在 `<head>` 同步执行，
+> 又会因 `#app` 未解析而只显示占位）。`vite.config.js` 的 `dbx-ui-single-file` 在每次构建
+> （含 watch）后自动内联并定位脚本；`check-baseline.mjs` / `verify-package.py` 强制断言。
+> 若 HTML 已加载但 JS 未跑，页面显示静态占位「ES Studio / Starting workbench…」而非纯白。
 
 ## 已知限制
 
@@ -125,7 +134,7 @@ dbx-plugin package .                     # 产出未签名审核候选包，直�
 |---|---|
 | `go test -race` | 本机未启用 CGO / 无对应 C 工具链，暂未执行；普通 `go test` 与 `go vet` 全绿 |
 | dev host 连接列表 | 官方 mock host 的 `host.getConnections()` 恒返回 `Mock Connection / sqlite`；UI 以 `context.connectionId` 为准并补一项占位，真实 DBX 不受影响 |
-| 浏览器人工验收 | P1 未启动 headless 浏览器（当时可用内存 1.56GB，避免触发 ES 守卫）；自动化已覆盖 frame 注入、资源相对路径与完整 bridge 数据链路 |
+| 浏览器人工验收 | 已在本机真实 DBX 中代验：URL 安装 → 新建连接 → Test Connection → 连接树打开工作台显示真实指标；dev host `host.getConnections()` 仍恒返回 `Mock Connection / sqlite`，UI 以 `context.connectionId` 兜底，真实 DBX 不受影响 |
 | 未实现页面 | 导航中 P2–P5 条目禁用并标注阶段，属计划内范围，非缺失功能 |
 | 包目标平台 | `dbx-plugin package` 只产当前平台（本机 windows-x64），且永远是未签名候选包 |
 

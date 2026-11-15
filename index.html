@@ -7,9 +7,12 @@
     <!--
       DBX serves plugin UI as a single HTML document inside an opaque-origin
       iframe. External ./assets/*.js cannot be resolved there, so the build
-      inlines everything (see vite.config.js). This static boot marker stays
-      in the HTML itself: if it remains visible, the document loaded but the
-      application script did not run - never an unexplained blank page.
+      inlines everything (see vite.config.js). The build moves the inlined
+      script to the end of <body> so it runs after #app exists. This static
+      boot marker stays in the HTML itself: if it remains visible, the document
+      loaded but the application script did not run - never an unexplained
+      blank page. If it reads "Application script running…", the script started
+      but the Svelte mount failed.
     -->
     <style>
       html, body { margin: 0; height: 100%; }

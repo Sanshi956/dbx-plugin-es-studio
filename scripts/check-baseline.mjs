@@ -57,6 +57,17 @@ if (existsSync(path.join(root, "ui", "assets"))) {
   console.error("FAIL: ui/assets/ must be removed after inlining");
   process.exit(1);
 }
+// The inlined script must be at the end of <body>: a plain <script> placed in
+// <head> runs synchronously before #app exists and the workbench never mounts.
+const bodyAt = html.search(/<body\b/i);
+const appAt = html.indexOf('id="app"');
+const scriptAt = html.indexOf("<script>\n");
+const bodyEndAt = html.search(/<\/body>/i);
+if (!(bodyAt >= 0 && appAt > bodyAt && scriptAt > appAt && scriptAt < bodyEndAt)) {
+  console.error("FAIL: inline script must be inside <body> AFTER #app (else it runs before the DOM exists)");
+  process.exit(1);
+}
 console.log("\n=== sandbox UI ===");
 console.log(`single-file ui/index.html (${Buffer.byteLength(html)} bytes, no external refs)`);
+console.log("inline script placement: <body> → #app → <script> → </body>  OK");
 console.log("\nBASELINE OK");

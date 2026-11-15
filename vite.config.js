@@ -9,6 +9,12 @@ import { fileURLToPath } from "node:url";
 // fetch), which yields a completely blank workbench even though the package is
 // installed correctly. Every plugin that actually renders in DBX ships a
 // self-contained HTML document, so we inline CSS + JS after each build.
+//
+// Critical detail: Vite hoists the module script into <head>. Once inlined as a
+// plain <script>, it becomes synchronous and executes BEFORE <body> exists, so
+// `document.getElementById("app")` returns null and the app never mounts (the
+// static boot marker stays on screen forever). Working DBX plugins all place
+// their inline <script> at the very end of <body>; we do the same here.
 function singleFileUi() {
   const ui = (relative) => fileURLToPath(new URL(`./ui/${relative}`, import.meta.url));
 
@@ -21,20 +27,30 @@ function singleFileUi() {
 
       let html = readFileSync(htmlPath, "utf8");
       html = html.replace(
-        /<script\b[^>]*\ssrc="([^"]+)"[^>]*>\s*<\/script>/g,
-        (_tag, src) => {
-          const code = readFileSync(ui(src.replace(/^\.?\//, "")), "utf8")
-            .replace(/<\/script/gi, "<\\/script");
-          return `<script>\n${code}\n</script>`;
-        },
-      );
-      html = html.replace(
         /<link\b[^>]*rel="stylesheet"[^>]*href="([^"]+)"[^>]*>/g,
         (_tag, href) => {
           const css = readFileSync(ui(href.replace(/^\.?\//, "")), "utf8")
             .replace(/<\/style/gi, "<\\/style");
           return `<style>\n${css}\n</style>`;
         },
+      );
+
+      // Pull the Vite script out of <head> and re-insert it just before
+      // </body>, with a boot-phase marker so a script that starts but fails
+      // later is distinguishable from a script that never runs at all.
+      const scriptTag = /<script\b[^>]*\ssrc="([^"]+)"[^>]*>\s*<\/script>/;
+      const match = html.match(scriptTag);
+      if (!match) throw new Error("ES Studio UI: Vite script tag missing");
+      const code = readFileSync(ui(match[1].replace(/^\.?\//, "")), "utf8")
+        .replace(/<\/script/gi, "<\\/script");
+      const bootMarker =
+        `(function(){var e=document.getElementById("es-boot");` +
+        `if(e){var s=e.querySelector("small");` +
+        `if(s)s.textContent="Application script running…";}})();`;
+      html = html.replace(scriptTag, "");
+      html = html.replace(
+        /<\/body>/i,
+        `<script>\n${bootMarker}\n${code}\n</script>\n  </body>`,
       );
 
       // Only inspect tags, not the inlined JS/CSS bodies (which may legitimately
@@ -44,6 +60,12 @@ function singleFileUi() {
       }
       if (!html.includes("<script>\n") || !html.includes("<style>\n")) {
         throw new Error("ES Studio UI inline script/style missing");
+      }
+      const bodyAt = html.search(/<body\b/i);
+      const scriptAt = html.indexOf("<script>\n");
+      const bodyEndAt = html.search(/<\/body>/i);
+      if (!(bodyAt >= 0 && scriptAt > bodyAt && scriptAt < bodyEndAt)) {
+        throw new Error("ES Studio UI inline script must be inside <body> after the app root");
       }
 
       writeFileSync(htmlPath, html);

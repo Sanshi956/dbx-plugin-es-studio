@@ -196,7 +196,9 @@ Easysearch 兼容必须经真实 API 验证，不得凭接口名相似宣称兼�
 | T15/T16 用 `scripts/mock-es.py` 驱动 Overview | 用真实 ES + `scripts/dev-host-check.mjs` 走官方 dev host HTTP 协议 | 内存达标后采用更强验证，且未引入静态假数据 |
 | §3 架构图中的 `cmd/es-studio-mcp` | P1 未实现，属 P5 | 架构图画的是终态，按 D1 分阶段交付 |
 | 直接 `dbx-plugin dev --path .` | 用 `npm run dev`（`scripts/dev.mjs` + `dev-host.mjs`） | 官方 CLI 0.1.10 在 Windows 传 `\\?\` 扩展长度路径作 cwd，构建命令必失败；兼容层只剥离前缀，不修改全局 CLI |
-| Vite 默认多文件 UI 产物（`./assets/*.js` 外链） | `ui/index.html` **单文件内联** CSS + JS | DBX 通过 `read_plugin_ui_entry` 把 HTML 放入 opaque-origin iframe，外链资源解析不到 → 工作台纯白；`vite.config.js` 构建后自动内联，`check-baseline.mjs` / `verify-package.py` 强制断言 |
+| Vite 默认多文件 UI 产物（`./assets/*.js` 外链） | `ui/index.html` **单文件内联** CSS + JS，且内联 `<script>` 位于 `<body>` 末尾 `#app` 之后 | DBX 通过 `read_plugin_ui_entry` 把 HTML 放入 opaque-origin iframe，外链资源解析不到 → 工作台纯白；首版内联落 `<head>` 同步执行又导致 `#app` 未解析、`mount` 抛错、只显示占位，二次修正脚本位置；`vite.config.js` 构建后自动内联，`check-baseline.mjs` / `verify-package.py` 强制断言 |
 | connection-provider `label: "Elasticsearch"` | `label: "ES Studio (Elasticsearch)"` | DBX 原生内置 Elasticsearch 连接类型，同名会让「新建连接」里无法区分插件入口与内置驱动 |
+| 仅实现自定义 `connection/test` / `connect` / `disconnect` RPC | 额外实现标准 `connection/action` RPC（`backend/internal/transport/connection_action.go`） | manifest 自加 `actions` 字段使 DBX 走标准 `connection/action`，否则「Test Connection」报 `Unknown method`；实测 DBX 传 `action.id` + `connection{host,port,external_config,runtime}` |
+| 本机 DBX 端到端验证交给用户 | 由 AI 在本机真实 DBX 中代验（URL 安装 → 新建连接 → Test Connection → 连接树打开工作台显示真实指标） | DBX 以更高完整性级别运行，模拟输入被 UIPI 拦截；改用 `AttachThreadInput` 抢前台 + 插件中心「从 URL 安装」完成整条链路 |
 
 `go test -race` 因本机未启用 CGO 未执行，已登记为 P1-05 待补，不阻断阶段闸口。
