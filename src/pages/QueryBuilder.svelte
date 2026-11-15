@@ -283,7 +283,7 @@
     {#each tabs as tab (tab.id)}
       <span class="tab" class:active={tab.id === activeId}>
         <button type="button" class="tab-name" onclick={() => activate(tab.id)} title={tabLabel(tab)}>
-          {tabLabel(tab)}{#if tab.clauses.length}<em>{tab.clauses.length}</em>{/if}
+          {tabLabel(tab)}{#if tab.clauses.length} <em>{tab.clauses.length} 条</em>{/if}
         </button>
         {#if tabs.length > 1}
           <button type="button" class="tab-x" onclick={() => closeTab(tab.id)} title="关闭">×</button>

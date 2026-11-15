@@ -637,12 +637,13 @@ export function buildDsl(clauses: QueryClause[], opts: DslOptions = {}): Record<
   if (groups.must.length) bool.must = groups.must;
   if (groups.filter.length) bool.filter = groups.filter;
   if (groups.should.length) {
-    bool.should = groups.should;
     // A bool with only `should` clauses requires one match by default; when the
     // user combines should with must/filter, ES defaults to "optional", which is
-    // rarely what "I added a should" means — be explicit.
+    // rarely what "I added a should" means — be explicit. It is assigned before
+    // `should` so it shows up above the clause list in the DSL preview.
     const msm = (opts.minimumShouldMatch ?? "").trim();
     bool.minimum_should_match = msm === "" ? 1 : msm;
+    bool.should = groups.should;
   }
   if (groups.must_not.length) bool.must_not = groups.must_not;
 
