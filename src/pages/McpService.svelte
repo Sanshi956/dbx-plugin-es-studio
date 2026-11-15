@@ -7,6 +7,7 @@
     type McpToolSummary,
   } from "../lib/mcp";
   import type { DbxBridge } from "../lib/bridge";
+  import { t, tOr } from "../lib/i18n.svelte.js";
 
   interface Props {
     bridge: DbxBridge;
@@ -46,7 +47,7 @@
       bucket.push(tool);
       map.set(tool.category, bucket);
     }
-    return order.filter((key) => map.has(key)).map((key) => ({ key, label: CATEGORY_LABEL[key] ?? key, tools: map.get(key)! }));
+    return order.filter((key) => map.has(key)).map((key) => ({ key, label: CATEGORY_LABEL[key] ? t(CATEGORY_LABEL[key]) : key, tools: map.get(key)! }));
   });
 
   let grantForThis = $derived(grants.grants.find((grant) => grant.connection_id === connectionId));
@@ -109,7 +110,7 @@
       callResult = await callMcpTool(bridge, connectionId, selected.name, args);
       log = await fetchMcpLog(bridge, 50);
     } catch (cause) {
-      callError = cause instanceof SyntaxError ? "参数不是合法 JSON" : mcpErrorText(cause);
+      callError = cause instanceof SyntaxError ? t("mcp.badJson") : mcpErrorText(cause);
     } finally {
       calling = false;
     }
@@ -120,7 +121,7 @@
     try {
       issued = await grantConnection(bridge, connectionId, ttlDays);
       grants = await listGrants(bridge);
-      say("已授权，令牌只显示这一次");
+      say(t("mcp.authorized"));
       await copy(issued.snippet);
     } catch (cause) {
       say(mcpErrorText(cause));
@@ -132,7 +133,7 @@
       await revokeGrant(bridge, connectionID);
       grants = await listGrants(bridge);
       if (issued?.public.connection_id === connectionID) issued = null;
-      say("已撤销授权，该客户端下一次调用会失败");
+      say(t("mcp.revoked"));
     } catch (cause) {
       say(mcpErrorText(cause));
     }
@@ -141,9 +142,9 @@
   async function copy(text: string): Promise<void> {
     try {
       await navigator.clipboard.writeText(text);
-      say("客户端配置已复制到剪贴板");
+      say(t("mcp.copied"));
     } catch {
-      say("剪贴板不可用，请从下方文本框手动复制");
+      say(t("mcp.copyFailed"));
     }
   }
 
@@ -157,63 +158,63 @@
 <div class="page">
   <header>
     <div>
-      <h1>MCP Tool Service</h1>
-      <p>只读工具目录 · 授权外部 AI 客户端 · {catalogue.length} 个工具 / {Object.keys(categories).length} 个分类</p>
+      <h1>{t("mcp.title")}</h1>
+      <p>{t("mcp.hint", { tools: catalogue.length, cats: Object.keys(categories).length })}</p>
     </div>
     <div class="tools">
-      <button onclick={() => void load()} disabled={loading}>刷新</button>
+      <button onclick={() => void load()} disabled={loading}>{t("common.refresh")}</button>
     </div>
   </header>
 
   {#if toast}<div class="toast">{toast}</div>{/if}
   {#if error}
-    <StateBlock kind="error" message="MCP 服务不可用" detail={error} />
+    <StateBlock kind="error" message={t("mcp.serviceDown")} detail={error} />
   {:else}
     <section class="summary">
       <div class="card">
-        <span class="lbl">工具总数</span>
+        <span class="lbl">{t("mcp.card.tools")}</span>
         <span class="num-value">{catalogue.length}</span>
       </div>
       <div class="card">
-        <span class="lbl">写工具</span>
+        <span class="lbl">{t("mcp.card.write")}</span>
         <span class="num-value">0</span>
       </div>
       <div class="card">
-        <span class="lbl">已授权连接</span>
+        <span class="lbl">{t("mcp.card.grants")}</span>
         <span class="num-value">{grants.count}</span>
       </div>
       <div class="card">
-        <span class="lbl">最近调用</span>
+        <span class="lbl">{t("mcp.card.calls")}</span>
         <span class="num-value">{log.count}</span>
       </div>
     </section>
 
     <section class="panel">
       <div class="panel-head">
-        <h2>外部客户端授权</h2>
+        <h2>{t("mcp.grants.title")}</h2>
         <div class="inline">
-          <select bind:value={ttlDays} title="令牌有效期">
-            <option value={7}>7 天</option>
-            <option value={30}>30 天</option>
-            <option value={90}>90 天</option>
+          <select bind:value={ttlDays} title={t("mcp.ttl")}>
+            <option value={7}>{t("mcp.days", { n: 7 })}</option>
+            <option value={30}>{t("mcp.days", { n: 30 })}</option>
+            <option value={90}>{t("mcp.days", { n: 90 })}</option>
           </select>
           <button class="primary" onclick={() => void authorize()} disabled={!connectionId}>
-            {grantForThis ? "重新授权当前连接" : "授权当前连接"}
+            {grantForThis ? t("mcp.reauthorize") : t("mcp.authorize")}
           </button>
         </div>
       </div>
       {#if grants.count === 0}
-        <p class="hint">还没有授权。授权后把下方配置贴到 MCP 客户端，它就能以只读方式访问这一个连接。</p>
+        <p class="hint">{t("mcp.grants.empty")}</p>
       {:else}
         <table class="grants">
           <thead>
             <tr>
-              <th>连接</th>
-              <th>地址</th>
-              <th title="令牌指纹：用于和客户端配置核对，不是令牌本身">指纹</th>
-              <th>授权时间</th>
-              <th>到期</th>
-              <th class="right">操作</th>
+              <th>{t("mcp.col.connection")}</th>
+              <th>{t("mcp.col.endpoint")}</th>
+              <th title={t("mcp.tip.fingerprint")}>{t("mcp.col.fingerprint")}</th>
+              <th>{t("mcp.col.granted")}</th>
+              <th>{t("mcp.col.expires")}</th>
+              <th class="right">{t("mcp.col.actions")}</th>
             </tr>
           </thead>
           <tbody>
@@ -226,9 +227,9 @@
                 <td class="mono">{grant.host}:{grant.port}</td>
                 <td class="mono">{grant.fingerprint}</td>
                 <td class="mono">{stamp(grant.created_at)}</td>
-                <td class="mono">{grant.expired ? "已过期" : stamp(grant.expires_at)}</td>
+                <td class="mono">{grant.expired ? t("mcp.expired") : stamp(grant.expires_at)}</td>
                 <td class="right">
-                  <button class="link" onclick={() => void revoke(grant.connection_id)}>撤销</button>
+                  <button class="link" onclick={() => void revoke(grant.connection_id)}>{t("mcp.revoke")}</button>
                 </td>
               </tr>
             {/each}
@@ -239,32 +240,31 @@
       {#if issued}
         <div class="issued">
           <div class="issued-head">
-            <strong>客户端配置</strong>
-            <button class="link" onclick={() => void copy(issued!.snippet)}>复制</button>
+            <strong>{t("mcp.issued.title")}</strong>
+            <button class="link" onclick={() => void copy(issued!.snippet)}>{t("mcp.copy")}</button>
           </div>
           <p class="hint">
-            令牌只显示这一次：<span class="mono">{issued.token.slice(0, 12)}…</span>
-            （指纹 {issued.public.fingerprint}）。过期或撤销后需重新授权。
+            {t("mcp.issued.note", { token: `${issued.token.slice(0, 12)}…`, fingerprint: issued.public.fingerprint })}
           </p>
           <textarea class="snippet" readonly rows="9">{issued.snippet}</textarea>
-          <p class="hint">先用 <span class="mono">--check</span> 验证令牌再接入客户端；stdout 只承载协议，诊断信息都在 stderr。</p>
+          <p class="hint">{t("mcp.issued.check")}</p>
         </div>
       {/if}
     </section>
 
     <section class="panel">
       <div class="panel-head">
-        <h2>工具目录</h2>
-        <input class="search" placeholder="按名称 / 描述 / 分类过滤" bind:value={filter} />
+        <h2>{t("mcp.catalog.title")}</h2>
+        <input class="search" placeholder={t("mcp.catalog.filter")} bind:value={filter} />
       </div>
       {#if visible.length === 0}
-        <p class="hint">没有匹配的工具。</p>
+        <p class="hint">{t("mcp.catalog.empty")}</p>
       {:else}
         <table class="tools">
           <thead>
             <tr>
-              <th>工具</th>
-              <th class="col-args">参数</th>
+              <th>{t("mcp.col.tool")}</th>
+              <th class="col-args">{t("mcp.col.args")}</th>
               <th class="col-act"></th>
             </tr>
           </thead>
@@ -277,7 +277,7 @@
                 <tr class:active={selected?.name === tool.name}>
                   <td>
                     <span class="mono name">{tool.name}</span>
-                    <div class="sub">{tool.title} · {tool.description}</div>
+                    <div class="sub">{tOr(`mcp.tool.${tool.name}`, tool.title)} · {tOr(`mcp.tool.${tool.name}.desc`, tool.description)}</div>
                   </td>
                   <td class="args">
                     {#if tool.args.length === 0}
@@ -287,7 +287,7 @@
                     {/if}
                   </td>
                   <td class="right">
-                    <button class="link" onclick={() => choose(tool)}>试调用</button>
+                    <button class="link" onclick={() => choose(tool)}>{t("mcp.try")}</button>
                   </td>
                 </tr>
               {/each}
@@ -300,14 +300,14 @@
     {#if selected}
       <section class="panel call">
         <div class="panel-head">
-          <h2>试调用 · <span class="mono">{selected.name}</span></h2>
+          <h2>{t("mcp.try")} · <span class="mono">{selected.name}</span></h2>
           <button class="primary" onclick={() => void runTool()} disabled={calling || !connectionId}>
-            {calling ? "调用中…" : "调用"}
+            {calling ? t("mcp.call.running") : t("mcp.call.run")}
           </button>
         </div>
-        <p class="hint">{selected.description}</p>
+        <p class="hint">{tOr(`mcp.tool.${selected.name}.desc`, selected.description)}</p>
         {#if selected.args.length > 0}
-          <p class="hint">参数：{selected.args.map((arg) => `${arg.name}${arg.required ? "（必填）" : ""} ${arg.type}`).join("，")}</p>
+          <p class="hint">{t("mcp.call.args", { list: selected.args.map((arg) => `${arg.name}${arg.required ? t("mcp.call.required") : ""} ${arg.type}`).join(t("common.listSep")) })}</p>
         {/if}
         <textarea class="args-input" rows="6" bind:value={argsText} spellcheck="false"></textarea>
         {#if callError}
@@ -317,7 +317,7 @@
           <p class="call-meta">
             <span class="mono">{callResult.request.method} {callResult.request.path}</span>
             · HTTP {callResult.status} · {callResult.duration_ms} ms · {callResult.bytes} B
-            {#if callResult.truncated}<span class="warn">· 结果已截断</span>{/if}
+            {#if callResult.truncated}<span class="warn">{t("mcp.call.truncated")}</span>{/if}
           </p>
           <pre class="result">{callResult.text}</pre>
         {/if}
@@ -326,21 +326,21 @@
 
     <section class="panel">
       <div class="panel-head">
-        <h2>调用日志</h2>
+        <h2>{t("mcp.log.title")}</h2>
         <span class="hint mono">{log.file ?? "—"}{log.bytes ? ` · ${log.bytes} B` : ""}</span>
       </div>
       {#if log.calls.length === 0}
-        <p class="hint">还没有调用记录。每次工具调用（含外部客户端）都会在这里留一行，只记参数名不记参数值。</p>
+        <p class="hint">{t("mcp.log.empty")}</p>
       {:else}
         <table class="calls">
           <thead>
             <tr>
-              <th>时间</th>
-              <th>工具</th>
-              <th>连接</th>
-              <th class="right">状态</th>
-              <th class="right">耗时</th>
-              <th class="right">大小</th>
+              <th>{t("mcp.col.time")}</th>
+              <th>{t("mcp.col.tool")}</th>
+              <th>{t("mcp.col.connection")}</th>
+              <th class="right">{t("mcp.col.status")}</th>
+              <th class="right">{t("mcp.col.duration")}</th>
+              <th class="right">{t("mcp.col.size")}</th>
             </tr>
           </thead>
           <tbody>
@@ -364,7 +364,7 @@
 <style>
   .page { max-width: 1180px; }
   header { display: flex; justify-content: space-between; align-items: start; gap: 16px; margin-bottom: 12px; flex-wrap: wrap; }
-  h1 { margin: 0 0 4px; font-size: 18px; }
+  h1 { margin: 0 0 4px; font-size: var(--es-fs-3xl); }
   header p { margin: 0; color: var(--es-muted); }
   .tools { display: flex; gap: 8px; align-items: center; }
   button { padding: 5px 12px; border: 1px solid var(--es-border); border-radius: 6px; background: var(--es-surface); color: var(--es-text); cursor: pointer; white-space: nowrap; }
@@ -373,41 +373,41 @@
   button.primary { background: var(--es-accent); border-color: var(--es-accent); color: #fff; }
   button.primary:hover:not(:disabled) { filter: brightness(0.92); }
   button.link { border: none; background: none; color: var(--es-accent); padding: 0; }
-  .toast { padding: 8px 12px; margin-bottom: 12px; border: 1px solid var(--es-border); border-radius: 6px; background: var(--es-surface-2); font-size: 12px; }
+  .toast { padding: 8px 12px; margin-bottom: 12px; border: 1px solid var(--es-border); border-radius: 6px; background: var(--es-surface-2); font-size: var(--es-fs-sm); }
   .summary { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 10px; margin-bottom: 14px; }
   .card { border: 1px solid var(--es-border); border-radius: var(--es-radius); background: var(--es-surface); padding: 10px 12px; display: flex; flex-direction: column; gap: 4px; }
-  .card .lbl { font-size: 11px; color: var(--es-muted); text-transform: uppercase; letter-spacing: 0.06em; }
-  .card .num-value { font-family: var(--es-mono); font-size: 20px; font-weight: 700; }
+  .card .lbl { font-size: var(--es-fs-xs); color: var(--es-muted); text-transform: uppercase; letter-spacing: 0.06em; }
+  .card .num-value { font-family: var(--es-mono); font-size: var(--es-fs-4xl); font-weight: 700; }
   .panel { border: 1px solid var(--es-border); border-radius: var(--es-radius); background: var(--es-surface); padding: 10px 14px; margin-bottom: 14px; }
   .panel-head { display: flex; justify-content: space-between; align-items: center; gap: 12px; }
-  .panel-head h2 { margin: 0 0 6px; font-size: 12px; text-transform: uppercase; letter-spacing: 0.08em; color: var(--es-muted); }
+  .panel-head h2 { margin: 0 0 6px; font-size: var(--es-fs-sm); text-transform: uppercase; letter-spacing: 0.08em; color: var(--es-muted); }
   .inline { display: flex; gap: 8px; align-items: center; }
-  select, input.search, textarea { border: 1px solid var(--es-border); border-radius: 6px; background: var(--es-bg); color: var(--es-text); padding: 5px 8px; font-size: 12px; font-family: inherit; }
+  select, input.search, textarea { border: 1px solid var(--es-border); border-radius: 6px; background: var(--es-bg); color: var(--es-text); padding: 5px 8px; font-size: var(--es-fs-sm); font-family: inherit; }
   input.search { width: 240px; }
-  table { width: 100%; border-collapse: collapse; font-size: 12px; margin-top: 6px; }
+  table { width: 100%; border-collapse: collapse; font-size: var(--es-fs-sm); margin-top: 6px; }
   th, td { padding: 6px 10px; border-bottom: 1px solid var(--es-border); text-align: left; vertical-align: top; }
-  th { background: var(--es-surface-2); color: var(--es-muted); font-weight: 600; font-size: 11px; }
+  th { background: var(--es-surface-2); color: var(--es-muted); font-weight: 600; font-size: var(--es-fs-xs); }
   tbody tr:hover { background: var(--es-surface-2); }
   .right { text-align: right; }
   .mono { font-family: var(--es-mono); }
-  .sub { font-size: 11px; color: var(--es-muted); margin-top: 2px; }
+  .sub { font-size: var(--es-fs-xs); color: var(--es-muted); margin-top: 2px; }
   .name { font-weight: 600; }
   .muted { color: var(--es-muted); }
-  .hint { font-size: 11px; color: var(--es-muted); margin: 6px 0; }
+  .hint { font-size: var(--es-fs-xs); color: var(--es-muted); margin: 6px 0; }
   .col-args { width: 30%; }
   .col-act { width: 78px; }
-  tr.group-row td { background: var(--es-surface-2); color: var(--es-muted); font-size: 11px; font-weight: 600; letter-spacing: 0.04em; text-transform: uppercase; padding: 5px 10px; }
-  .args { font-family: var(--es-mono); font-size: 11px; color: var(--es-muted); }
+  tr.group-row td { background: var(--es-surface-2); color: var(--es-muted); font-size: var(--es-fs-xs); font-weight: 600; letter-spacing: 0.04em; text-transform: uppercase; padding: 5px 10px; }
+  .args { font-family: var(--es-mono); font-size: var(--es-fs-xs); color: var(--es-muted); }
   tr.group-row .count { color: var(--es-muted); font-weight: 400; margin-left: 4px; }
   tr.expired td { opacity: 0.6; }
   tr.active td { background: var(--es-surface-2); }
   tr.failed td { color: var(--es-red); }
   .issued { margin-top: 10px; border-top: 1px dashed var(--es-border); padding-top: 8px; }
-  .issued-head { display: flex; justify-content: space-between; align-items: center; font-size: 12px; }
-  textarea.snippet { width: 100%; font-family: var(--es-mono); font-size: 11px; }
-  textarea.args-input { width: 100%; font-family: var(--es-mono); font-size: 11px; }
-  .call-error { font-size: 12px; color: var(--es-red); margin: 6px 0; }
-  .call-meta { font-size: 11px; color: var(--es-muted); margin: 8px 0 4px; }
+  .issued-head { display: flex; justify-content: space-between; align-items: center; font-size: var(--es-fs-sm); }
+  textarea.snippet { width: 100%; font-family: var(--es-mono); font-size: var(--es-fs-xs); }
+  textarea.args-input { width: 100%; font-family: var(--es-mono); font-size: var(--es-fs-xs); }
+  .call-error { font-size: var(--es-fs-sm); color: var(--es-red); margin: 6px 0; }
+  .call-meta { font-size: var(--es-fs-xs); color: var(--es-muted); margin: 8px 0 4px; }
   .call-meta .warn { color: var(--es-yellow); }
-  pre.result { margin: 0; max-height: 320px; overflow: auto; border: 1px solid var(--es-border); border-radius: 6px; padding: 10px; background: var(--es-bg); font-family: var(--es-mono); font-size: 11px; white-space: pre-wrap; }
+  pre.result { margin: 0; max-height: 320px; overflow: auto; border: 1px solid var(--es-border); border-radius: 6px; padding: 10px; background: var(--es-bg); font-family: var(--es-mono); font-size: var(--es-fs-xs); white-space: pre-wrap; }
 </style>

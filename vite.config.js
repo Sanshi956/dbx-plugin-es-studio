@@ -48,10 +48,16 @@ function singleFileUi() {
         `if(e){var s=e.querySelector("small");` +
         `if(s)s.textContent="Application script running…";}})();`;
       html = html.replace(scriptTag, "");
-      html = html.replace(
-        /<\/body>/i,
-        `<script>\n${bootMarker}\n${code}\n</script>\n  </body>`,
-      );
+      // Function replacer, not a string: a string replacement expands `$&`,
+      // `$'` and `$1` found in the minified bundle. That is not theoretical —
+      // `caps && !caps.x` minifies to `$&&!$`, and `$&` pasted the matched
+      // `</body>` into the middle of the app, which then failed to parse with
+      // "Unexpected token '<'" and left a blank workbench.
+      const inline = `<script>\n${bootMarker}\n${code}\n</script>\n  </body>`;
+      html = html.replace(/<\/body>/i, () => inline);
+      if (!html.includes(`<script>\n${bootMarker}\n${code}\n</script>`)) {
+        throw new Error("ES Studio UI: inlined script was corrupted during insertion");
+      }
 
       // Only inspect tags, not the inlined JS/CSS bodies (which may legitimately
       // contain strings such as src="...").
@@ -77,6 +83,16 @@ function singleFileUi() {
 
 export default defineConfig({
   base: "./",
+  // The topbar shows the release version. Read it from manifest.json at build
+  // time instead of hardcoding it in the UI: manifest.json / backend/main.go /
+  // package name have already drifted apart once, so this keeps one source.
+  define: {
+    __PLUGIN_VERSION__: JSON.stringify(
+      JSON.parse(
+        readFileSync(fileURLToPath(new URL("./manifest.json", import.meta.url)), "utf8"),
+      ).version,
+    ),
+  },
   plugins: [
     svelte(),
     singleFileUi(),

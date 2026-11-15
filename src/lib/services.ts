@@ -5,6 +5,7 @@
 // Business safety (read-only rejection, unsafe-path guard) stays in Go.
 
 import type { DbxBridge } from "./bridge";
+import { t } from "./i18n.svelte.js";
 import { invoke, type EsResult } from "./api";
 
 export type { EsResult } from "./api";
@@ -108,6 +109,22 @@ export async function single(
     const code = typeof (cause as { code?: unknown })?.code === "number" ? (cause as { code: number }).code : -32000;
     return { status: 0, error: { code, message } };
   }
+}
+
+/**
+ * Message for a failed response. Elasticsearch explains itself in
+ * `body.error.reason` (and `root_cause`), which is far more useful than the
+ * bare status our transport also reports; a 429 without an explanation gets
+ * the backpressure hint, because "HTTP 429" alone tells nobody what to do.
+ */
+export function failureText(res: EsResult): string {
+  const err = record(record(res.body).error);
+  const causes = Array.isArray(err.root_cause) ? err.root_cause : [];
+  const reason = str(err.reason) || str(record(causes[0]).reason);
+  if (reason) return `${reason} · HTTP ${res.status}`;
+  if (res.error?.message) return `${res.error.message} · HTTP ${res.status}`;
+  if (res.status === 429) return t("err.tooManyRequests");
+  return `HTTP ${res.status}`;
 }
 
 export function isError(r: EsResult): boolean {
@@ -391,6 +408,23 @@ function collectFields(
 }
 
 /**
+ * A 400/405/501 from a versioned endpoint means "this build does not have the
+ * API", which must read differently from "the cluster has nothing here".
+ * Silently returning an empty list is how a 7.x cluster looked broken instead
+ * of simply not supporting data streams. 404 stays a legitimate empty result.
+ */
+function throwIfUnsupported(res: EsResult, api: string): void {
+  if (res.status === 400 || res.status === 405 || res.status === 501) {
+    throw new Error(t("err.unsupportedApi", { api }));
+  }
+}
+
+/** True for a plain object — guards the typed/typeless mapping branch. */
+function isRecord(value: unknown): boolean {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+/**
  * Read field names + types from `GET /{index}/_mapping`.
  * Works for aliases (mapping spans several indices, names are deduped) and
  * returns `[]` for a closed/missing index instead of throwing.
@@ -406,7 +440,18 @@ export async function fetchFields(
   const body = record(res.body);
   for (const indexKey of Object.keys(body)) {
     const mappings = record(record(body[indexKey]).mappings);
-    collectFields(record(mappings.properties), "", found, 0);
+    // Typeless (8.x/9.x): properties live directly under mappings. Typed
+    // (6.x, and 7.x before types were removed): properties sit one level
+    // deeper, under the type name. Reading only `mappings.properties` is why
+    // the field picker used to come up empty on a 6.x cluster.
+    if (isRecord(mappings.properties)) {
+      collectFields(record(mappings.properties), "", found, 0);
+      continue;
+    }
+    for (const typeName of Object.keys(mappings)) {
+      const typed = record(mappings[typeName]);
+      if (isRecord(typed.properties)) collectFields(record(typed.properties), "", found, 0);
+    }
   }
   return [...found.entries()]
     .map(([name, type]) => ({ name, type }))
@@ -508,10 +553,10 @@ export function parseAliasFilter(text: string): { ok: true; value?: Record<strin
   try {
     parsed = JSON.parse(trimmed);
   } catch (cause) {
-    return { ok: false, error: `Filter 不是合法 JSON：${cause instanceof Error ? cause.message : String(cause)}` };
+    return { ok: false, error: t("filter.badJson", { detail: cause instanceof Error ? cause.message : String(cause) }) };
   }
   if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
-    return { ok: false, error: "Filter 必须是 JSON 对象，例如 {\"term\": {\"env\": \"prod\"}}" };
+    return { ok: false, error: t("filter.notObject") };
   }
   return { ok: true, value: parsed as Record<string, unknown> };
 }
@@ -563,7 +608,7 @@ export async function searchIndex(
   body: Record<string, unknown>,
 ): Promise<SearchResult> {
   const res = await single(bridge, connectionId, "POST", `/${encodeURIComponent(index)}/_search`, body);
-  if (isError(res)) return { took: 0, total: 0, hits: [], raw: res.error, error: res.error?.message ?? `HTTP ${res.status}` };
+  if (isError(res)) return { took: 0, total: 0, hits: [], raw: res.error, error: failureText(res) };
   return parseSearch(res.body);
 }
 
@@ -719,49 +764,49 @@ export interface OperatorOption {
 
 /** Operators that actually make sense for a mapping type, most useful first. */
 export function operatorsForType(type: string): OperatorOption[] {
-  const t = type.trim();
-  if (NUMERIC_TYPES.has(t) || DATE_TYPES.has(t)) {
+  const trimmed = type.trim();
+  if (NUMERIC_TYPES.has(trimmed) || DATE_TYPES.has(trimmed)) {
     return [
-      { value: "range", label: "range（区间）" },
-      { value: "term", label: "term（精确值）" },
-      { value: "exists", label: "exists（字段存在）" },
+      { value: "range", label: t("qb.op.range") },
+      { value: "term", label: t("qb.op.term") },
+      { value: "exists", label: t("qb.op.exists") },
     ];
   }
-  if (t === "boolean") {
+  if (trimmed === "boolean") {
     return [
-      { value: "term", label: "term（true/false）" },
-      { value: "exists", label: "exists（字段存在）" },
+      { value: "term", label: t("qb.op.termBool") },
+      { value: "exists", label: t("qb.op.exists") },
     ];
   }
-  if (KEYWORD_TYPES.has(t)) {
+  if (KEYWORD_TYPES.has(trimmed)) {
     return [
-      { value: "term", label: "term（精确值）" },
-      { value: "wildcard", label: "wildcard（通配符）" },
-      { value: "prefix", label: "prefix（前缀）" },
-      { value: "exists", label: "exists（字段存在）" },
+      { value: "term", label: t("qb.op.term") },
+      { value: "wildcard", label: t("qb.op.wildcard") },
+      { value: "prefix", label: t("qb.op.prefix") },
+      { value: "exists", label: t("qb.op.exists") },
     ];
   }
-  if (TEXT_TYPES.has(t)) {
+  if (TEXT_TYPES.has(trimmed)) {
     return [
-      { value: "match", label: "match（分词匹配）" },
-      { value: "match_phrase", label: "match_phrase（短语）" },
-      { value: "term", label: "term（不分词精确值）" },
-      { value: "prefix", label: "prefix（前缀）" },
-      { value: "wildcard", label: "wildcard（通配符）" },
-      { value: "exists", label: "exists（字段存在）" },
+      { value: "match", label: t("qb.op.match") },
+      { value: "match_phrase", label: t("qb.op.matchPhrase") },
+      { value: "term", label: t("qb.op.termKeyword") },
+      { value: "prefix", label: t("qb.op.prefix") },
+      { value: "wildcard", label: t("qb.op.wildcard") },
+      { value: "exists", label: t("qb.op.exists") },
     ];
   }
-  if (GEO_TYPES.has(t)) {
+  if (GEO_TYPES.has(trimmed)) {
     return [
-      { value: "term", label: "term（精确值）" },
-      { value: "exists", label: "exists（字段存在）" },
+      { value: "term", label: t("qb.op.term") },
+      { value: "exists", label: t("qb.op.exists") },
     ];
   }
   // object / nested / flattened / unknown: only existence is safe to build
   // without knowing the shape.
   return [
-    { value: "exists", label: "exists（字段存在）" },
-    { value: "term", label: "term（精确值）" },
+    { value: "exists", label: t("qb.op.exists") },
+    { value: "term", label: t("qb.op.term") },
   ];
 }
 
@@ -796,6 +841,7 @@ export interface AnalyzeResult {
 export async function analyzeText(
   bridge: DbxBridge,
   connectionId: string,
+  index: string,
   params: {
     text: string;
     analyzer?: string;
@@ -811,7 +857,11 @@ export async function analyzeText(
   if (params.tokenizer) body.tokenizer = params.tokenizer;
   if (params.filter?.length) body.filter = params.filter;
   if (params.char_filter?.length) body.char_filter = params.char_filter;
-  const res = await single(bridge, connectionId, "POST", "/_analyze", body);
+  // Field/tokenizer context is only valid against an index: POST /_analyze with
+  // a `field` is rejected with "requires an index", which is why every
+  // field-scoped analysis used to fail no matter what the page selected.
+  const path = index.trim() ? `/${encodeURIComponent(index.trim())}/_analyze` : "/_analyze";
+  const res = await single(bridge, connectionId, "POST", path, body);
   if (isError(res)) return { tokens: [], detail: res.error };
   const r = record(res.body);
   const tokens = Array.isArray(r.tokens) ? (r.tokens as unknown[]).map((t) => {
@@ -951,7 +1001,7 @@ export async function explainAllocation(bridge: DbxBridge, connectionId: string)
   };
   const res = await single(bridge, connectionId, "GET", "/_cluster/allocation/explain");
   if (isError(res)) {
-    return { ...empty, error: res.error?.message ?? `HTTP ${res.status}`, raw: res.error };
+    return { ...empty, error: failureText(res), raw: res.error };
   }
   const body = record(res.body);
   const state = record(body.current_state);
@@ -1113,7 +1163,7 @@ export async function getTemplate(
   const res = kind === "composable"
     ? await single(bridge, connectionId, "GET", `/_index_template/${encodeURIComponent(name)}`)
     : await single(bridge, connectionId, "GET", `/_template/${encodeURIComponent(name)}`);
-  if (isError(res)) return { ok: false, body: null, error: res.error?.message ?? `HTTP ${res.status}` };
+  if (isError(res)) return { ok: false, body: null, error: failureText(res) };
   if (kind === "legacy") return { ok: true, body: record(res.body)[name] ?? res.body };
   const body = record(res.body);
   const first = Array.isArray(body.index_templates) ? record((body.index_templates as unknown[])[0]) : {};
@@ -1150,7 +1200,10 @@ export async function fetchComponentTemplates(
   connectionId: string,
 ): Promise<ComponentTemplateRow[]> {
   const res = await single(bridge, connectionId, "GET", "/_component_template");
-  if (isError(res)) return [];
+  if (isError(res)) {
+    throwIfUnsupported(res, "/_component_template");
+    return [];
+  }
   const body = record(res.body);
   const list = Array.isArray(body.component_templates) ? (body.component_templates as unknown[]) : [];
   return list
@@ -1175,7 +1228,7 @@ export async function getComponentTemplate(
   name: string,
 ): Promise<{ ok: boolean; body: unknown; error?: string }> {
   const res = await single(bridge, connectionId, "GET", `/_component_template/${encodeURIComponent(name)}`);
-  if (isError(res)) return { ok: false, body: null, error: res.error?.message ?? `HTTP ${res.status}` };
+  if (isError(res)) return { ok: false, body: null, error: failureText(res) };
   const body = record(res.body);
   const first = Array.isArray(body.component_templates) ? record((body.component_templates as unknown[])[0]) : {};
   return { ok: true, body: first.component_template ?? res.body };
@@ -1213,7 +1266,10 @@ export interface DataStreamRow {
 
 export async function fetchDataStreams(bridge: DbxBridge, connectionId: string): Promise<DataStreamRow[]> {
   const res = await single(bridge, connectionId, "GET", "/_data_stream");
-  if (isError(res)) return [];
+  if (isError(res)) {
+    throwIfUnsupported(res, "/_data_stream");
+    return [];
+  }
   const body = record(res.body);
   const list = Array.isArray(body.data_streams) ? (body.data_streams as unknown[]) : [];
   return list
@@ -1268,7 +1324,7 @@ export interface IlmStatus {
 
 export async function fetchIlmStatus(bridge: DbxBridge, connectionId: string): Promise<IlmStatus> {
   const res = await single(bridge, connectionId, "GET", "/_ilm/status");
-  if (isError(res)) return { mode: "unknown", error: res.error?.message ?? `HTTP ${res.status}` };
+  if (isError(res)) return { mode: "unknown", error: failureText(res) };
   return { mode: str(record(res.body).operation_mode) || "unknown" };
 }
 
@@ -1282,7 +1338,10 @@ export interface IlmPolicyRow {
 
 export async function fetchIlmPolicies(bridge: DbxBridge, connectionId: string): Promise<IlmPolicyRow[]> {
   const res = await single(bridge, connectionId, "GET", "/_ilm/policy");
-  if (isError(res)) return [];
+  if (isError(res)) {
+    throwIfUnsupported(res, "/_ilm/policy");
+    return [];
+  }
   const body = record(res.body);
   const out: IlmPolicyRow[] = [];
   for (const [name, raw] of Object.entries(body)) {
@@ -1314,7 +1373,10 @@ export async function fetchIlmExplain(bridge: DbxBridge, connectionId: string): 
   // ES 8.x has no bare `/_ilm/explain` handler (405/404); the target form is
   // required and `_all` covers every index in one read-only GET.
   const res = await single(bridge, connectionId, "GET", "/_all/_ilm/explain");
-  if (isError(res)) return [];
+  if (isError(res)) {
+    throwIfUnsupported(res, "/_all/_ilm/explain");
+    return [];
+  }
   const body = record(res.body);
   const indices = record(body.indices);
   return Object.entries(indices)
@@ -1410,7 +1472,7 @@ export async function runProfile(
     { ...body, profile: true },
   );
   if (isError(res)) {
-    return { ok: false, took: 0, hits: 0, shards: [], error: res.error?.message ?? `HTTP ${res.status}`, raw: res.error };
+    return { ok: false, took: 0, hits: 0, shards: [], error: failureText(res), raw: res.error };
   }
   const payload = record(res.body);
   const profile = record(payload.profile);
@@ -1460,7 +1522,10 @@ export interface RepositoryRow {
 
 export async function fetchRepositories(bridge: DbxBridge, connectionId: string): Promise<RepositoryRow[]> {
   const res = await single(bridge, connectionId, "GET", "/_snapshot");
-  if (isError(res)) return [];
+  if (isError(res)) {
+    throwIfUnsupported(res, "/_snapshot");
+    return [];
+  }
   const body = record(res.body);
   return Object.entries(body)
     .filter(([name]) => name !== "error")
@@ -1489,7 +1554,10 @@ export async function fetchSnapshots(
   repository: string,
 ): Promise<SnapshotRow[]> {
   const res = await single(bridge, connectionId, "GET", `/_snapshot/${encodeURIComponent(repository)}/_all`);
-  if (isError(res)) return [];
+  if (isError(res)) {
+    throwIfUnsupported(res, "/_snapshot/{repository}/_all");
+    return [];
+  }
   const body = record(res.body);
   return (Array.isArray(body.snapshots) ? (body.snapshots as unknown[]) : [])
     .map((entry) => {
@@ -1602,7 +1670,10 @@ export interface TaskRow {
 
 export async function fetchTasks(bridge: DbxBridge, connectionId: string): Promise<TaskRow[]> {
   const res = await single(bridge, connectionId, "GET", "/_tasks?group_by=none&detailed=true");
-  if (isError(res)) return [];
+  if (isError(res)) {
+    throwIfUnsupported(res, "/_tasks");
+    return [];
+  }
   const body = record(res.body);
   const out: TaskRow[] = [];
 
@@ -1662,11 +1733,11 @@ export interface OperationRisk {
 }
 
 const DESTRUCTIVE_ENDS: Record<string, { kind: RiskKind; label: string }> = {
-  "_close": { kind: "close-index", label: "关闭索引" },
-  "_open": { kind: "open-index", label: "打开索引" },
-  "_delete_by_query": { kind: "delete-by-query", label: "按查询删除" },
-  "_forcemerge": { kind: "forcemerge", label: "强制合并段" },
-  "_flush": { kind: "flush", label: "刷新事务日志" },
+  "_close": { kind: "close-index", label: "risk.closeIndex.label" },
+  "_open": { kind: "open-index", label: "risk.openIndex.label" },
+  "_delete_by_query": { kind: "delete-by-query", label: "risk.deleteByQueryEnds.label" },
+  "_forcemerge": { kind: "forcemerge", label: "risk.forcemerge.label" },
+  "_flush": { kind: "flush", label: "risk.flush.label" },
 };
 
 export function classifyOperation(method: string, path: string): OperationRisk {
@@ -1679,87 +1750,87 @@ export function classifyOperation(method: string, path: string): OperationRisk {
     const scopeOf = (fallback: string): string => segs.filter((s) => !s.startsWith("_")).join("/") || fallback;
 
     if (has("_cluster") && has("settings")) {
-      return { dangerous: true, kind: "settings", label: "修改集群设置", scope: "整个集群（所有节点与索引）" };
+      return { dangerous: true, kind: "settings", label: t("risk.settings.label"), scope: t("risk.settings.scope") };
     }
     if (has("_snapshot")) {
-      if (has("_restore")) return { dangerous: true, kind: "snapshot", label: "恢复快照", scope: `快照 ${scopeOf("")}` };
-      if (m === "DELETE") return { dangerous: true, kind: "snapshot", label: "删除快照 / 仓库", scope: scopeOf("未指定") };
-      return { dangerous: true, kind: "snapshot", label: "创建仓库 / 快照", scope: scopeOf("未指定") };
+      if (has("_restore")) return { dangerous: true, kind: "snapshot", label: t("risk.restore.label"), scope: t("risk.restore.scope", { name: scopeOf("") }) };
+      if (m === "DELETE") return { dangerous: true, kind: "snapshot", label: t("risk.snapshotDelete.label"), scope: t("risk.scope.name", { name: scopeOf(t("risk.scope.unspecified")) }) };
+      return { dangerous: true, kind: "snapshot", label: t("risk.snapshotCreate.label"), scope: t("risk.scope.name", { name: scopeOf(t("risk.scope.unspecified")) }) };
     }
     if (has("_data_stream")) {
       return m === "DELETE"
-        ? { dangerous: true, kind: "data-stream", label: "删除数据流", scope: `数据流 ${scopeOf("")} 及其背后全部索引` }
-        : { dangerous: true, kind: "data-stream", label: "数据流滚动", scope: `数据流 ${scopeOf("")} 生成新后备索引` };
+        ? { dangerous: true, kind: "data-stream", label: t("risk.dsDelete.label"), scope: t("risk.dsDelete.scope", { name: scopeOf("") }) }
+        : { dangerous: true, kind: "data-stream", label: t("risk.dsRollover.label"), scope: t("risk.dsRollover.scope", { name: scopeOf("") }) };
     }
     if (has("_ilm")) {
       if (has("_start") || has("_stop")) {
-        return { dangerous: false, kind: "ilm", label: "切换 ILM 运行状态", scope: "全局生命周期管理" };
+        return { dangerous: false, kind: "ilm", label: t("risk.ilmToggle.label"), scope: t("risk.ilmToggle.scope") };
       }
       return m === "DELETE"
-        ? { dangerous: true, kind: "ilm", label: "删除 ILM 策略", scope: `策略 ${scopeOf("未指定")}` }
-        : { dangerous: true, kind: "ilm", label: "写入 ILM 策略", scope: `策略 ${scopeOf("未指定")}` };
+        ? { dangerous: true, kind: "ilm", label: t("risk.ilmDelete.label"), scope: t("risk.ilm.scope", { name: scopeOf(t("risk.scope.unspecified")) }) }
+        : { dangerous: true, kind: "ilm", label: t("risk.ilmWrite.label"), scope: t("risk.ilm.scope", { name: scopeOf(t("risk.scope.unspecified")) }) };
     }
     if (has("_index_template")) {
       return m === "DELETE"
-        ? { dangerous: true, kind: "template", label: "删除索引模板", scope: `模板 ${scopeOf("未指定")}` }
-        : { dangerous: true, kind: "template", label: "写入索引模板", scope: `模板 ${scopeOf("未指定")}` };
+        ? { dangerous: true, kind: "template", label: t("risk.tplDelete.label"), scope: t("risk.tpl.scope", { name: scopeOf(t("risk.scope.unspecified")) }) }
+        : { dangerous: true, kind: "template", label: t("risk.tplWrite.label"), scope: t("risk.tpl.scope", { name: scopeOf(t("risk.scope.unspecified")) }) };
     }
     if (has("_component_template")) {
       return m === "DELETE"
-        ? { dangerous: true, kind: "template", label: "删除组件模板", scope: `组件模板 ${scopeOf("未指定")}` }
-        : { dangerous: true, kind: "template", label: "写入组件模板", scope: `组件模板 ${scopeOf("未指定")}` };
+        ? { dangerous: true, kind: "template", label: t("risk.ctDelete.label"), scope: t("risk.ct.scope", { name: scopeOf(t("risk.scope.unspecified")) }) }
+        : { dangerous: true, kind: "template", label: t("risk.ctWrite.label"), scope: t("risk.ct.scope", { name: scopeOf(t("risk.scope.unspecified")) }) };
     }
     if (has("_tasks") && has("_cancel")) {
-      return { dangerous: true, kind: "task", label: "取消任务", scope: `任务 ${segs[1] ?? ""}` };
+      return { dangerous: true, kind: "task", label: t("risk.taskCancel.label"), scope: t("risk.task.scope", { name: segs[1] ?? "" }) };
     }
     if (has("_settings")) {
-      return { dangerous: true, kind: "settings", label: "修改索引设置", scope: `索引 ${segs[0] ?? "*"}` };
+      return { dangerous: true, kind: "settings", label: t("risk.indexSettings.label"), scope: t("risk.index.scope", { name: segs[0] ?? "*" }) };
     }
   }
 
   if (m === "DELETE") {
     // DELETE /{index}/_doc/{id} or /{index}/_doc/{id}/_create etc.
     if (segs.length >= 2 && segs[1] === "_doc") {
-      return { dangerous: true, kind: "delete-doc", label: "删除文档", scope: `索引 ${segs[0]} 中的文档 ${segs[2] ?? ""}` };
+      return { dangerous: true, kind: "delete-doc", label: t("risk.deleteDoc.label"), scope: t("risk.deleteDoc.scope", { name: segs[0], doc: segs[2] ?? "" }) };
     }
-    return { dangerous: true, kind: "delete-index", label: "删除索引", scope: `索引 ${segs[0] ?? "*"}` };
+    return { dangerous: true, kind: "delete-index", label: t("risk.deleteIndex.label"), scope: t("risk.index.scope", { name: segs[0] ?? "*" }) };
   }
 
   if (m === "POST" || m === "PUT") {
     if (segs.length >= 1 && segs[segs.length - 1].startsWith("_")) {
       const tail = segs[segs.length - 1];
       if (tail === "_aliases") {
-        return { dangerous: true, kind: "aliases", label: "修改别名", scope: "集群别名映射" };
+        return { dangerous: true, kind: "aliases", label: t("risk.aliases.label"), scope: t("risk.aliases.scope") };
       }
       if (tail === "_delete_by_query") {
-        return { dangerous: true, kind: "delete-by-query", label: "按查询删除文档", scope: `索引 ${segs[0] ?? "*"}` };
+        return { dangerous: true, kind: "delete-by-query", label: t("risk.deleteByQuery.label"), scope: t("risk.index.scope", { name: segs[0] ?? "*" }) };
       }
       const mapped = DESTRUCTIVE_ENDS[tail];
       if (mapped) {
-        return { dangerous: mapped.kind !== "refresh" && mapped.kind !== "flush", kind: mapped.kind, label: mapped.label, scope: `索引 ${segs[0] ?? "*"}` };
+        return { dangerous: mapped.kind !== "refresh" && mapped.kind !== "flush", kind: mapped.kind, label: t(mapped.label), scope: t("risk.index.scope", { name: segs[0] ?? "*" }) };
       }
     }
     if (m === "PUT" && segs.length === 1 && !segs[0].startsWith("_")) {
-      return { dangerous: true, kind: "create-index", label: "创建索引", scope: `索引 ${segs[0]}` };
+      return { dangerous: true, kind: "create-index", label: t("risk.createIndex.label"), scope: t("risk.index.scope", { name: segs[0] }) };
     }
     if (m === "POST" && segs.length === 1 && !segs[0].startsWith("_")) {
-      return { dangerous: true, kind: "bulk", label: "批量写入", scope: `索引 ${segs[0]}` };
+      return { dangerous: true, kind: "bulk", label: t("risk.bulk.label"), scope: t("risk.bulk.scope", { name: segs[0] }) };
     }
     if (segs.length === 1 && segs[0] === "_reindex") {
-      return { dangerous: true, kind: "reindex", label: "重建索引", scope: "跨索引重建" };
+      return { dangerous: true, kind: "reindex", label: t("risk.reindex.label"), scope: t("risk.reindex.scope") };
     }
   }
 
   if (m === "POST" && p === "/_analyze") {
-    return { dangerous: false, kind: "other", label: "分析文本", scope: "无状态变更" };
+    return { dangerous: false, kind: "other", label: t("risk.analyze.label"), scope: t("risk.scope.none") };
   }
   if (m === "POST" && (p.endsWith("/_refresh") || p === "/_refresh")) {
-    return { dangerous: false, kind: "refresh", label: "刷新", scope: "使新文档可搜索" };
+    return { dangerous: false, kind: "refresh", label: t("risk.refresh.label"), scope: t("risk.refresh.scope") };
   }
   if (m === "GET" || m === "HEAD" || m === "POST" && (p.endsWith("/_search") || p === "/_search") || p.endsWith("/_doc/") ) {
-    return { dangerous: false, kind: "other", label: "只读查询", scope: "无状态变更" };
+    return { dangerous: false, kind: "other", label: t("risk.read.label"), scope: t("risk.scope.none") };
   }
-  return { dangerous: false, kind: "other", label: m, scope: "无状态变更" };
+  return { dangerous: false, kind: "other", label: m, scope: t("risk.scope.none") };
 }
 
 // ---------------------------------------------------------------------------

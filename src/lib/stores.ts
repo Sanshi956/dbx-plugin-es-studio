@@ -1,12 +1,11 @@
-/** Full navigation from requirement chapter 4. Items not delivered in P1 are
- *  DISABLED and phase-labelled - requirement 16.4 forbids decorative buttons. */
-export type Phase = "P1" | "P2" | "P3" | "P4" | "P5";
-
+/** Full navigation from requirement chapter 4.
+ *
+ *  Labels are i18n keys, not copy: Nav renders them through t() so switching
+ *  the host language relabels the sidebar without a remount. The phase-era
+ *  badges that used to sit here were build scaffolding and are gone. */
 export interface NavItem {
   id: string;
   label: string;
-  phase: Phase;
-  enabled: boolean;
 }
 
 export interface NavGroup {
@@ -16,47 +15,47 @@ export interface NavGroup {
 }
 
 export const NAV_GROUPS: NavGroup[] = [
-  { id: "overview", label: "Overview", items: [{ id: "overview", label: "Cluster Overview", phase: "P1", enabled: true }] },
+  { id: "overview", label: "nav.group.overview", items: [{ id: "overview", label: "nav.overview" }] },
   {
-    id: "cluster", label: "Cluster", items: [
-      { id: "nodes", label: "Nodes", phase: "P2", enabled: true },
-      { id: "shards", label: "Shards", phase: "P2", enabled: true },
-      { id: "allocation", label: "Allocation", phase: "P3", enabled: true },
-      { id: "cluster-settings", label: "Cluster Settings", phase: "P3", enabled: true },
+    id: "cluster", label: "nav.group.cluster", items: [
+      { id: "nodes", label: "nav.nodes" },
+      { id: "shards", label: "nav.shards" },
+      { id: "allocation", label: "nav.allocation" },
+      { id: "cluster-settings", label: "nav.clusterSettings" },
     ],
   },
   {
-    id: "indices", label: "Indices", items: [
-      { id: "index-list", label: "Index List", phase: "P2", enabled: true },
-      { id: "aliases", label: "Aliases", phase: "P2", enabled: true },
-      { id: "templates", label: "Templates", phase: "P3", enabled: true },
-      { id: "component-templates", label: "Component Templates", phase: "P3", enabled: true },
-      { id: "data-streams", label: "Data Streams", phase: "P3", enabled: true },
-      { id: "lifecycle", label: "Lifecycle", phase: "P3", enabled: true },
+    id: "indices", label: "nav.group.indices", items: [
+      { id: "index-list", label: "nav.indexList" },
+      { id: "aliases", label: "nav.aliases" },
+      { id: "templates", label: "nav.templates" },
+      { id: "component-templates", label: "nav.componentTemplates" },
+      { id: "data-streams", label: "nav.dataStreams" },
+      { id: "lifecycle", label: "nav.lifecycle" },
     ],
   },
-  { id: "documents", label: "Documents", items: [{ id: "browser", label: "Browser", phase: "P2", enabled: true }] },
+  { id: "documents", label: "nav.group.documents", items: [{ id: "browser", label: "nav.browser" }] },
   {
-    id: "query", label: "Query Studio", items: [
-      { id: "query-builder", label: "Query Builder", phase: "P2", enabled: true },
-      { id: "dsl-editor", label: "DSL Editor", phase: "P2", enabled: true },
-      { id: "query-profiler", label: "Query Profiler", phase: "P3", enabled: true },
-      { id: "analyzer", label: "Analyzer", phase: "P2", enabled: true },
+    id: "query", label: "nav.group.query", items: [
+      { id: "query-builder", label: "nav.queryBuilder" },
+      { id: "dsl-editor", label: "nav.dslEditor" },
+      { id: "query-profiler", label: "nav.queryProfiler" },
+      { id: "analyzer", label: "nav.analyzer" },
     ],
   },
-  { id: "rest", label: "REST Console", items: [{ id: "rest-console", label: "REST Console", phase: "P2", enabled: true }] },
+  { id: "rest", label: "nav.group.rest", items: [{ id: "rest-console", label: "nav.restConsole" }] },
   {
-    id: "monitoring", label: "Monitoring", items: [
-      { id: "cluster-metrics", label: "Cluster Metrics", phase: "P4", enabled: true },
-      { id: "node-metrics", label: "Node Metrics", phase: "P4", enabled: true },
-      { id: "history", label: "History", phase: "P4", enabled: true },
+    id: "monitoring", label: "nav.group.monitoring", items: [
+      { id: "cluster-metrics", label: "nav.clusterMetrics" },
+      { id: "node-metrics", label: "nav.nodeMetrics" },
+      { id: "history", label: "nav.history" },
     ],
   },
-  { id: "diagnostics", label: "Diagnostics", items: [{ id: "diagnostics", label: "Cluster Diagnostics", phase: "P4", enabled: true }] },
-  { id: "snapshots", label: "Snapshots", items: [{ id: "snapshots", label: "Snapshots", phase: "P3", enabled: true }] },
-  { id: "tasks", label: "Tasks", items: [{ id: "tasks", label: "Tasks", phase: "P3", enabled: true }] },
-  { id: "compare", label: "Compare", items: [{ id: "compare", label: "Multi-Cluster Compare", phase: "P4", enabled: true }] },
-  { id: "mcp", label: "MCP", items: [{ id: "mcp", label: "MCP Tool Service", phase: "P5", enabled: true }] },
+  { id: "diagnostics", label: "nav.group.diagnostics", items: [{ id: "diagnostics", label: "nav.diagnostics" }] },
+  { id: "snapshots", label: "nav.group.snapshots", items: [{ id: "snapshots", label: "nav.snapshots" }] },
+  { id: "tasks", label: "nav.group.tasks", items: [{ id: "tasks", label: "nav.tasks" }] },
+  { id: "compare", label: "nav.group.compare", items: [{ id: "compare", label: "nav.compare" }] },
+  { id: "mcp", label: "nav.group.mcp", items: [{ id: "mcp", label: "nav.mcp" }] },
 ];
 
 export const DEFAULT_PAGE = "overview";

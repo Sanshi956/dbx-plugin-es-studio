@@ -1,5 +1,6 @@
 <script lang="ts">
   import type { Snippet } from "svelte";
+  import { t } from "../lib/i18n.svelte.js";
 
   interface Props {
     open: boolean;
@@ -25,7 +26,7 @@
           <h3>{title}</h3>
           {#if subtitle}<span class="sub">{subtitle}</span>{/if}
         </div>
-        <button type="button" class="close" aria-label="关闭" onclick={onClose}>✕ Esc</button>
+        <button type="button" class="close" aria-label={t("common.close")} onclick={onClose}>✕ Esc</button>
       </header>
       <div class="body">{@render children()}</div>
     </div>
@@ -63,12 +64,12 @@
     background: var(--es-surface-2);
   }
   .titles { display: flex; align-items: baseline; gap: 8px; min-width: 0; }
-  h3 { margin: 0; font-size: 13px; font-family: var(--es-mono); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-  .sub { font-size: 11px; color: var(--es-muted); font-family: var(--es-mono); }
+  h3 { margin: 0; font-size: var(--es-fs-md); font-family: var(--es-mono); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .sub { font-size: var(--es-fs-xs); color: var(--es-muted); font-family: var(--es-mono); }
   .close {
     flex: 0 0 auto;
     padding: 3px 8px;
-    font-size: 11px;
+    font-size: var(--es-fs-xs);
     font-family: var(--es-mono);
     border: 1px solid var(--es-border);
     border-radius: 6px;

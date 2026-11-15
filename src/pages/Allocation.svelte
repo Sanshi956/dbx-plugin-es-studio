@@ -8,6 +8,7 @@
   } from "../lib/services";
   import type { TableColumn } from "../lib/types";
   import type { DbxBridge } from "../lib/bridge";
+  import { t } from "../lib/i18n.svelte.js";
 
   interface Props {
     bridge: DbxBridge;
@@ -73,9 +74,9 @@
     const failed = results.filter((r) => isError(r));
     editing = null;
     if (failed.length) {
-      toast = `失败：${failed.map((r) => r.error?.message ?? "HTTP " + r.status).join("；")}`;
+      toast = t("common.toast.failed", { detail: failed.map((r) => r.error?.message ?? "HTTP " + r.status).join("; ") });
     } else {
-      toast = `已更新 ${target.index} 的分配设置`;
+      toast = t("alloc.toast.updated", { index: target.index });
     }
     await load();
   }
@@ -90,10 +91,10 @@
   }
 
   const columns: TableColumn[] = [
-    { key: "index", label: "Index", mono: true },
-    { key: "primaryShards", label: "Pri", align: "right" },
-    { key: "replicaShards", label: "Rep", align: "right" },
-    { key: "status", label: "Status", render: (v) => (String(v) === "open" ? "open" : "closed") },
+    { key: "index", label: "index.col.index", mono: true },
+    { key: "primaryShards", label: "alloc.col.pri", align: "right" },
+    { key: "replicaShards", label: "alloc.col.rep", align: "right" },
+    { key: "status", label: "alloc.col.status", render: (v) => (String(v) === "open" ? "open" : "closed") },
     { key: "include", label: "include._name", mono: true },
     { key: "exclude", label: "exclude._name", mono: true },
     { key: "require", label: "require._name", mono: true },
@@ -103,25 +104,25 @@
 <div class="page">
   <header>
     <div>
-      <h1>Allocation</h1>
-      <p>Per-index shard allocation settings plus the real reason unassigned shards cannot be placed.</p>
+      <h1>{t("alloc.title")}</h1>
+      <p>{t("alloc.hint")}</p>
     </div>
     <button type="button" onclick={runExplain} disabled={explaining}>
-      {explaining ? "Explaining…" : "Explain unassigned shard"}
+      {explaining ? t("alloc.explaining") : t("alloc.explain")}
     </button>
   </header>
 
   {#if toast}<div class="toast">{toast}</div>{/if}
-  {#if error}<StateBlock kind="error" message="Failed to read allocation settings" detail={error} />{/if}
+  {#if error}<StateBlock kind="error" message={t("alloc.failed")} detail={error} />{/if}
 
   {#if explain}
     <section class="explain">
       {#if explain.ok}
-        <h2>{explain.index} · shard {explain.shard}{explain.primary ? " (primary)" : " (replica)"}</h2>
+        <h2>{explain.index} · shard {explain.shard}{explain.primary ? t("alloc.role.primary") : t("alloc.role.replica")}</h2>
         <p class="verdict"><span class={explain.canAllocate === "yes" ? "ok" : "bad"}>{explain.canAllocate}</span> {explain.reason}</p>
         {#if explain.nodes.length}
           <table class="mini">
-            <thead><tr><th>Node</th><th>Decision</th><th>Reason</th></tr></thead>
+            <thead><tr><th>{t("alloc.col.node")}</th><th>{t("alloc.col.decision")}</th><th>{t("alloc.col.reason")}</th></tr></thead>
             <tbody>
               {#each explain.nodes as d (d.node)}
                 <tr><td class="mono">{d.node}</td><td>{d.decision}</td><td class="reason">{d.reason}</td></tr>
@@ -131,32 +132,32 @@
         {/if}
         {#if explain.note}<p class="note">{explain.note}</p>{/if}
       {:else}
-        <p class="note">无法解释：{explain.error}</p>
+        <p class="note">{t("alloc.noExplain", { detail: explain.error ?? "" })}</p>
       {/if}
     </section>
   {/if}
 
   {#if editing}
     <section class="editor">
-      <h2>编辑 <code>{editing.index}</code></h2>
+      <h2>{t("alloc.editHeading")} <code>{editing.index}</code></h2>
       <div class="fields">
         <label>number_of_replicas<input type="number" min="0" max="10" bind:value={form.replicas} /></label>
-        <label>include._name<input placeholder="留空 = 移除规则" bind:value={form.include} /></label>
-        <label>exclude._name<input placeholder="留空 = 移除规则" bind:value={form.exclude} /></label>
-        <label>require._name<input placeholder="留空 = 移除规则" bind:value={form.require} /></label>
+        <label>include._name<input placeholder={t("alloc.rulePlaceholder")} bind:value={form.include} /></label>
+        <label>exclude._name<input placeholder={t("alloc.rulePlaceholder")} bind:value={form.exclude} /></label>
+        <label>require._name<input placeholder={t("alloc.rulePlaceholder")} bind:value={form.require} /></label>
       </div>
       <div class="actions">
-        <span class="diff">{changes(editing).join("；") || "无变更"}</span>
-        <button type="button" onclick={() => (editing = null)}>取消</button>
-        <button type="button" class="primary" disabled={changes(editing).length === 0} onclick={() => (pending = true)}>应用</button>
+        <span class="diff">{changes(editing).join("; ") || t("alloc.noChange")}</span>
+        <button type="button" onclick={() => (editing = null)}>{t("common.cancel")}</button>
+        <button type="button" class="primary" disabled={changes(editing).length === 0} onclick={() => (pending = true)}>{t("common.apply")}</button>
       </div>
     </section>
   {/if}
 
   {#if loading}
-    <StateBlock kind="loading" message="Reading /_all/_settings…" />
+    <StateBlock kind="loading" message={t("alloc.reading")} />
   {:else if rows.length === 0}
-    <StateBlock kind="empty" message="No indices" />
+    <StateBlock kind="empty" message={t("alloc.empty")} />
   {:else}
     <DataTable
       columns={columns}
@@ -165,7 +166,7 @@
     />
     <div class="row-actions">
       {#each rows as row (row.index)}
-        <button type="button" class="mini" onclick={() => openEdit(row)}>编辑 {row.index}</button>
+        <button type="button" class="mini" onclick={() => openEdit(row)}>{t("alloc.edit", { index: row.index })}</button>
       {/each}
     </div>
   {/if}
@@ -173,10 +174,10 @@
 
 <ConfirmDanger
   open={pending && editing !== null}
-  title="修改索引分配设置"
-  message="写入 index.number_of_replicas / index.routing.allocation.* 会立即触发分片重新分配，可能造成短暂的副本缺失与数据搬迁。"
-  scope={editing ? `${editing.index}：${changes(editing).join("；")}` : ""}
-  confirmLabel="应用设置"
+  title={t("alloc.confirm.title")}
+  message={t("alloc.confirm.message")}
+  scope={editing ? t("alloc.confirm.scope", { index: editing.index, changes: changes(editing).join("; ") }) : ""}
+  confirmLabel={t("alloc.confirm.label")}
   onConfirm={save}
   onCancel={() => (pending = false)}
 />
@@ -184,28 +185,28 @@
 <style>
   .page { max-width: 1080px; }
   header { display: flex; justify-content: space-between; align-items: start; gap: 16px; margin-bottom: 16px; }
-  h1 { margin: 0 0 4px; font-size: 18px; }
+  h1 { margin: 0 0 4px; font-size: var(--es-fs-3xl); }
   header p { margin: 0; color: var(--es-muted); }
   button { padding: 6px 14px; border: 1px solid var(--es-border); border-radius: 6px; background: var(--es-surface); color: var(--es-text); cursor: pointer; white-space: nowrap; }
   button:hover:not(:disabled):not(.primary) { background: var(--es-surface-2); }
   .primary { background: var(--es-accent); color: #fff; border-color: var(--es-accent); }
   .primary:hover:not(:disabled) { filter: brightness(0.92); }
   button:disabled { opacity: 0.55; cursor: default; }
-  .mini { padding: 3px 8px; font-size: 11px; }
-  .toast { padding: 8px 12px; margin-bottom: 12px; border: 1px solid var(--es-border); border-radius: 6px; background: var(--es-surface-2); font-size: 12px; }
+  .mini { padding: 3px 8px; font-size: var(--es-fs-xs); }
+  .toast { padding: 8px 12px; margin-bottom: 12px; border: 1px solid var(--es-border); border-radius: 6px; background: var(--es-surface-2); font-size: var(--es-fs-sm); }
   .explain, .editor { border: 1px solid var(--es-border); border-radius: var(--es-radius); padding: 14px; margin-bottom: 16px; background: var(--es-surface); }
-  .explain h2, .editor h2 { margin: 0 0 8px; font-size: 13px; }
-  .verdict { margin: 0 0 10px; font-size: 12px; }
+  .explain h2, .editor h2 { margin: 0 0 8px; font-size: var(--es-fs-md); }
+  .verdict { margin: 0 0 10px; font-size: var(--es-fs-sm); }
   .ok { color: var(--es-green); font-weight: 700; }
   .bad { color: var(--es-red); font-weight: 700; }
-  table.mini { width: 100%; border-collapse: collapse; font-size: 11px; }
+  table.mini { width: 100%; border-collapse: collapse; font-size: var(--es-fs-xs); }
   table.mini th, table.mini td { padding: 5px 8px; border-bottom: 1px solid var(--es-border); text-align: left; }
   .reason { white-space: normal; color: var(--es-muted); }
-  .note { margin: 8px 0 0; font-size: 11px; color: var(--es-muted); line-height: 1.6; }
+  .note { margin: 8px 0 0; font-size: var(--es-fs-xs); color: var(--es-muted); line-height: 1.6; }
   .fields { display: flex; gap: 12px; flex-wrap: wrap; margin-bottom: 10px; }
-  .fields label { display: flex; flex-direction: column; gap: 4px; font-size: 11px; color: var(--es-muted); }
+  .fields label { display: flex; flex-direction: column; gap: 4px; font-size: var(--es-fs-xs); color: var(--es-muted); }
   .fields input { padding: 6px 10px; border: 1px solid var(--es-border); border-radius: 6px; background: var(--es-surface); color: var(--es-text); min-width: 180px; }
   .actions { display: flex; align-items: center; gap: 10px; justify-content: flex-end; }
-  .diff { margin-right: auto; font-size: 11px; color: var(--es-muted); font-family: var(--es-mono); }
+  .diff { margin-right: auto; font-size: var(--es-fs-xs); color: var(--es-muted); font-family: var(--es-mono); }
   .row-actions { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 10px; }
 </style>

@@ -10,6 +10,7 @@
 import { batch, isError, num, record, str, type BatchRequest } from "./services";
 import { formatBytes, formatCount } from "./api";
 import type { DbxBridge } from "./bridge";
+import { t } from "./i18n.svelte.js";
 
 export interface ClusterFacts {
   connectionId: string;
@@ -44,12 +45,12 @@ export const SETTING_KEYS = [
 ];
 
 const SETTING_LABEL: Record<string, string> = {
-  "cluster.routing.allocation.enable": "分片分配开关",
-  "cluster.routing.allocation.disk.watermark.low": "磁盘 low 水位",
-  "cluster.routing.allocation.disk.watermark.high": "磁盘 high 水位",
-  "cluster.routing.allocation.disk.watermark.flood_stage": "磁盘 flood 水位",
-  "cluster.blocks.read_only": "集群只读",
-  "cluster.max_shards_per_node": "单节点分片上限",
+  "cluster.routing.allocation.enable": "cmp.setting.enable",
+  "cluster.routing.allocation.disk.watermark.low": "cmp.setting.wmLow",
+  "cluster.routing.allocation.disk.watermark.high": "cmp.setting.wmHigh",
+  "cluster.routing.allocation.disk.watermark.flood_stage": "cmp.setting.wmFlood",
+  "cluster.blocks.read_only": "cmp.setting.readOnly",
+  "cluster.max_shards_per_node": "cmp.setting.maxShards",
 };
 
 export const SETTING_DEFAULT: Record<string, string> = {
@@ -75,7 +76,7 @@ export async function collectFacts(bridge: DbxBridge, connectionId: string): Pro
   const healthResult = results[0];
   if (!healthResult || isError(healthResult)) {
     const detail = healthResult?.error?.message ?? "empty response";
-    throw new Error(`/_cluster/health 失败：${detail}`);
+    throw new Error(t("cmp.healthFailed", { detail }));
   }
   const health = record(healthResult.body);
   const stats = record(results[1]?.body);
@@ -158,33 +159,33 @@ const percent = (value: unknown): string => `${num(value).toFixed(1)}%`;
 export function diffFacts(left: ClusterFacts, right: ClusterFacts): DiffRow[] {
   const out: DiffRow[] = [];
 
-  push(out, "概览", "集群名", left.name, right.name, text);
-  push(out, "概览", "版本", left.version, right.version, text);
-  push(out, "概览", "健康状态", left.health, right.health, text, "green / yellow / red");
+  push(out, "cmp.g.overview", "cmp.i.name", left.name, right.name, text);
+  push(out, "cmp.g.overview", "cmp.i.version", left.version, right.version, text);
+  push(out, "cmp.g.overview", "cmp.i.health", left.health, right.health, text, "cmp.hint.health");
 
-  push(out, "节点", "节点数", left.nodes, right.nodes, count);
-  push(out, "节点", "数据节点", left.dataNodes, right.dataNodes, count);
-  push(out, "节点", "主节点", left.masterNodes, right.masterNodes, count);
-  push(out, "节点", "堆上限", left.heapMaxBytes, right.heapMaxBytes, bytes);
-  push(out, "节点", "堆使用率", left.heapUsedPercent, right.heapUsedPercent, percent);
+  push(out, "cmp.g.nodes", "cmp.i.nodes", left.nodes, right.nodes, count);
+  push(out, "cmp.g.nodes", "cmp.i.dataNodes", left.dataNodes, right.dataNodes, count);
+  push(out, "cmp.g.nodes", "cmp.i.masterNodes", left.masterNodes, right.masterNodes, count);
+  push(out, "cmp.g.nodes", "cmp.i.heapMax", left.heapMaxBytes, right.heapMaxBytes, bytes);
+  push(out, "cmp.g.nodes", "cmp.i.heapUsed", left.heapUsedPercent, right.heapUsedPercent, percent);
 
-  push(out, "分片与容量", "索引数", left.indices, right.indices, count, "_cluster/stats.indices.count（含系统索引）");
-  push(out, "分片与容量", "主分片", left.primary, right.primary, count);
-  push(out, "分片与容量", "活跃分片", left.active, right.active, count);
-  push(out, "分片与容量", "未分配分片", left.unassigned, right.unassigned, count);
-  push(out, "分片与容量", "文档数", left.docs, right.docs, count);
-  push(out, "分片与容量", "存储", left.storeBytes, right.storeBytes, bytes);
-  push(out, "分片与容量", "磁盘总量", left.diskTotalBytes, right.diskTotalBytes, bytes);
-  push(out, "分片与容量", "磁盘可用", left.diskFreeBytes, right.diskFreeBytes, bytes);
+  push(out, "cmp.g.shards", "cmp.i.indices", left.indices, right.indices, count, "cmp.hint.indices");
+  push(out, "cmp.g.shards", "cmp.i.primary", left.primary, right.primary, count);
+  push(out, "cmp.g.shards", "cmp.i.active", left.active, right.active, count);
+  push(out, "cmp.g.shards", "cmp.i.unassigned", left.unassigned, right.unassigned, count);
+  push(out, "cmp.g.shards", "cmp.i.docs", left.docs, right.docs, count);
+  push(out, "cmp.g.shards", "cmp.i.store", left.storeBytes, right.storeBytes, bytes);
+  push(out, "cmp.g.shards", "cmp.i.diskTotal", left.diskTotalBytes, right.diskTotalBytes, bytes);
+  push(out, "cmp.g.shards", "cmp.i.diskFree", left.diskFreeBytes, right.diskFreeBytes, bytes);
 
   for (const key of SETTING_KEYS) {
     const leftValue = left.settings[key] || SETTING_DEFAULT[key] || "";
     const rightValue = right.settings[key] || SETTING_DEFAULT[key] || "";
     out.push({
-      group: "关键设置",
+      group: "cmp.g.settings",
       item: SETTING_LABEL[key] ?? key,
-      left: leftValue || "默认",
-      right: rightValue || "默认",
+      left: leftValue || t("cmp.default"),
+      right: rightValue || t("cmp.default"),
       same: leftValue === rightValue,
       hint: key,
     });
@@ -208,7 +209,7 @@ export function toCsv(rows: DiffRow[], leftLabel: string, rightLabel: string): s
   const escape = (value: string): string => (/[",\n]/.test(value) ? `"${value.replace(/"/g, '""')}"` : value);
   const header = ["group", "item", escape(leftLabel), escape(rightLabel), "same"].join(",");
   const lines = rows.map((row) =>
-    [escape(row.group), escape(row.item), escape(row.left), escape(row.right), row.same ? "yes" : "no"].join(","),
+    [escape(t(row.group)), escape(t(row.item)), escape(row.left), escape(row.right), row.same ? "yes" : "no"].join(","),
   );
   return [header, ...lines].join("\n");
 }

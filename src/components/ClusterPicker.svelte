@@ -1,5 +1,6 @@
 <script lang="ts">
   import type { ConnectionSummary } from "../lib/bridge";
+  import { t } from "../lib/i18n.svelte.js";
 
   interface Props {
     connections: ConnectionSummary[];
@@ -11,28 +12,28 @@
 </script>
 
 <label class="picker">
-  <span class="caption">Cluster</span>
+  <span class="caption">{t("app.cluster")}</span>
   {#if connections.length > 0}
     <select
       value={activeId}
       disabled={busy}
       onchange={(event) => onchange(event.currentTarget.value)}
-      aria-label="Current Elasticsearch cluster"
+      aria-label={t("app.connection.aria")}
     >
       {#each connections as connection (connection.id)}
         <option value={connection.id}>
-          {connection.name}{connection.readOnly ? " · read only" : ""}
+          {connection.name}{connection.readOnly ? t("app.connection.readOnly") : ""}
         </option>
       {/each}
     </select>
   {:else}
-    <span class="none">No connection available</span>
+    <span class="none">{t("app.connection.empty")}</span>
   {/if}
 </label>
 
 <style>
   .picker { display: flex; align-items: center; gap: 8px; }
-  .caption { color: var(--es-muted); font-size: 11px; text-transform: uppercase; letter-spacing: 0.06em; }
+  .caption { color: var(--es-muted); font-size: var(--es-fs-xs); text-transform: uppercase; letter-spacing: 0.06em; }
   select {
     min-width: 180px;
     padding: 5px 8px;

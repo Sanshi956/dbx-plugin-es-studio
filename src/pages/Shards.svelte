@@ -7,6 +7,7 @@
   } from "../lib/services";
   import type { DbxBridge } from "../lib/bridge";
   import type { TableColumn } from "../lib/types";
+  import { t } from "../lib/i18n.svelte.js";
 
   interface Props {
     bridge: DbxBridge;
@@ -23,16 +24,17 @@
   let lastUpdated = $state("");
   let inflight = false;
 
-  /** Chinese label for the four `_cat/shards` states ES actually reports. */
+  /** i18n keys for the four `_cat/shards` states ES actually reports. */
   const STATE_LABEL: Record<string, string> = {
-    STARTED: "已就绪",
-    INITIALIZING: "分配中",
-    RELOCATING: "迁移中",
-    UNASSIGNED: "未分配",
+    STARTED: "shards.state.started",
+    INITIALIZING: "shards.state.initializing",
+    RELOCATING: "shards.state.relocating",
+    UNASSIGNED: "shards.state.unassigned",
   };
 
   function stateText(state: string): string {
-    return STATE_LABEL[state] ?? state;
+    const key = STATE_LABEL[state];
+    return key ? t(key) : state;
   }
 
   async function load(id: string): Promise<void> {
@@ -81,21 +83,21 @@
   );
 
   const columns: TableColumn[] = [
-    { key: "index", label: "Index" },
-    { key: "shard", label: "Shard", align: "right", mono: true },
-    { key: "prirep", label: "Type", align: "center", mono: true },
+    { key: "index", label: "shards.col.index" },
+    { key: "shard", label: "shards.col.shard", align: "right", mono: true },
+    { key: "prirep", label: "shards.col.type", align: "center", mono: true },
     {
       key: "state",
-      label: "State",
+      label: "shards.col.state",
       mono: true,
       render: (v) => `${String(v)} · ${stateText(String(v))}`,
       cellClass: (v) => stateClass(String(v)),
     },
-    { key: "docs", label: "Docs", align: "right", mono: true },
-    { key: "storeBytes", label: "Store", align: "right", mono: true, render: (v) => formatBytes(Number(v)) },
-    { key: "node", label: "Node" },
-    { key: "reason", label: "未分配原因", mono: true, render: (v) => (String(v) ? String(v) : "—") },
-    { key: "waiting", label: "已等待", mono: true, render: (v) => (String(v) ? String(v) : "—") },
+    { key: "docs", label: "shards.col.docs", align: "right", mono: true },
+    { key: "storeBytes", label: "shards.col.store", align: "right", mono: true, render: (v) => formatBytes(Number(v)) },
+    { key: "node", label: "shards.col.node" },
+    { key: "reason", label: "shards.col.reason", mono: true, render: (v) => (String(v) ? String(v) : "—") },
+    { key: "waiting", label: "shards.col.waiting", mono: true, render: (v) => (String(v) ? String(v) : "—") },
   ];
 
   function formatBytes(value: number): string {
@@ -132,60 +134,60 @@
 <div class="page">
   <header>
     <div>
-      <h1>Shards &amp; Topology</h1>
-      <p>Shard copies from <code>/_cat/shards</code>, plus an index × node matrix.</p>
+      <h1>{t("shards.title")}</h1>
+      <p>{t("shards.hintPrefix")}<code>/_cat/shards</code>{t("shards.hintSuffix")}</p>
     </div>
     <div class="head-actions">
-      <label class="auto"><input type="checkbox" bind:checked={autoRefresh} />有在途分片时每 2s 自动刷新</label>
+      <label class="auto"><input type="checkbox" bind:checked={autoRefresh} />{t("shards.autoRefresh")}</label>
       <button type="button" onclick={() => load(connectionId)} disabled={loading || !connectionId}>
-        {loading ? "Loading…" : "Refresh"}
+        {loading ? t("common.loading") : t("common.refresh")}
       </button>
     </div>
   </header>
 
   {#if loading && shards.length === 0}
-    <StateBlock kind="loading" message="Loading shards…" detail="GET /_cat/shards" />
+    <StateBlock kind="loading" message={t("shards.loadingMessage")} detail="GET /_cat/shards" />
   {:else if error}
-    <StateBlock kind="error" message="Could not load shards" detail={error === "NO_CONNECTION" ? "No DBX connection is selected." : error} />
+    <StateBlock kind="error" message={t("shards.loadFailed")} detail={error === "NO_CONNECTION" ? t("common.noConnection") : error} />
   {:else if shards.length === 0}
-    <StateBlock kind="empty" message="No shards returned" />
+    <StateBlock kind="empty" message={t("shards.empty")} />
   {:else}
     <section class="summary">
       <div class="card started">
         <span class="num">{summary.started}</span>
-        <span class="lbl">已就绪 STARTED</span>
+        <span class="lbl">{t("shards.card.started")}</span>
       </div>
       <div class="card initializing" class:active={summary.initializing > 0}>
         <span class="num">{summary.initializing}</span>
-        <span class="lbl">分配中 INITIALIZING</span>
+        <span class="lbl">{t("shards.card.initializing")}</span>
       </div>
       <div class="card relocating" class:active={summary.relocating > 0}>
         <span class="num">{summary.relocating}</span>
-        <span class="lbl">迁移中 RELOCATING</span>
+        <span class="lbl">{t("shards.card.relocating")}</span>
       </div>
       <div class="card unassigned" class:active={summary.unassigned > 0}>
         <span class="num">{summary.unassigned}</span>
-        <span class="lbl">未分配 UNASSIGNED</span>
+        <span class="lbl">{t("shards.card.unassigned")}</span>
       </div>
     </section>
 
     {#if summary.inFlight > 0}
       <p class="inflight">
-        正在搬运 <strong>{summary.inFlight}</strong> 个分片副本（分配中 {summary.initializing} · 迁移中 {summary.relocating}）
-        {#if autoRefresh}<span class="muted">· 每 2s 自动刷新</span>{/if}
+        {t("shards.inflight", { count: summary.inFlight, initializing: summary.initializing, relocating: summary.relocating })}
+        {#if autoRefresh}<span class="muted">{t("shards.autoRefreshNote")}</span>{/if}
       </p>
     {:else if summary.unassigned > 0}
-      <p class="inflight note"><strong>{summary.unassigned}</strong> 个副本未分配，原因见下表「未分配原因」。</p>
+      <p class="inflight note">{t("shards.unassignedNote", { count: summary.unassigned })}</p>
     {/if}
 
-    <h2>Topology matrix <span class="asof">{lastUpdated ? `updated ${lastUpdated}` : ""}</span></h2>
+    <h2>{t("shards.matrix.title")} <span class="asof">{lastUpdated ? t("shards.matrix.updated", { time: lastUpdated }) : ""}</span></h2>
     <div class="matrix-wrap">
       <table class="matrix">
         <thead>
           <tr>
-            <th class="corner">Index</th>
+            <th class="corner">{t("shards.matrix.index")}</th>
             {#each matrix.nodes as node (node)}<th>{node}</th>{/each}
-            <th class="unassigned-col">Unassigned</th>
+            <th class="unassigned-col">{t("shards.matrix.unassigned")}</th>
           </tr>
         </thead>
         <tbody>
@@ -201,7 +203,7 @@
               {/each}
               <td class="unassigned-col">
                 {#each unassignedTags(index) as tag (tag.key)}
-                  <span class="shard unassigned" title="未分配">{tag.label}</span>
+                  <span class="shard unassigned" title={t("shards.matrix.unassigned")}>{tag.label}</span>
                 {/each}
               </td>
             </tr>
@@ -210,7 +212,7 @@
       </table>
     </div>
 
-    <h2>Shard allocation <span class="asof">{summary.total} copies</span></h2>
+    <h2>{t("shards.table.title")} <span class="asof">{t("shards.table.copies", { count: summary.total })}</span></h2>
     <DataTable
       columns={columns}
       rows={tableRows}
@@ -223,13 +225,13 @@
 <style>
   .page { max-width: 1240px; }
   header { display: flex; justify-content: space-between; align-items: flex-start; gap: 16px; margin-bottom: 16px; }
-  h1 { margin: 0 0 6px; font-size: 18px; }
-  h2 { margin: 22px 0 10px; font-size: 12px; text-transform: uppercase; letter-spacing: 0.08em; color: var(--es-muted); }
-  h2 .asof { margin-left: 8px; font-size: 10px; letter-spacing: 0; text-transform: none; font-family: var(--es-mono); }
+  h1 { margin: 0 0 6px; font-size: var(--es-fs-3xl); }
+  h2 { margin: 22px 0 10px; font-size: var(--es-fs-sm); text-transform: uppercase; letter-spacing: 0.08em; color: var(--es-muted); }
+  h2 .asof { margin-left: 8px; font-size: var(--es-fs-2xs); letter-spacing: 0; text-transform: none; font-family: var(--es-mono); }
   header p { margin: 0; color: var(--es-muted); }
-  header code { font-family: var(--es-mono); font-size: 11px; }
+  header code { font-family: var(--es-mono); font-size: var(--es-fs-xs); }
   .head-actions { display: flex; align-items: center; gap: 12px; flex: 0 0 auto; }
-  .auto { display: flex; align-items: center; gap: 6px; font-size: 11px; color: var(--es-muted); white-space: nowrap; }
+  .auto { display: flex; align-items: center; gap: 6px; font-size: var(--es-fs-xs); color: var(--es-muted); white-space: nowrap; }
   button { padding: 6px 14px; border: 1px solid var(--es-border); border-radius: 6px; background: var(--es-surface); color: var(--es-text); cursor: pointer; }
   button:hover:not(:disabled):not(.primary) { background: var(--es-surface-2); }
   .primary:hover:not(:disabled) { filter: brightness(0.92); }
@@ -237,8 +239,8 @@
 
   .summary { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px; }
   .card { display: flex; flex-direction: column; gap: 3px; padding: 10px 12px; border: 1px solid var(--es-border); border-radius: var(--es-radius); background: var(--es-surface); border-left-width: 3px; }
-  .card .num { font-family: var(--es-mono); font-size: 20px; font-weight: 600; line-height: 1.1; }
-  .card .lbl { font-size: 11px; color: var(--es-muted); font-family: var(--es-mono); }
+  .card .num { font-family: var(--es-mono); font-size: var(--es-fs-4xl); font-weight: 600; line-height: 1.1; }
+  .card .lbl { font-size: var(--es-fs-xs); color: var(--es-muted); font-family: var(--es-mono); }
   .card.started { border-left-color: var(--es-green); }
   .card.started .num { color: var(--es-green); }
   .card.initializing { border-left-color: var(--es-accent); }
@@ -252,17 +254,17 @@
   .card.unassigned.active { background: color-mix(in srgb, var(--es-red) 6%, var(--es-surface)); }
   .card.unassigned.active .num { color: var(--es-red); }
 
-  .inflight { margin: 12px 0 0; padding: 6px 12px; font-size: 12px; border: 1px solid var(--es-accent); border-radius: var(--es-radius); background: var(--es-accent-soft); color: var(--es-text); }
+  .inflight { margin: 12px 0 0; padding: 6px 12px; font-size: var(--es-fs-sm); border: 1px solid var(--es-accent); border-radius: var(--es-radius); background: var(--es-accent-soft); color: var(--es-text); }
   .inflight.note { border-color: var(--es-border); background: var(--es-surface-2); color: var(--es-muted); }
   .inflight .muted { color: var(--es-muted); }
 
   .matrix-wrap { overflow-x: auto; border: 1px solid var(--es-border); border-radius: var(--es-radius); }
-  table.matrix { border-collapse: collapse; font-size: 11px; width: 100%; }
+  table.matrix { border-collapse: collapse; font-size: var(--es-fs-xs); width: 100%; }
   .matrix th, .matrix td { border: 1px solid var(--es-border); padding: 6px 8px; vertical-align: top; }
   .matrix .corner, .matrix .rowhead { background: var(--es-surface-2); text-align: left; font-weight: 600; white-space: nowrap; }
   .matrix .unassigned-col { background: var(--es-surface-2); }
-  .shard { display: inline-block; margin: 1px; padding: 1px 5px; border-radius: 4px; font-family: var(--es-mono); font-size: 10px; border: 1px solid var(--es-border); }
-  .shard.inline { font-size: 10px; }
+  .shard { display: inline-block; margin: 1px; padding: 1px 5px; border-radius: 4px; font-family: var(--es-mono); font-size: var(--es-fs-2xs); border: 1px solid var(--es-border); }
+  .shard.inline { font-size: var(--es-fs-2xs); }
   .shard.started { color: var(--es-green); }
   .shard.initializing { color: var(--es-accent); border-color: var(--es-accent); background: var(--es-accent-soft); }
   .shard.relocating { color: var(--es-yellow); border-color: var(--es-yellow); }

@@ -1,14 +1,17 @@
 <script lang="ts">
   import type { TableColumn } from "../lib/types";
+  import { t } from "../lib/i18n.svelte.js";
 
   interface Props {
     columns: TableColumn[];
     rows: Record<string, unknown>[];
     sortable?: boolean;
+    /** Empty means "use the translated default"; resolved in the template so a
+     *  language switch re-renders it. */
     emptyText?: string;
     rowKey?: (row: Record<string, unknown>) => string;
   }
-  let { columns, rows, sortable = true, emptyText = "No data", rowKey }: Props = $props();
+  let { columns, rows, sortable = true, emptyText = "", rowKey }: Props = $props();
 
   let sortKey = $state("");
   let sortDir = $state<"asc" | "desc">("asc");
@@ -50,7 +53,7 @@
 
 <div class="table-wrap">
   {#if sorted.length === 0}
-    <div class="empty">{emptyText}</div>
+    <div class="empty">{emptyText || t("common.noData")}</div>
   {:else}
     <table>
       <thead>
@@ -62,7 +65,7 @@
               class:center={col.align === "center"}
               onclick={() => col.sortable !== false && toggleSort(col.key)}
             >
-              {col.label}
+              {t(col.label)}
               {#if sortable && sortKey === col.key}
                 <span class="sort">{sortDir === "asc" ? "▲" : "▼"}</span>
               {/if}
@@ -90,7 +93,7 @@
 
 <style>
   .table-wrap { overflow-x: auto; border: 1px solid var(--es-border); border-radius: var(--es-radius); }
-  table { width: 100%; border-collapse: collapse; font-size: 12px; }
+  table { width: 100%; border-collapse: collapse; font-size: var(--es-fs-sm); }
   th, td { padding: 8px 12px; text-align: left; border-bottom: 1px solid var(--es-border); white-space: nowrap; }
   th { background: var(--es-surface-2); color: var(--es-muted); font-weight: 600; position: sticky; top: 0; }
   th.sortable { cursor: pointer; user-select: none; }
@@ -98,6 +101,6 @@
   th.center, td.center { text-align: center; }
   td.mono { font-family: var(--es-mono); }
   tbody tr:hover { background: var(--es-surface-2); }
-  .sort { font-size: 9px; margin-left: 4px; }
+  .sort { font-size: var(--es-fs-2xs); margin-left: 4px; }
   .empty { padding: 18px; text-align: center; color: var(--es-muted); }
 </style>

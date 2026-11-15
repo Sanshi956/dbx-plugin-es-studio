@@ -1,4 +1,6 @@
 <script lang="ts">
+  import { t } from "../lib/i18n.svelte.js";
+
   interface Props {
     health: string;
   }
@@ -6,14 +8,14 @@
   let cls = $derived.by(() => (["green", "yellow", "red"].includes(health) ? health : "unknown"));
 </script>
 
-<span class="badge {cls}">{health || "unknown"}</span>
+<span class="badge {cls}">{health || t("common.unknown")}</span>
 
 <style>
   .badge {
     display: inline-block;
     padding: 2px 9px;
     border-radius: 999px;
-    font-size: 11px;
+    font-size: var(--es-fs-xs);
     font-weight: 700;
     text-transform: uppercase;
     border: 1px solid var(--es-border);

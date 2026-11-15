@@ -58,33 +58,54 @@ func TestVersionDetectEngine(t *testing.T) {
 }
 
 func TestVersionCapabilities(t *testing.T) {
-	v7, err := ParseVersion("7.17.9")
-	if err != nil {
-		t.Fatal(err)
+	// Each case is the version that introduced the feature, not a round number:
+	// the matrix gates real API calls, so the boundary itself is the assertion.
+	cases := []struct {
+		raw        string
+		typed      bool
+		ilm        bool
+		component  bool
+		dataStream bool
+		pit        bool
+		esql       bool
+	}{
+		{"6.8.23", true, true, false, false, false, false},
+		{"7.7.0", true, true, false, false, false, false},
+		{"7.8.0", true, true, true, false, false, false},
+		{"7.9.0", true, true, true, true, false, false},
+		{"7.10.0", true, true, true, true, true, false},
+		{"7.17.9", true, true, true, true, true, false},
+		{"8.0.0", false, true, true, true, true, false},
+		{"8.11.0", false, true, true, true, true, true},
+		{"8.19.23", false, true, true, true, true, true},
+		{"9.0.0", false, true, true, true, true, true},
 	}
-	c7, err := Capabilities(v7)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if !c7.TypedAPI || c7.DataStreams {
-		t.Fatalf("ES 7.x: typedAPI must be true and dataStreams false, got %+v", c7)
+	for _, tc := range cases {
+		v, err := ParseVersion(tc.raw)
+		if err != nil {
+			t.Fatalf("parse %s: %v", tc.raw, err)
+		}
+		c, err := Capabilities(v, EngineElasticsearch)
+		if err != nil {
+			t.Fatalf("capabilities %s: %v", tc.raw, err)
+		}
+		if c.TypedAPI != tc.typed || c.ILM != tc.ilm || c.ComponentTemplates != tc.component ||
+			c.DataStreams != tc.dataStream || c.PIT != tc.pit || c.ESQL != tc.esql {
+			t.Fatalf("ES %s: unexpected matrix %+v", tc.raw, c)
+		}
+		if c.Engine != EngineElasticsearch {
+			t.Fatalf("ES %s: engine not carried through: %q", tc.raw, c.Engine)
+		}
 	}
 
-	for _, raw := range []string{"8.19.23", "9.0.0"} {
-		v, err := ParseVersion(raw)
-		if err != nil {
-			t.Fatal(err)
-		}
-		c, err := Capabilities(v)
-		if err != nil {
-			t.Fatal(err)
-		}
-		if c.TypedAPI || !c.DataStreams || !c.ComponentTemplates || !c.PIT {
-			t.Fatalf("ES %s: unexpected capability matrix %+v", raw, c)
-		}
-	}
-
-	if _, err := Capabilities(Version{}); !errors.Is(err, ErrUnknownVersion) {
+	if _, err := Capabilities(Version{}, EngineElasticsearch); !errors.Is(err, ErrUnknownVersion) {
 		t.Fatalf("unknown version must return ErrUnknownVersion, got %v", err)
+	}
+	other, err := Capabilities(Version{Major: 2, Minor: 11}, EngineOpenSearch)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if other.Engine != EngineOpenSearch {
+		t.Fatalf("engine must travel with the matrix, got %q", other.Engine)
 	}
 }

@@ -327,8 +327,7 @@ func (h *Handler) testWith(cfg connection.Config, client *es.Client) (any, *dbxp
 		"message":      fmt.Sprintf("ES %s at %s", version, cfg.BaseURL()),
 	}
 	if parsed, err := es.ParseVersion(version); err == nil {
-		if caps, err := es.Capabilities(parsed); err == nil {
-			caps.Engine = es.Engine(engine)
+		if caps, err := es.Capabilities(parsed, es.Engine(engine)); err == nil {
 			result["capabilities"] = caps
 		}
 	}

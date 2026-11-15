@@ -6,6 +6,7 @@
 
 import { invoke } from "./api";
 import type { DbxBridge } from "./bridge";
+import { t } from "./i18n.svelte.js";
 
 export interface McpArg {
   name: string;
@@ -96,16 +97,16 @@ export interface McpGrantResult {
 }
 
 const ERRORS: Record<string, string> = {
-  "-32002": "该连接尚未在 DBX 中打开（先点连接节点，再授权）",
-  "-32003": "MCP 只读：写操作被拒绝",
-  "-32602": "参数不符合工具声明",
+  "-32002": "mcp.error.noConnection",
+  "-32003": "mcp.error.readOnly",
+  "-32602": "mcp.error.badArgs",
 };
 
 /** Turn a Sidecar error into a sentence the page can show. */
 export function mcpErrorText(cause: unknown): string {
   const message = cause instanceof Error ? cause.message : String(cause);
   const match = /(-32\d{3})/.exec(message);
-  if (match && ERRORS[match[1]]) return `${ERRORS[match[1]]}（${match[1]}）`;
+  if (match && ERRORS[match[1]]) return `${t(ERRORS[match[1]])} (${match[1]})`;
   return message;
 }
 
@@ -140,13 +141,13 @@ export function revokeGrant(bridge: DbxBridge, connectionId: string): Promise<{ 
 
 /** Category labels for the tool catalogue groups. */
 export const CATEGORY_LABEL: Record<string, string> = {
-  cluster: "集群",
-  index: "索引",
-  doc: "文档与查询",
-  template: "模板",
-  stream: "数据流",
-  ilm: "生命周期",
-  snapshot: "快照",
-  task: "任务",
-  advanced: "高级",
+  cluster: "mcp.cat.cluster",
+  index: "mcp.cat.index",
+  doc: "mcp.cat.doc",
+  template: "mcp.cat.template",
+  stream: "mcp.cat.stream",
+  ilm: "mcp.cat.ilm",
+  snapshot: "mcp.cat.snapshot",
+  task: "mcp.cat.task",
+  advanced: "mcp.cat.advanced",
 };

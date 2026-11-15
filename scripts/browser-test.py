@@ -16,21 +16,21 @@ CHROME = r"C:/Program Files/Google/Chrome/Application/chrome.exe"
 
 PAGES = [
     # (nav_label, expected_text_in_rendered_page)
-    ("Cluster Overview", "es-studio-test"),
-    ("Nodes", "es-studio-node-1"),
-    ("Shards", "products"),
-    ("Index List", "archived-2023"),
-    ("Aliases", "prod-view"),
+    ("集群概览", "es-studio-test"),
+    ("节点", "es-studio-node-1"),
+    ("分片", "products"),
+    ("索引列表", "archived-2023"),
+    ("别名", "prod-view"),
     # P3
-    ("Allocation", "include._name"),
-    ("Cluster Settings", "Persistent"),
-    ("Templates", "p3-demo-template"),
-    ("Component Templates", "p3-demo-component"),
-    ("Data Streams", "logs-p3-demo"),
-    ("Lifecycle", "p3-demo-policy"),
-    ("Query Profiler", "Run profile"),
-    ("Snapshots", "p3-fs-repo"),
-    ("Tasks", "In-flight node tasks"),
+    ("分片分配", "include._name"),
+    ("集群设置", "写入 / 移除设置"),
+    ("索引模板", "p3-demo-template"),
+    ("组件模板", "p3-demo-component"),
+    ("数据流", "logs-p3-demo"),
+    ("生命周期", "p3-demo-policy"),
+    ("查询剖析", "运行剖析"),
+    ("快照", "p3-fs-repo"),
+    ("任务", "在途节点任务"),
 ]
 
 
@@ -97,43 +97,43 @@ def run(base_url, out_dir, ro_delete=False):
         # ---- Browser: field list from mapping + keyword search + field scoping ----
         rec = {"step": "interact:browser", "expect": "field list + keyword search", "ok": False}
         try:
-            click_nav(page, "Browser")
-            page.locator('label:has-text("Index") select').select_option("products")
+            click_nav(page, "文档浏览")
+            page.locator('label:has-text("索引") select').select_option("products")
 
             # The field dropdown must be fed by GET /products/_mapping, so the
             # user never has to type a field name by hand.
             # <option> inside a closed <select> has no layout box, so it never
             # counts as "visible" — wait for attachment instead.
             page.wait_for_selector(
-                'label:has-text("Search in") select option[value="name"]',
+                'label:has-text("搜索字段") select option[value="name"]',
                 state="attached", timeout=20000,
             )
-            opts = page.locator('label:has-text("Search in") select option').all_inner_texts()
-            assert any(o.startswith("All fields") for o in opts), opts
+            opts = page.locator('label:has-text("搜索字段") select option').all_inner_texts()
+            assert any(o.startswith("全部字段") for o in opts), opts
             for expect_field in ("name", "name.kw", "category", "price"):
                 assert any(o.startswith(expect_field + " ·") for o in opts), (expect_field, opts)
             rec["fields"] = opts
 
             # 1) empty keyword -> match_all
-            page.get_by_role("button", name="Search documents", exact=True).click()
+            page.get_by_role("button", name="搜索文档", exact=True).click()
             wait_text(page, "match_all", timeout=20000)
 
             # 2) keyword with no field -> multi_match over all fields
             page.locator("label.grow input").fill("Mouse")
-            page.get_by_role("button", name="Search documents", exact=True).click()
+            page.get_by_role("button", name="搜索文档", exact=True).click()
             wait_text(page, "Wireless Mouse", timeout=20000)
             shot("ix-browser-search-all")
 
             # 3) scope to a concrete field -> metadata says which field matched
-            page.locator('label:has-text("Search in") select').select_option("name")
-            page.get_by_role("button", name="Search documents", exact=True).click()
+            page.locator('label:has-text("搜索字段") select').select_option("name")
+            page.get_by_role("button", name="搜索文档", exact=True).click()
             wait_text(page, 'name ~ "Mouse"', timeout=20000)
             shot("ix-browser-search-field")
 
             # 4) scoping must actually narrow: "Mouse" is not in category
-            page.locator('label:has-text("Search in") select').select_option("category")
-            page.get_by_role("button", name="Search documents", exact=True).click()
-            wait_text(page, "No documents matched", timeout=20000)
+            page.locator('label:has-text("搜索字段") select').select_option("category")
+            page.get_by_role("button", name="搜索文档", exact=True).click()
+            wait_text(page, "没有匹配的文档", timeout=20000)
             shot("ix-browser-scoped-empty")
             rec["ok"] = True
         except Exception as e:
@@ -145,7 +145,7 @@ def run(base_url, out_dir, ro_delete=False):
         # ---- Query Builder (match name=Mouse) ----
         rec = {"step": "interact:querybuilder", "expect": "Wireless Mouse", "ok": False}
         try:
-            click_nav(page, "Query Builder")
+            click_nav(page, "查询构建器")
             page.locator("section.bar select").first.select_option("products")
             page.wait_for_function(
                 "() => { const el = document.querySelector('.fcount');"
@@ -156,7 +156,7 @@ def run(base_url, out_dir, ro_delete=False):
             page.locator("div.clause select.field").first.select_option("name")
             page.wait_for_timeout(200)
             page.locator("div.clause input.value").first.fill("Mouse")
-            page.get_by_role("button", name="Run query", exact=True).click()
+            page.get_by_role("button", name="执行查询", exact=True).click()
             wait_text(page, "Wireless Mouse", timeout=20000)
             time.sleep(0.3)
             shot("ix-querybuilder-match")
@@ -170,8 +170,8 @@ def run(base_url, out_dir, ro_delete=False):
         # ---- DSL Editor (default match_all) ----
         rec = {"step": "interact:dsleditor", "expect": "total", "ok": False}
         try:
-            click_nav(page, "DSL Editor")
-            page.get_by_role("button", name="Run", exact=True).click()
+            click_nav(page, "DSL 编辑器")
+            page.get_by_role("button", name="运行", exact=True).click()
             wait_text(page, "total", timeout=20000)
             time.sleep(0.3)
             shot("ix-dsleditor-run")
@@ -183,16 +183,16 @@ def run(base_url, out_dir, ro_delete=False):
         results.append(rec)
 
         # ---- Analyzer ----
-        rec = {"step": "interact:analyzer", "expect": "tokens", "ok": False}
+        rec = {"step": "interact:analyzer", "expect": "词元", "ok": False}
         try:
-            click_nav(page, "Analyzer")
+            click_nav(page, "分词分析")
             page.locator("section.form select").first.select_option("products")
             page.wait_for_selector(
                 'section.form select option[value="name"]', state="attached", timeout=20000
             )
             page.locator("section.form select").nth(1).select_option("name")
-            page.get_by_role("button", name="Analyze", exact=True).click()
-            wait_text(page, "tokens", timeout=20000)
+            page.get_by_role("button", name="分析", exact=True).click()
+            wait_text(page, "词元", timeout=20000)
             time.sleep(0.3)
             shot("ix-analyzer")
             rec["ok"] = True
@@ -205,8 +205,8 @@ def run(base_url, out_dir, ro_delete=False):
         # ---- REST Console (GET /_cluster/health) ----
         rec = {"step": "interact:restconsole", "expect": "cluster_name", "ok": False}
         try:
-            click_nav(page, "REST Console")
-            page.get_by_role("button", name="Send", exact=True).click()
+            click_nav(page, "REST 控制台")
+            page.get_by_role("button", name="发送", exact=True).click()
             wait_text(page, "cluster_name", timeout=20000)
             time.sleep(0.3)
             shot("ix-restconsole-health")
@@ -221,12 +221,12 @@ def run(base_url, out_dir, ro_delete=False):
         if ro_delete:
             rec = {"step": "readonly:delete-rejected", "expect": "-32003", "ok": False}
             try:
-                click_nav(page, "REST Console")
+                click_nav(page, "REST 控制台")
                 # Two <select> exist on the page (connection picker + method):
                 # target the request bar explicitly.
                 page.locator("section.bar select").select_option("DELETE")
                 page.locator('input.path').fill("/products")
-                page.get_by_role("button", name="Send", exact=True).click()
+                page.get_by_role("button", name="发送", exact=True).click()
                 wait_text(page, "-32003", timeout=20000)
                 time.sleep(0.3)
                 shot("ro-restconsole-delete-rejected")
@@ -240,8 +240,8 @@ def run(base_url, out_dir, ro_delete=False):
         # ---- Index List danger-confirm modal (open, then cancel) ----
         rec = {"step": "interact:indexlist-danger-modal", "expect": "ES REST", "ok": False}
         try:
-            click_nav(page, "Index List")
-            page.locator('table.ix tbody tr:has-text("products") button:has-text("Close")').click()
+            click_nav(page, "索引列表")
+            page.locator('table.ix tbody tr:has-text("products") button:has-text("关闭索引")').click()
             wait_text(page, "ES REST", timeout=10000)
             time.sleep(0.3)
             shot("ix-indexlist-danger")
@@ -260,8 +260,8 @@ def run(base_url, out_dir, ro_delete=False):
         # ---- Allocation: explain an unassigned shard (read-only, real reason) ----
         rec = {"step": "interact:allocation-explain", "expect": "explain panel", "ok": False}
         try:
-            click_nav(page, "Allocation")
-            page.get_by_role("button", name="Explain unassigned shard").click()
+            click_nav(page, "分片分配")
+            page.get_by_role("button", name="解析未分配分片").click()
             page.wait_for_selector(".explain", timeout=20000)
             text = page.locator(".explain").inner_text()
             assert ("allocate" in text.lower()) or ("shard" in text.lower()), text
@@ -275,13 +275,13 @@ def run(base_url, out_dir, ro_delete=False):
         results.append(rec)
 
         # ---- Query Profiler: real profile tree on products ----
-        rec = {"step": "interact:profiler", "expect": "Query tree", "ok": False}
+        rec = {"step": "interact:profiler", "expect": "查询树", "ok": False}
         try:
-            click_nav(page, "Query Profiler")
+            click_nav(page, "查询剖析")
             page.locator("section.bar select").select_option("products")
-            page.get_by_role("button", name="Run profile").click()
+            page.get_by_role("button", name="运行剖析").click()
             # the <h2> is text-transformed to uppercase, and innerText follows CSS
-            wait_text(page, "QUERY TREE", timeout=20000)
+            wait_text(page, "查询树", timeout=20000)
             time.sleep(0.3)
             shot("ix-profiler")
             rec["ok"] = True
@@ -295,10 +295,10 @@ def run(base_url, out_dir, ro_delete=False):
         if os.environ.get("TASK_DEMO") == "1":
             rec = {"step": "interact:tasks-live", "expect": "indices:data/write/reindex", "ok": False}
             try:
-                click_nav(page, "Tasks")
+                click_nav(page, "任务")
                 wait_text(page, "indices:data/write/reindex", timeout=20000)
                 row = page.locator("tr", has_text="indices:data/write/reindex").first
-                assert row.locator("button", has_text="Cancel").is_enabled(), "Cancel should be enabled"
+                assert row.locator("button", has_text="取消").is_enabled(), "Cancel should be enabled"
                 time.sleep(0.3)
                 shot("ix-tasks-live")
                 rec["ok"] = True

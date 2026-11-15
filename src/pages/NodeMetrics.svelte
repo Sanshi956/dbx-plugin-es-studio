@@ -6,6 +6,7 @@
     type MonitorSample, type MonitorStatus,
   } from "../lib/services";
   import type { DbxBridge } from "../lib/bridge";
+  import { t } from "../lib/i18n.svelte.js";
   import type { ChartSeries } from "../lib/types";
 
   interface Props {
@@ -125,54 +126,54 @@
 <div class="page">
   <header>
     <div>
-      <h1>Node Metrics</h1>
-      <p>Per-node heap, CPU and load from the same sidecar series as Cluster Metrics.</p>
+      <h1>{t("nm.title")}</h1>
+      <p>{t("nm.hint")}</p>
     </div>
-    <span class="live" class:on={status?.running}>{status?.running ? "采集中" : "已停止"}</span>
+    <span class="live" class:on={status?.running}>{status?.running ? t("mc.running") : t("mc.stopped")}</span>
   </header>
 
   {#if error && error !== "NO_CONNECTION"}
-    <StateBlock kind="error" message="Could not read the monitoring series" detail={error} />
+    <StateBlock kind="error" message={t("mc.readFailed")} detail={error} />
   {:else if error === "NO_CONNECTION"}
-    <StateBlock kind="error" message="No connection selected" detail="Select a connected cluster first." />
+    <StateBlock kind="error" message={t("mc.noConnection")} detail={t("mc.noConnectionDetail")} />
   {:else if loading && samples.length === 0}
-    <StateBlock kind="loading" message="Reading collected samples…" detail="mon/history" />
+    <StateBlock kind="loading" message={t("mc.reading")} detail="mon/history" />
   {:else if samples.length === 0}
-    <StateBlock kind="empty" message="还没有采样点" detail="打开 Cluster Metrics 点「立即采样」，或等待采集周期" />
+    <StateBlock kind="empty" message={t("nm.empty")} detail={t("nm.emptyDetail")} />
   {:else}
     <section class="bar">
-      <span class="lbl">节点</span>
+      <span class="lbl">{t("nm.lbl.node")}</span>
       {#each nodeNames() as name (name)}
         <button type="button" class="chip" class:on={isOn(name)} onclick={() => toggle(name)}>
           <i style={`background:${colorOf(name)}`}></i>{name}
         </button>
       {/each}
-      <span class="foot">{selected.length === 0 ? "全部节点" : `${selected.length} / ${nodeNames().length}`}</span>
+      <span class="foot">{selected.length === 0 ? t("nm.allNodes") : `${selected.length} / ${nodeNames().length}`}</span>
     </section>
 
     <section class="grid">
       <div class="panel">
-        <h2>Heap %</h2>
+        <h2>{t("nm.sec.heap")}</h2>
         <MetricChart series={seriesFor((node) => node.heapPercent)} yMax={100} format={(value) => `${value.toFixed(0)}%`} />
       </div>
       <div class="panel">
-        <h2>CPU %</h2>
+        <h2>{t("nm.sec.cpu")}</h2>
         <MetricChart series={seriesFor((node) => node.cpuPercent)} yMax={100} format={(value) => `${value.toFixed(0)}%`} />
       </div>
       <div class="panel">
-        <h2>Load 1m</h2>
+        <h2>{t("nm.sec.load")}</h2>
         <MetricChart series={seriesFor((node) => node.load1)} format={(value) => value.toFixed(2)} />
       </div>
       <div class="panel">
-        <h2>Latest sample</h2>
+        <h2>{t("nm.latest")}</h2>
         <table>
           <thead>
             <tr>
-              <th>Node</th>
-              <th class="right" title="JVM 堆使用百分比">Heap</th>
-              <th class="right" title="进程 CPU 使用百分比">CPU</th>
-              <th class="right" title="系统 1 分钟平均负载">Load 1m</th>
-              <th class="right" title="数据盘已用百分比">Disk</th>
+              <th>{t("nm.col.node")}</th>
+              <th class="right" title={t("nm.tip.heap")}>{t("nm.col.heap")}</th>
+              <th class="right" title={t("nm.tip.cpu")}>{t("nm.col.cpu")}</th>
+              <th class="right" title={t("nm.tip.load")}>{t("nm.col.load")}</th>
+              <th class="right" title={t("nm.tip.disk")}>{t("nm.col.disk")}</th>
             </tr>
           </thead>
           <tbody>
@@ -195,22 +196,22 @@
 <style>
   .page { max-width: 1180px; }
   header { display: flex; justify-content: space-between; align-items: start; gap: 16px; margin-bottom: 14px; }
-  h1 { margin: 0 0 4px; font-size: 18px; }
+  h1 { margin: 0 0 4px; font-size: var(--es-fs-3xl); }
   header p { margin: 0; color: var(--es-muted); }
-  .live { font-size: 11px; color: var(--es-muted); border: 1px solid var(--es-border); border-radius: 999px; padding: 2px 10px; }
+  .live { font-size: var(--es-fs-xs); color: var(--es-muted); border: 1px solid var(--es-border); border-radius: 999px; padding: 2px 10px; }
   .live.on { color: var(--es-green); border-color: var(--es-green); }
   .bar { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; padding: 10px 14px; border: 1px solid var(--es-border); border-radius: var(--es-radius); background: var(--es-surface); margin-bottom: 14px; }
-  .bar .lbl { font-size: 11px; color: var(--es-muted); text-transform: uppercase; letter-spacing: 0.06em; }
-  .chip { display: inline-flex; align-items: center; gap: 6px; padding: 3px 10px; border: 1px solid var(--es-border); border-radius: 999px; background: var(--es-surface-2); color: var(--es-muted); font-size: 11px; font-family: var(--es-mono); cursor: pointer; }
+  .bar .lbl { font-size: var(--es-fs-xs); color: var(--es-muted); text-transform: uppercase; letter-spacing: 0.06em; }
+  .chip { display: inline-flex; align-items: center; gap: 6px; padding: 3px 10px; border: 1px solid var(--es-border); border-radius: 999px; background: var(--es-surface-2); color: var(--es-muted); font-size: var(--es-fs-xs); font-family: var(--es-mono); cursor: pointer; }
   .chip i { width: 8px; height: 8px; border-radius: 2px; }
   .chip.on { background: var(--es-surface); color: var(--es-text); border-color: var(--es-accent); }
-  .foot { margin-left: auto; font-size: 11px; color: var(--es-muted); font-family: var(--es-mono); }
+  .foot { margin-left: auto; font-size: var(--es-fs-xs); color: var(--es-muted); font-family: var(--es-mono); }
   .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(420px, 1fr)); gap: 12px; }
   .panel { border: 1px solid var(--es-border); border-radius: var(--es-radius); background: var(--es-surface); padding: 12px 14px; }
-  .panel h2 { margin: 0 0 8px; font-size: 12px; text-transform: uppercase; letter-spacing: 0.08em; color: var(--es-muted); }
-  table { width: 100%; border-collapse: collapse; font-size: 12px; }
+  .panel h2 { margin: 0 0 8px; font-size: var(--es-fs-sm); text-transform: uppercase; letter-spacing: 0.08em; color: var(--es-muted); }
+  table { width: 100%; border-collapse: collapse; font-size: var(--es-fs-sm); }
   th, td { padding: 5px 8px; border-bottom: 1px solid var(--es-border); text-align: left; }
-  th { color: var(--es-muted); font-size: 11px; font-weight: 600; }
+  th { color: var(--es-muted); font-size: var(--es-fs-xs); font-weight: 600; }
   .right { text-align: right; }
   .mono { font-family: var(--es-mono); }
   .swatch { display: inline-block; width: 8px; height: 8px; border-radius: 2px; margin-right: 6px; }

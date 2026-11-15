@@ -4,6 +4,7 @@
   import { handleEditorKey } from "../lib/editorKeys";
   import { fetchIndices, runProfile, type IndexRow, type ProfileShard, type ProfileNode } from "../lib/services";
   import type { DbxBridge } from "../lib/bridge";
+  import { t } from "../lib/i18n.svelte.js";
 
   interface Props {
     bridge: DbxBridge;
@@ -50,12 +51,12 @@
     try {
       const value = JSON.parse(body);
       if (value === null || typeof value !== "object" || Array.isArray(value)) {
-        formError = "请求体必须是 JSON 对象";
+        formError = t("prof.err.notObject");
         return;
       }
       parsed = value as Record<string, unknown>;
     } catch (cause) {
-      formError = `JSON 解析失败：${cause instanceof Error ? cause.message : String(cause)}`;
+      formError = t("prof.err.parse", { detail: cause instanceof Error ? cause.message : String(cause) });
       return;
     }
     running = true;
@@ -93,20 +94,20 @@
 <div class="page">
   <header>
     <div>
-      <h1>Query Profiler</h1>
-      <p>Runs your DSL with <code>"profile": true</code> and flattens the query tree into per-shard timings.</p>
+      <h1>{t("prof.title")}</h1>
+      <p>{t("prof.hintPrefix")}<code>"profile": true</code>{t("prof.hintMid")}</p>
     </div>
   </header>
 
   <section class="bar">
-    <label>Index
+    <label>{t("index.col.index")}
       <select bind:value={selectedIndex} disabled={loadingIndices}>
-        {#if loadingIndices}<option>Loading…</option>{/if}
+        {#if loadingIndices}<option>{t("common.loading")}</option>{/if}
         {#each indices as ix (ix.index)}<option value={ix.index}>{ix.index}</option>{/each}
       </select>
     </label>
     <button type="button" class="primary" onclick={run} disabled={!selectedIndex || running}>
-      {running ? "Profiling…" : "Run profile"}
+      {running ? t("prof.running") : t("prof.run")}
     </button>
   </section>
 
@@ -119,14 +120,14 @@
   {#if formError}<p class="form-error">{formError}</p>{/if}
 
   {#if error}
-    <StateBlock kind="error" message="Profile failed" detail={error} />
+    <StateBlock kind="error" message={t("prof.failed")} detail={error} />
   {:else if running}
-    <StateBlock kind="loading" message="Profiling query…" detail={`POST /${selectedIndex}/_search with profile=true`} />
+    <StateBlock kind="loading" message={t("prof.runningQuery")} detail={`POST /${selectedIndex}/_search with profile=true`} />
   {:else if shards.length > 0}
     <p class="meta">{shards.length} shards · took {took} ms · {hits} hits</p>
 
     <table class="shards">
-      <thead><tr><th>Shard</th><th>Index</th><th>Node</th><th>Query (ms)</th><th>Rewrite (ms)</th><th>Collector (ms)</th><th>Nodes</th></tr></thead>
+      <thead><tr><th>{t("prof.col.shard")}</th><th>{t("prof.col.index")}</th><th>{t("prof.col.node")}</th><th>{t("prof.col.query")}</th><th>{t("prof.col.rewrite")}</th><th>{t("prof.col.collector")}</th><th>{t("prof.col.nodes")}</th></tr></thead>
       <tbody>
         {#each shards as shard, i (`${shard.index}-${shard.shard}-${i}`)}
           <tr>
@@ -143,9 +144,9 @@
     </table>
 
     {#if treeNodes(shards).length > 0}
-      <h2 class="sub">Query tree</h2>
+      <h2 class="sub">{t("prof.tree")}</h2>
       <table class="tree">
-        <thead><tr><th>Type / description</th><th>Time (ms)</th></tr></thead>
+        <thead><tr><th>{t("prof.col.type")}</th><th>{t("prof.col.time")}</th></tr></thead>
         <tbody>
           {#each treeNodes(shards) as row, i (`${row.shard}-${i}`)}
             <tr>
@@ -162,38 +163,38 @@
       </table>
     {/if}
 
-    <button type="button" class="link" onclick={() => (showRaw = !showRaw)}>{showRaw ? "Hide" : "Show"} raw profile</button>
+    <button type="button" class="link" onclick={() => (showRaw = !showRaw)}>{showRaw ? t("prof.hideRaw") : t("prof.showRaw")}</button>
     {#if showRaw}<JsonView value={raw} />{/if}
   {:else}
-    <StateBlock kind="empty" message="No profile run yet" detail="选择索引后点 Run profile" />
+    <StateBlock kind="empty" message={t("prof.empty")} detail={t("prof.emptyDetail")} />
   {/if}
 </div>
 
 <style>
   .page { max-width: 1080px; }
   header { margin-bottom: 16px; }
-  h1 { margin: 0 0 4px; font-size: 18px; }
+  h1 { margin: 0 0 4px; font-size: var(--es-fs-3xl); }
   header p { margin: 0; color: var(--es-muted); }
-  header code { font-family: var(--es-mono); font-size: 11px; }
+  header code { font-family: var(--es-mono); font-size: var(--es-fs-xs); }
   button { padding: 6px 14px; border: 1px solid var(--es-border); border-radius: 6px; background: var(--es-surface); color: var(--es-text); cursor: pointer; white-space: nowrap; }
   button:hover:not(:disabled):not(.primary) { background: var(--es-surface-2); }
   .primary { background: var(--es-accent); color: #fff; border-color: var(--es-accent); }
   .primary:hover:not(:disabled) { filter: brightness(0.92); }
   button:disabled { opacity: 0.55; cursor: default; }
   .bar { display: flex; gap: 12px; align-items: end; margin-bottom: 10px; flex-wrap: wrap; }
-  .bar label { display: flex; flex-direction: column; gap: 4px; font-size: 11px; color: var(--es-muted); }
+  .bar label { display: flex; flex-direction: column; gap: 4px; font-size: var(--es-fs-xs); color: var(--es-muted); }
   .bar select { padding: 6px 10px; border: 1px solid var(--es-border); border-radius: 6px; background: var(--es-surface); color: var(--es-text); }
-  textarea { width: 100%; box-sizing: border-box; font-family: var(--es-mono); font-size: 12px; padding: 10px; border: 1px solid var(--es-border); border-radius: 6px; background: var(--es-surface-2); color: var(--es-text); margin-bottom: 10px; }
-  .form-error { margin: 0 0 10px; font-size: 11px; color: var(--es-red); }
-  .meta { font-size: 11px; color: var(--es-muted); font-family: var(--es-mono); margin: 0 0 10px; }
-  table { width: 100%; border-collapse: collapse; font-size: 12px; border: 1px solid var(--es-border); border-radius: var(--es-radius); overflow: hidden; margin-bottom: 14px; }
+  textarea { width: 100%; box-sizing: border-box; font-family: var(--es-mono); font-size: var(--es-fs-sm); padding: 10px; border: 1px solid var(--es-border); border-radius: 6px; background: var(--es-surface-2); color: var(--es-text); margin-bottom: 10px; }
+  .form-error { margin: 0 0 10px; font-size: var(--es-fs-xs); color: var(--es-red); }
+  .meta { font-size: var(--es-fs-xs); color: var(--es-muted); font-family: var(--es-mono); margin: 0 0 10px; }
+  table { width: 100%; border-collapse: collapse; font-size: var(--es-fs-sm); border: 1px solid var(--es-border); border-radius: var(--es-radius); overflow: hidden; margin-bottom: 14px; }
   th, td { padding: 6px 8px; border-bottom: 1px solid var(--es-border); text-align: left; }
-  th { background: var(--es-surface-2); color: var(--es-muted); font-size: 11px; font-weight: 600; }
+  th { background: var(--es-surface-2); color: var(--es-muted); font-size: var(--es-fs-xs); font-weight: 600; }
   .mono { font-family: var(--es-mono); }
-  .small { font-size: 11px; }
-  .sub { font-size: 12px; text-transform: uppercase; letter-spacing: 0.08em; color: var(--es-muted); margin: 4px 0 8px; }
+  .small { font-size: var(--es-fs-xs); }
+  .sub { font-size: var(--es-fs-sm); text-transform: uppercase; letter-spacing: 0.08em; color: var(--es-muted); margin: 4px 0 8px; }
   .indent { display: inline-block; }
-  .type { font-family: var(--es-mono); font-size: 11px; }
-  .desc { margin-left: 8px; color: var(--es-muted); font-size: 11px; }
+  .type { font-family: var(--es-mono); font-size: var(--es-fs-xs); }
+  .desc { margin-left: 8px; color: var(--es-muted); font-size: var(--es-fs-xs); }
   .link { background: none; border: none; color: var(--es-accent); cursor: pointer; padding: 6px 0; }
 </style>

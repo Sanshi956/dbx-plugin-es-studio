@@ -5,6 +5,7 @@
   // x is a real timestamp (not an index), so a collector that was stopped for an
   // hour shows an hour-wide gap instead of a lie.
   import type { ChartPoint, ChartSeries } from "../lib/types";
+  import { t } from "../lib/i18n.svelte.js";
 
   interface Props {
     series: ChartSeries[];
@@ -20,7 +21,7 @@
     height = 150,
     yMax,
     format = (value: number) => String(Math.round(value * 10) / 10),
-    emptyText = "暂无采样点",
+    emptyText = "",
   }: Props = $props();
 
   const PAD_L = 46;
@@ -146,14 +147,14 @@
           <b>{item.value === null ? "—" : format(item.value)}</b>
         </span>
       {/each}
-      {#if hover >= 0}<span class="muted">hover 读数（移开显示最新）</span>{/if}
+      {#if hover >= 0}<span class="muted">{t("chart.hoverHint")}</span>{/if}
     {:else}
-      <span class="muted">{emptyText}</span>
+      <span class="muted">{emptyText || t("chart.empty")}</span>
     {/if}
   </div>
 
   {#if width > 0 && total > 0}
-    <svg width={width} height={height} role="img" aria-label="time series">
+    <svg width={width} height={height} role="img" aria-label={t("chart.aria")}>
       {#each TICKS as tick (tick)}
         {@const y = PAD_T + (plotH / GRID) * tick}
         <line x1={PAD_L} x2={width - PAD_R} y1={y} y2={y} class="grid" />
@@ -198,13 +199,13 @@
       />
     </svg>
   {:else}
-    <div class="empty" style={`height:${height}px`}>{emptyText}</div>
+    <div class="empty" style={`height:${height}px`}>{emptyText || t("chart.empty")}</div>
   {/if}
 </div>
 
 <style>
   .chart { width: 100%; }
-  .readout { display: flex; align-items: center; gap: 12px; min-height: 20px; font-size: 11px; color: var(--es-muted); flex-wrap: wrap; }
+  .readout { display: flex; align-items: center; gap: 12px; min-height: 20px; font-size: var(--es-fs-xs); color: var(--es-muted); flex-wrap: wrap; }
   .at { font-family: var(--es-mono); color: var(--es-text); }
   .val { display: inline-flex; align-items: center; gap: 5px; }
   .val i { width: 8px; height: 8px; border-radius: 2px; display: inline-block; }
@@ -212,10 +213,10 @@
   .muted { color: var(--es-muted); }
   svg { display: block; }
   .grid { stroke: var(--es-border); stroke-width: 1; stroke-dasharray: 3 3; }
-  .tick { fill: var(--es-muted); font-size: 10px; font-family: var(--es-mono); }
+  .tick { fill: var(--es-muted); font-size: var(--es-fs-2xs); font-family: var(--es-mono); }
   .line { fill: none; stroke-width: 1.6; stroke-linejoin: round; stroke-linecap: round; }
   .area { opacity: 0.1; stroke: none; }
   .cursor { stroke: var(--es-muted); stroke-width: 1; stroke-dasharray: 2 2; }
   .hit { fill: transparent; cursor: crosshair; }
-  .empty { display: grid; place-items: center; font-size: 11px; color: var(--es-muted); border: 1px dashed var(--es-border); border-radius: 6px; }
+  .empty { display: grid; place-items: center; font-size: var(--es-fs-xs); color: var(--es-muted); border: 1px dashed var(--es-border); border-radius: 6px; }
 </style>

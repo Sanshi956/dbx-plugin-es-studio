@@ -89,9 +89,9 @@ const bridgeScript = `<script>
   window.dbxPlugin = {
     ready: Promise.resolve({ connectionId: 'local-es', providerId:'es.studio', connectionType:'elasticsearch' }),
     context: { connectionId: 'local-es', providerId:'es.studio', connectionType:'elasticsearch' },
-    locale: 'zh-CN',
+    locale: ${JSON.stringify(process.env.BRIDGE_LOCALE || 'zh-CN')},
     contributionId: 'local.es.studio',
-    theme: { appearance: 'light', tokens: {} },
+    theme: ${JSON.stringify({ appearance: process.env.BRIDGE_THEME || 'light', tokens: JSON.parse(process.env.BRIDGE_TOKENS || '{}') })},
     invoke: function(method, params, options){
       return rpc(method, params || {}).then(function(res){
         if (res && res.error) { var e = new Error(res.error.message || 'RPC error'); e.code = res.error.code; throw e; }

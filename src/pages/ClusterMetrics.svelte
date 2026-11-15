@@ -7,6 +7,7 @@
   } from "../lib/services";
   import { formatBytes, formatCount } from "../lib/api";
   import type { DbxBridge } from "../lib/bridge";
+  import { t } from "../lib/i18n.svelte.js";
   import type { ChartPoint, ChartSeries } from "../lib/types";
 
   interface Props {
@@ -97,13 +98,13 @@
     try {
       if (status?.running) {
         status = await stopMonitor(bridge, connectionId);
-        toast = "采集已停止（已采到的点保留）";
+        toast = t("mc.toast.stopped");
       } else {
         status = await startMonitor(bridge, connectionId, intervalSec);
-        toast = `采集已启动，每 ${intervalSec}s 一次`;
+        toast = t("mc.toast.started", { interval: intervalSec });
       }
     } catch (cause) {
-      toast = `操作失败：${cause instanceof Error ? cause.message : String(cause)}`;
+      toast = t("mc.toast.failed", { detail: cause instanceof Error ? cause.message : String(cause) });
     } finally {
       busy = false;
     }
@@ -115,9 +116,9 @@
     busy = true;
     try {
       status = await startMonitor(bridge, connectionId, intervalSec);
-      toast = `采集间隔已改为 ${intervalSec}s`;
+      toast = t("mc.toast.intervalChanged", { interval: intervalSec });
     } catch (cause) {
-      toast = `修改失败：${cause instanceof Error ? cause.message : String(cause)}`;
+      toast = t("mc.toast.intervalFailed", { detail: cause instanceof Error ? cause.message : String(cause) });
     } finally {
       busy = false;
     }
@@ -129,9 +130,9 @@
     try {
       status = await sampleNow(bridge, connectionId);
       await refresh();
-      toast = "已采集一个点";
+      toast = t("mc.toast.sampled");
     } catch (cause) {
-      toast = `采样失败：${cause instanceof Error ? cause.message : String(cause)}`;
+      toast = t("mc.toast.sampleFailed", { detail: cause instanceof Error ? cause.message : String(cause) });
     } finally {
       busy = false;
     }
@@ -151,28 +152,28 @@
     const first = samples[0].at;
     const last = samples[samples.length - 1].at;
     const minutes = Math.max(1, Math.round((last - first) / 60000));
-    return `覆盖 ${minutes} 分钟`;
+    return t("mc.span", { minutes });
   });
 </script>
 
 <div class="page">
   <header>
     <div>
-      <h1>Cluster Metrics</h1>
-      <p>Sampled by the sidecar every {intervalSec}s and persisted under the plugin data dir.</p>
+      <h1>{t("mc.title")}</h1>
+      <p>{t("mc.hint", { interval: intervalSec })}</p>
     </div>
   </header>
 
   {#if toast}<div class="toast">{toast}</div>{/if}
   {#if error && error !== "NO_CONNECTION"}
-    <StateBlock kind="error" message="Could not read the monitoring series" detail={error} />
+    <StateBlock kind="error" message={t("mc.readFailed")} detail={error} />
   {:else if error === "NO_CONNECTION"}
-    <StateBlock kind="error" message="No connection selected" detail="Select a connected cluster first." />
+    <StateBlock kind="error" message={t("mc.noConnection")} detail={t("mc.noConnectionDetail")} />
   {:else}
     <section class="bar">
       <span class="dot" class:on={status?.running}></span>
-      <span class="state">{status?.running ? "采集中" : "已停止"}</span>
-      <label>间隔
+      <span class="state">{status?.running ? t("mc.running") : t("mc.stopped")}</span>
+      <label>{t("mc.interval")}
         <select bind:value={intervalSec} onchange={applyInterval} disabled={busy}>
           {#each INTERVALS as seconds (seconds)}
             <option value={seconds}>{seconds}s</option>
@@ -180,56 +181,56 @@
         </select>
       </label>
       <button type="button" class:primary={!status?.running} onclick={toggleRun} disabled={busy}>
-        {status?.running ? "停止采集" : "开始采集"}
+        {status?.running ? t("mc.stop") : t("mc.start")}
       </button>
-      <button type="button" onclick={collectNow} disabled={busy}>立即采样</button>
+      <button type="button" onclick={collectNow} disabled={busy}>{t("mc.collectNow")}</button>
       <span class="foot">
-        {stored} 点 · {formatBytes(bytes)}{#if span} · {span}{/if}{#if file} · <code>{file}</code>{/if}
+        {stored} {t("mc.points")} · {formatBytes(bytes)}{#if span} · {span}{/if}{#if file} · <code>{file}</code>{/if}
       </span>
-      {#if status?.lastError}<span class="err" title={status.lastError}>最近一次采集失败</span>{/if}
+      {#if status?.lastError}<span class="err" title={status.lastError}>{t("mc.lastError")}</span>{/if}
     </section>
 
     {#if loading && samples.length === 0}
-      <StateBlock kind="loading" message="Reading collected samples…" detail="mon/history" />
+      <StateBlock kind="loading" message={t("mc.reading")} detail="mon/history" />
     {:else if samples.length === 0}
       <StateBlock
         kind="empty"
-        message="还没有采样点"
-        detail={status?.lastError || "点「立即采样」先采一个点，或等待下一个采集周期"}
+        message={t("mc.empty")}
+        detail={status?.lastError || t("mc.emptyDetail")}
       />
     {:else}
       <section class="cards">
         <div class="card">
-          <span class="lbl">Health</span>
+          <span class="lbl">{t("mc.lbl.health")}</span>
           <span class="num" class:green={latest?.cluster.status === "green"} class:yellow={latest?.cluster.status === "yellow"} class:red={latest?.cluster.status === "red"}>
             {latest?.cluster.status ?? "—"}
           </span>
         </div>
         <div class="card">
-          <span class="lbl">Nodes</span>
+          <span class="lbl">{t("mc.lbl.nodes")}</span>
           <span class="num">{latest?.cluster.nodes ?? 0}</span>
         </div>
         <div class="card">
-          <span class="lbl">Shards active / unassigned</span>
+          <span class="lbl">{t("mc.lbl.shards")}</span>
           <span class="num">{latest?.cluster.active ?? 0} <small>/ {latest?.cluster.unassigned ?? 0}</small></span>
         </div>
         <div class="card">
-          <span class="lbl">Documents</span>
+          <span class="lbl">{t("mc.lbl.documents")}</span>
           <span class="num">{formatCount(latest?.cluster.docs ?? 0)}</span>
         </div>
         <div class="card">
-          <span class="lbl">Store</span>
+          <span class="lbl">{t("mc.lbl.store")}</span>
           <span class="num">{formatBytes(latest?.cluster.storeBytes ?? 0)}</span>
         </div>
         <div class="card">
-          <span class="lbl">Heap / CPU</span>
+          <span class="lbl">{t("mc.lbl.heapCpu")}</span>
           <span class="num">{(latest?.cluster.heapPercent ?? 0).toFixed(1)}% <small>/ {(latest?.cluster.cpuPercent ?? 0).toFixed(1)}%</small></span>
         </div>
       </section>
 
       <section class="grid">
         <div class="panel">
-          <h2>Shards</h2>
+          <h2>{t("mc.section.shards")}</h2>
           <MetricChart
             series={[
               series("active", "var(--es-accent)", (s) => s.cluster.active),
@@ -239,15 +240,15 @@
           />
         </div>
         <div class="panel">
-          <h2>Documents</h2>
+          <h2>{t("mc.section.documents")}</h2>
           <MetricChart series={[series("docs", "var(--es-green)", (s) => s.cluster.docs)]} format={(value) => formatCount(Math.round(value))} />
         </div>
         <div class="panel">
-          <h2>Store size</h2>
+          <h2>{t("mc.section.store")}</h2>
           <MetricChart series={[series("store", "var(--es-accent)", (s) => s.cluster.storeBytes)]} format={(value) => formatBytes(Math.round(value))} />
         </div>
         <div class="panel">
-          <h2>Heap / CPU %</h2>
+          <h2>{t("mc.section.heapCpu")}</h2>
           <MetricChart
             yMax={100}
             series={[
@@ -265,18 +266,18 @@
 <style>
   .page { max-width: 1180px; }
   header { display: flex; justify-content: space-between; align-items: start; gap: 16px; margin-bottom: 14px; }
-  h1 { margin: 0 0 4px; font-size: 18px; }
+  h1 { margin: 0 0 4px; font-size: var(--es-fs-3xl); }
   header p { margin: 0; color: var(--es-muted); }
-  .toast { padding: 8px 12px; margin-bottom: 12px; border: 1px solid var(--es-border); border-radius: 6px; background: var(--es-surface-2); font-size: 12px; }
+  .toast { padding: 8px 12px; margin-bottom: 12px; border: 1px solid var(--es-border); border-radius: 6px; background: var(--es-surface-2); font-size: var(--es-fs-sm); }
   .bar { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; padding: 10px 14px; border: 1px solid var(--es-border); border-radius: var(--es-radius); background: var(--es-surface); margin-bottom: 14px; }
   .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--es-muted); }
   .dot.on { background: var(--es-green); box-shadow: 0 0 0 3px var(--es-accent-soft); }
-  .state { font-size: 12px; font-weight: 600; }
-  .bar label { display: flex; align-items: center; gap: 6px; font-size: 11px; color: var(--es-muted); }
+  .state { font-size: var(--es-fs-sm); font-weight: 600; }
+  .bar label { display: flex; align-items: center; gap: 6px; font-size: var(--es-fs-xs); color: var(--es-muted); }
   .bar select { padding: 4px 8px; border: 1px solid var(--es-border); border-radius: 6px; background: var(--es-surface); color: var(--es-text); }
-  .foot { margin-left: auto; font-size: 11px; color: var(--es-muted); font-family: var(--es-mono); }
-  .foot code { font-size: 10px; }
-  .err { font-size: 11px; color: var(--es-red); }
+  .foot { margin-left: auto; font-size: var(--es-fs-xs); color: var(--es-muted); font-family: var(--es-mono); }
+  .foot code { font-size: var(--es-fs-2xs); }
+  .err { font-size: var(--es-fs-xs); color: var(--es-red); }
   button { padding: 5px 12px; border: 1px solid var(--es-border); border-radius: 6px; background: var(--es-surface); color: var(--es-text); cursor: pointer; white-space: nowrap; }
   button:hover:not(:disabled):not(.primary) { background: var(--es-surface-2); }
   .primary { background: var(--es-accent); color: #fff; border-color: var(--es-accent); }
@@ -284,13 +285,13 @@
   button:disabled { opacity: 0.55; cursor: default; }
   .cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 10px; margin-bottom: 14px; }
   .card { display: flex; flex-direction: column; gap: 4px; padding: 10px 12px; border: 1px solid var(--es-border); border-radius: var(--es-radius); background: var(--es-surface); }
-  .card .lbl { font-size: 10px; text-transform: uppercase; letter-spacing: 0.06em; color: var(--es-muted); }
-  .card .num { font-size: 16px; font-weight: 600; font-family: var(--es-mono); }
-  .card .num small { font-size: 11px; color: var(--es-muted); font-weight: 400; }
+  .card .lbl { font-size: var(--es-fs-2xs); text-transform: uppercase; letter-spacing: 0.06em; color: var(--es-muted); }
+  .card .num { font-size: var(--es-fs-2xl); font-weight: 600; font-family: var(--es-mono); }
+  .card .num small { font-size: var(--es-fs-xs); color: var(--es-muted); font-weight: 400; }
   .num.green { color: var(--es-green); }
   .num.yellow { color: var(--es-yellow); }
   .num.red { color: var(--es-red); }
   .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(420px, 1fr)); gap: 12px; }
   .panel { border: 1px solid var(--es-border); border-radius: var(--es-radius); background: var(--es-surface); padding: 12px 14px; }
-  .panel h2 { margin: 0 0 8px; font-size: 12px; text-transform: uppercase; letter-spacing: 0.08em; color: var(--es-muted); }
+  .panel h2 { margin: 0 0 8px; font-size: var(--es-fs-sm); text-transform: uppercase; letter-spacing: 0.08em; color: var(--es-muted); }
 </style>

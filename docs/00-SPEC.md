@@ -160,12 +160,24 @@ docs/                    00-SPEC.md · 01-PLAN.md · 验收记录 · API 兼容�
 5. **REST Console**：只相对路径、只当前授权集群、method 白名单、超时与响应上限、危险操作标识。
 6. **诊断**：确定性规则引擎，只给建议不自动修复；不得把推测写成确定事实。
 
-## 6. 版本适配（需求 7.4）
+## 6. 版本适配（需求 7.4，P6 修订）
 
 `internal/core/es/version.go` 识别 `version.number` + 发行版（Elasticsearch / Easysearch / OpenSearch）；
 `capability.go` 维护能力矩阵，UI 按能力隐藏/禁用不支持的功能并给出清晰提示。
-优先 7.x / 8.x / 9.x；typed API 与 `_doc`、ILM/ISM 差异、Data Stream 支持等按能力开关处理。
 Easysearch 兼容必须经真实 API 验证，不得凭接口名相似宣称兼容。
+
+P6 修订（验收反馈驱动）：
+
+- 能力矩阵门限 = API 实际引入版本：ILM 6.6 · 组件模板 7.8 · 数据流 7.9 ·
+  PIT 7.10 · ES\|QL 8.11；typed mapping 为 `major < 8`。前端
+  `capabilities.ts` 与 Go 矩阵同门限（版本从 `GET /` 取，每连接缓存）。
+- 版本差异以实证为准：`scripts/version-probe.py` 对 6.8 / 7.17 / 9.x 真集群
+  回放插件真实调用集并落 `probe.json`；不支持版本的 `400/405/501` 必须显示
+  "接口在当前集群不可用"，不允许静默空表。
+- `_mapping` 同时支持 typeless 与 typed（6.x）布局。
+- 界面文案单一真源：`t()` 词典（zh-CN / en 键集一致），语言与字号跟随宿主
+  （`env` 消息实时切换；字号经 `hostTheme.ts` 钉 `--es-fs-base`）。MCP 工具
+  说明例外：真源在 Go registry，英文为叠加层。
 
 ## 7. 阶段验收
 
@@ -176,6 +188,7 @@ Easysearch 兼容必须经真实 API 验证，不得凭接口名相似宣称兼�
 | P3 | Templates / Data Streams / ILM / Snapshot / Task / Profiler 真实 API 验证 |
 | P4 | 监控历史为真实周期采集序列；诊断规则可配置；两集群 diff 可导出 |
 | P5 | MCP Server 启动、Client 连接、列出工具、`es_get_cluster_health` / `es_list_indices` / `es_get_index_mapping` / `es_search_documents` / `es_list_shards` / `es_call_readonly_api` 全通；未授权连接拒绝；默认无写工具（14.4） |
+| P6 | 25 页双语全过（en 无 CJK、zh 无英文骨架），字号跟随宿主 token；6.8 / 7.17 / 9.x 真集群形状实证并落 probe.json；能力矩阵按引入版本断言；6.x typed mapping 可读；不支持接口显示明确提示 |
 
 ## 8. 明确不做的范围（需求 2.2 + 第一版边界）
 

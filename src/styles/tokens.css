@@ -3,6 +3,21 @@
    consume semantic --es-* variables, so no business component hardcodes color.
    Fallbacks keep the UI readable in the official dev host when tokens are absent. */
 :root {
+  /* Follow the host text size instead of pinning 13px. DBX writes its tokens
+     with setProperty on :root, but the exact name differs between host builds,
+     so the candidates are chained here rather than probed in JS. Everything
+     below scales from --es-fs-base; no component writes a raw px text size. */
+  --es-fs-base: var(--dbx-font-size, var(--dbx-font-size-base, var(--dbx-text-size, 13px)));
+  --es-fs-2xs: calc(var(--es-fs-base) * 0.77);
+  --es-fs-xs: calc(var(--es-fs-base) * 0.85);
+  --es-fs-sm: calc(var(--es-fs-base) * 0.92);
+  --es-fs-md: var(--es-fs-base);
+  --es-fs-lg: calc(var(--es-fs-base) * 1.08);
+  --es-fs-xl: calc(var(--es-fs-base) * 1.15);
+  --es-fs-2xl: calc(var(--es-fs-base) * 1.23);
+  --es-fs-3xl: calc(var(--es-fs-base) * 1.38);
+  --es-fs-4xl: calc(var(--es-fs-base) * 1.54);
+
   --es-bg: var(--dbx-bg, #f6f8fa);
   --es-surface: var(--dbx-surface, #ffffff);
   --es-surface-2: var(--dbx-surface-secondary, #f1f4f8);
@@ -39,6 +54,6 @@ body {
   background: var(--es-bg);
   color: var(--es-text);
   font-family: var(--es-font);
-  font-size: 13px;
+  font-size: var(--es-fs-md);
 }
-button, select, input { font-family: inherit; font-size: inherit; }
+button, select, input, textarea { font-family: inherit; font-size: inherit; }

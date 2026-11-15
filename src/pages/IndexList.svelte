@@ -4,6 +4,7 @@
   import ConfirmDanger from "../components/ConfirmDanger.svelte";
   import { fetchIndices, single, isError, type IndexRow } from "../lib/services";
   import type { DbxBridge } from "../lib/bridge";
+  import { t } from "../lib/i18n.svelte.js";
 
   interface Props {
     bridge: DbxBridge;
@@ -83,9 +84,9 @@
     try {
       const res = await single(bridge, connectionId, pending.method, pending.path);
       if (isError(res)) {
-        toast = `${pending.label} failed: ${res.error?.message ?? "HTTP " + res.status}`;
+        toast = t("index.toast.failed", { action: pending.label, detail: res.error?.message ?? "HTTP " + res.status });
       } else {
-        toast = `${pending.label} succeeded`;
+        toast = t("index.toast.succeeded", { action: pending.label });
         await load(connectionId);
       }
     } finally {
@@ -97,50 +98,52 @@
   async function refreshIndex(index: string): Promise<void> {
     toast = "";
     const res = await single(bridge, connectionId, "POST", `/${encodeURIComponent(index)}/_refresh`);
-    toast = isError(res) ? `refresh failed: ${res.error?.message}` : `refreshed ${index}`;
+    toast = isError(res)
+      ? t("index.toast.refreshFailed", { detail: res.error?.message ?? "HTTP " + res.status })
+      : t("index.toast.refreshed", { index });
   }
 </script>
 
 <div class="page">
   <header>
     <div>
-      <h1>Index List</h1>
-      <p>Indices from <code>/_cat/indices</code>. Writes go through the Sidecar permission gate.</p>
+      <h1>{t("index.title")}</h1>
+      <p>{t("index.hintPrefix")}<code>/_cat/indices</code>{t("index.hintSuffix")}</p>
     </div>
     <button type="button" onclick={() => load(connectionId)} disabled={loading || !connectionId}>
-      {loading ? "Loading…" : "Refresh"}
+      {loading ? t("common.loading") : t("common.refresh")}
     </button>
   </header>
 
   {#if toast}<div class="toast">{toast}</div>{/if}
 
   {#if loading && indices.length === 0}
-    <StateBlock kind="loading" message="Loading indices…" detail="GET /_cat/indices" />
+    <StateBlock kind="loading" message={t("index.loadingMessage")} detail="GET /_cat/indices" />
   {:else if error}
-    <StateBlock kind="error" message="Could not load indices" detail={error === "NO_CONNECTION" ? "No DBX connection is selected." : error} />
+    <StateBlock kind="error" message={t("index.loadFailed")} detail={error === "NO_CONNECTION" ? t("common.noConnection") : error} />
   {:else if indices.length === 0}
-    <StateBlock kind="empty" message="No indices returned" />
+    <StateBlock kind="empty" message={t("index.empty")} />
   {:else}
     <div class="filter-row">
-      <label>Filter<input placeholder="按索引名过滤" bind:value={filter} /></label>
+      <label>{t("index.filterLabel")}<input placeholder={t("index.filterPlaceholder")} bind:value={filter} /></label>
       <span class="count">{visible().length} / {indices.length}</span>
     </div>
 
     {#if visible().length === 0}
-      <StateBlock kind="empty" message="没有匹配的索引" detail="清空过滤条件试试" />
+      <StateBlock kind="empty" message={t("index.noMatch")} detail={t("index.noMatchDetail")} />
     {:else}
       <table class="ix">
         <thead>
           <tr>
-            <th>Index</th>
-            <th>Health</th>
-            <th>Status</th>
-            <th class="right">Primary</th>
-            <th class="right">Replicas</th>
-            <th class="right">Docs</th>
-            <th class="right">Deleted</th>
-            <th class="right">Store</th>
-            <th>Actions</th>
+            <th>{t("index.col.index")}</th>
+            <th>{t("index.col.health")}</th>
+            <th>{t("index.col.status")}</th>
+            <th class="right">{t("index.col.primary")}</th>
+            <th class="right">{t("index.col.replicas")}</th>
+            <th class="right">{t("index.col.docs")}</th>
+            <th class="right">{t("index.col.deleted")}</th>
+            <th class="right">{t("index.col.store")}</th>
+            <th>{t("index.col.actions")}</th>
           </tr>
         </thead>
         <tbody>
@@ -156,12 +159,12 @@
               <td class="right mono">{formatBytes(row.storeBytes)}</td>
               <td class="actions">
                 {#if isClosed(row)}
-                  <button type="button" class="mini" onclick={() => ask(row.index, "POST", `/${encodeURIComponent(row.index)}/_open`, "打开索引", `索引 ${row.index}`)} title="Open">Open</button>
+                  <button type="button" class="mini" onclick={() => ask(row.index, "POST", `/${encodeURIComponent(row.index)}/_open`, t("index.act.open"), t("index.scope.index", { index: row.index }))} title={t("index.act.open")}>{t("index.act.open")}</button>
                 {:else}
-                  <button type="button" class="mini" onclick={() => refreshIndex(row.index)} title="Refresh">↻</button>
-                  <button type="button" class="mini" onclick={() => ask(row.index, "POST", `/${encodeURIComponent(row.index)}/_close`, "关闭索引", `索引 ${row.index}`)} title="Close">Close</button>
+                  <button type="button" class="mini" onclick={() => refreshIndex(row.index)} title={t("index.act.refreshTitle")}>↻</button>
+                  <button type="button" class="mini" onclick={() => ask(row.index, "POST", `/${encodeURIComponent(row.index)}/_close`, t("index.act.close"), t("index.scope.index", { index: row.index }))} title={t("index.act.close")}>{t("index.act.close")}</button>
                 {/if}
-                <button type="button" class="mini danger" onclick={() => ask(row.index, "DELETE", `/${encodeURIComponent(row.index)}`, "删除索引", `索引 ${row.index} 及其全部数据`)} title="Delete">Delete</button>
+                <button type="button" class="mini danger" onclick={() => ask(row.index, "DELETE", `/${encodeURIComponent(row.index)}`, t("index.act.delete"), t("index.scope.indexData", { index: row.index }))} title={t("index.act.delete")}>{t("index.act.delete")}</button>
               </td>
             </tr>
           {/each}
@@ -174,9 +177,9 @@
 <ConfirmDanger
   open={pending !== null}
   title={pending ? pending.label : ""}
-  message="该操作将通过 ES REST 执行，Go Sidecar 会先校验只读模式与路径安全。"
+  message={t("index.confirm.message")}
   scope={pending ? pending.scope : ""}
-  confirmLabel={pending ? pending.label : "确认"}
+  confirmLabel={pending ? pending.label : t("common.confirm")}
   onConfirm={confirm}
   onCancel={cancel}
 />
@@ -184,19 +187,19 @@
 <style>
   .page { max-width: 1200px; }
   header { display: flex; justify-content: space-between; align-items: flex-start; gap: 16px; margin-bottom: 18px; }
-  h1 { margin: 0 0 4px; font-size: 18px; }
+  h1 { margin: 0 0 4px; font-size: var(--es-fs-3xl); }
   header p { margin: 0; color: var(--es-muted); }
-  header code { font-family: var(--es-mono); font-size: 11px; }
+  header code { font-family: var(--es-mono); font-size: var(--es-fs-xs); }
   button { padding: 6px 14px; border: 1px solid var(--es-border); border-radius: 6px; background: var(--es-surface); color: var(--es-text); cursor: pointer; }
   button:hover:not(:disabled):not(.primary) { background: var(--es-surface-2); }
   button:disabled { opacity: 0.55; cursor: default; }
-  .toast { padding: 8px 12px; margin-bottom: 12px; border: 1px solid var(--es-border); border-radius: 6px; background: var(--es-surface-2); font-size: 12px; }
+  .toast { padding: 8px 12px; margin-bottom: 12px; border: 1px solid var(--es-border); border-radius: 6px; background: var(--es-surface-2); font-size: var(--es-fs-sm); }
   .filter-row { display: flex; gap: 12px; align-items: end; margin-bottom: 14px; }
-  .filter-row label { display: flex; flex-direction: column; gap: 4px; font-size: 11px; color: var(--es-muted); }
+  .filter-row label { display: flex; flex-direction: column; gap: 4px; font-size: var(--es-fs-xs); color: var(--es-muted); }
   .filter-row input { padding: 6px 10px; border: 1px solid var(--es-border); border-radius: 6px; background: var(--es-surface); color: var(--es-text); min-width: 240px; }
-  .filter-row .count { font-family: var(--es-mono); font-size: 11px; color: var(--es-muted); padding-bottom: 8px; }
+  .filter-row .count { font-family: var(--es-mono); font-size: var(--es-fs-xs); color: var(--es-muted); padding-bottom: 8px; }
 
-  table.ix { width: 100%; border-collapse: collapse; font-size: 12px; border: 1px solid var(--es-border); border-radius: var(--es-radius); overflow: hidden; }
+  table.ix { width: 100%; border-collapse: collapse; font-size: var(--es-fs-sm); border: 1px solid var(--es-border); border-radius: var(--es-radius); overflow: hidden; }
   .ix th, .ix td { padding: 8px 10px; border-bottom: 1px solid var(--es-border); white-space: nowrap; }
   .ix th { background: var(--es-surface-2); color: var(--es-muted); font-weight: 600; text-align: left; }
   .ix th.right, .ix td.right { text-align: right; }
@@ -204,7 +207,7 @@
   .ix td.closed { color: var(--es-muted); }
   .ix tbody tr:hover { background: var(--es-surface-2); }
   .actions { display: flex; gap: 4px; }
-  .mini { padding: 3px 8px; font-size: 11px; }
+  .mini { padding: 3px 8px; font-size: var(--es-fs-xs); }
   .mini.danger { color: var(--es-red); border-color: var(--es-red); }
   .mini.danger:hover { background: var(--es-red); color: #fff; }
 </style>

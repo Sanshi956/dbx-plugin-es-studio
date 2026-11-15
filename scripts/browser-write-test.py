@@ -120,11 +120,11 @@ def run_rw(base_url, out_dir):
 
         # ---- 1. close an index through the danger modal ----
         try:
-            click_nav(page, "Index List")
+            click_nav(page, "索引列表")
             wait_text(page, "logs-app")
-            page.locator('table.ix tbody tr:has-text("logs-app") button[title="Close"]').click()
+            page.locator('table.ix tbody tr:has-text("logs-app") button[title="关闭索引"]').click()
             confirm_danger(page)
-            wait_text(page, "关闭索引 succeeded", timeout=15000)
+            wait_text(page, "关闭索引成功", timeout=15000)
             shot("wr-01-close-done")
             check("Index List Close logs-app (real ES state)", es_status("logs-app") == "close",
                   f"ES status={es_status('logs-app')}")
@@ -134,9 +134,9 @@ def run_rw(base_url, out_dir):
 
         # ---- 2. re-open it ----
         try:
-            page.locator('table.ix tbody tr:has-text("logs-app") button[title="Open"]').click()
+            page.locator('table.ix tbody tr:has-text("logs-app") button[title="打开索引"]').click()
             confirm_danger(page)
-            wait_text(page, "打开索引 succeeded", timeout=15000)
+            wait_text(page, "打开索引成功", timeout=15000)
             shot("wr-02-open-done")
             check("Index List Open logs-app (real ES state)", es_status("logs-app") == "open",
                   f"ES status={es_status('logs-app')}")
@@ -146,8 +146,8 @@ def run_rw(base_url, out_dir):
 
         # ---- 3. refresh (no modal, safe write) ----
         try:
-            page.locator('table.ix tbody tr:has-text("products") button[title="Refresh"]').click()
-            wait_text(page, "refreshed products", timeout=15000)
+            page.locator('table.ix tbody tr:has-text("products") button[title="刷新"]').click()
+            wait_text(page, "已刷新 products", timeout=15000)
             shot("wr-03-refresh-done")
             check("Index List Refresh products", True)
         except Exception as e:
@@ -156,12 +156,12 @@ def run_rw(base_url, out_dir):
 
         # ---- 4. create an index from the REST Console ----
         try:
-            click_nav(page, "REST Console")
+            click_nav(page, "REST 控制台")
             page.wait_for_selector("section.bar select", timeout=10000)
             page.select_option("section.bar select", "PUT")
             page.fill("input.path", "/ui-tmp-idx")
             page.fill("textarea.body", '{"settings":{"number_of_shards":1,"number_of_replicas":0}}')
-            page.click('button.primary:has-text("Send")')
+            page.click('button.primary:has-text("发送")')
             wait_text(page, "HTTP 200", timeout=20000)
             shot("wr-04-rest-put")
             check("REST Console PUT /ui-tmp-idx (real ES state)", es_exists("ui-tmp-idx"))
@@ -171,11 +171,11 @@ def run_rw(base_url, out_dir):
 
         # ---- 5. delete it from Index List ----
         try:
-            click_nav(page, "Index List")
+            click_nav(page, "索引列表")
             wait_text(page, "ui-tmp-idx", timeout=15000)
-            page.locator('table.ix tbody tr:has-text("ui-tmp-idx") button[title="Delete"]').click()
+            page.locator('table.ix tbody tr:has-text("ui-tmp-idx") button[title="删除索引"]').click()
             confirm_danger(page)
-            wait_text(page, "删除索引 succeeded", timeout=15000)
+            wait_text(page, "删除索引成功", timeout=15000)
             shot("wr-05-delete-done")
             check("Index List Delete ui-tmp-idx (real ES state)", not es_exists("ui-tmp-idx"),
                   "index still exists")
@@ -186,7 +186,7 @@ def run_rw(base_url, out_dir):
         # ---- 6. P3: rollover the data stream, verify generation on the cluster ----
         try:
             before = ds_generation("logs-p3-demo")
-            click_nav(page, "Data Streams")
+            click_nav(page, "数据流")
             wait_text(page, "logs-p3-demo", timeout=15000)
             page.locator('tbody tr:has-text("logs-p3-demo") button:has-text("Rollover")').click()
             confirm_danger(page)
@@ -202,7 +202,7 @@ def run_rw(base_url, out_dir):
 
         # ---- 7. P3: cluster settings write is visible on re-read ----
         try:
-            click_nav(page, "Cluster Settings")
+            click_nav(page, "集群设置")
             page.wait_for_selector("section.writer input", timeout=10000)
             inputs = page.locator("section.writer input")
             inputs.nth(0).fill("cluster.routing.allocation.enable")
@@ -221,7 +221,7 @@ def run_rw(base_url, out_dir):
         # ---- 8. P3: cancel a REAL in-flight task (needs scripts/es-task-demo.sh start) ----
         if os.environ.get("TASK_DEMO") == "1":
             try:
-                click_nav(page, "Tasks")
+                click_nav(page, "任务")
                 wait_text(page, "indices:data/write/reindex", timeout=25000)
                 row = page.locator("tr", has_text="indices:data/write/reindex").first
                 row.locator("button", has_text="Cancel").click()
@@ -273,15 +273,15 @@ def run_ro(base_url, out_dir):
 
         # ---- Index List: DELETE must be refused by the Sidecar ----
         try:
-            click_nav(page, "Index List")
+            click_nav(page, "索引列表")
             wait_text(page, "products")
-            page.locator('table.ix tbody tr:has-text("products") button[title="Delete"]').click()
+            page.locator('table.ix tbody tr:has-text("products") button[title="删除索引"]').click()
             confirm_danger(page)
-            wait_text(page, "read-only", timeout=20000)
+            wait_text(page, "删除索引失败", timeout=20000)
             shot("ro-01-delete-denied")
             body = page.inner_text("body")
             check("Index List DELETE denied on read-only (-32003)",
-                  "read-only" in body and "删除索引 failed" in body, body[:200])
+                  "删除索引失败" in body and "read-only" in body, body[:200])
             check("products survived the denied DELETE", es_exists("products"), "products is gone!")
         except Exception as e:
             shot("ro-01-delete-FAIL")
@@ -289,12 +289,12 @@ def run_ro(base_url, out_dir):
 
         # ---- REST Console: DELETE must be refused too ----
         try:
-            click_nav(page, "REST Console")
+            click_nav(page, "REST 控制台")
             page.wait_for_selector("section.bar select", timeout=10000)
             page.select_option("section.bar select", "DELETE")
             page.fill("input.path", "/products")
-            page.click('button.primary:has-text("Send")')
-            wait_text(page, "read-only", timeout=20000)
+            page.click('button.primary:has-text("发送")')
+            wait_text(page, "请求失败", timeout=20000)
             shot("ro-02-rest-delete-denied")
             check("REST Console DELETE denied on read-only", "read-only" in page.inner_text("body"))
         except Exception as e:
@@ -304,7 +304,7 @@ def run_ro(base_url, out_dir):
         # ---- P3: data stream rollover must be rejected on a read-only connection ----
         try:
             before = ds_generation("logs-p3-demo")
-            click_nav(page, "Data Streams")
+            click_nav(page, "数据流")
             wait_text(page, "logs-p3-demo", timeout=15000)
             page.locator('tbody tr:has-text("logs-p3-demo") button:has-text("Rollover")').click()
             confirm_danger(page)
@@ -320,7 +320,7 @@ def run_ro(base_url, out_dir):
         # ---- P3: cancelling a cluster task must be rejected on read-only ----
         if os.environ.get("TASK_DEMO") == "1":
             try:
-                click_nav(page, "Tasks")
+                click_nav(page, "任务")
                 wait_text(page, "indices:data/write/reindex", timeout=25000)
                 row = page.locator("tr", has_text="indices:data/write/reindex").first
                 row.locator("button", has_text="Cancel").click()

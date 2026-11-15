@@ -3,6 +3,7 @@
   import { fetchMonitorHistory, type MonitorSample } from "../lib/services";
   import { formatBytes, formatCount } from "../lib/api";
   import type { DbxBridge } from "../lib/bridge";
+  import { t } from "../lib/i18n.svelte.js";
 
   interface Props {
     bridge: DbxBridge;
@@ -11,10 +12,10 @@
   let { bridge, connectionId }: Props = $props();
 
   const RANGES = [
-    { label: "最近 1 小时", hours: 1 },
-    { label: "最近 6 小时", hours: 6 },
-    { label: "最近 24 小时", hours: 24 },
-    { label: "全部（最多 5000 点）", hours: 0 },
+    { label: "hist.range1h", hours: 1 },
+    { label: "hist.range6h", hours: 6 },
+    { label: "hist.range24h", hours: 24 },
+    { label: "hist.rangeAll", hours: 0 },
   ];
   const MAX_ROWS = 500;
 
@@ -95,12 +96,12 @@
     try {
       await navigator.clipboard.writeText(csv);
       showCsv = false;
-      toast = `已复制 ${rows.length} 行 CSV 到剪贴板`;
+      toast = t("hist.toast.copied", { count: rows.length });
     } catch {
       // Opaque-origin iframe may refuse clipboard writes without a user gesture
       // grant; showing the text keeps the data reachable.
       showCsv = true;
-      toast = "剪贴板被拒绝，已展开文本，可手动全选复制";
+      toast = t("hist.toast.clipboardDenied");
     }
   }
 </script>
@@ -108,34 +109,34 @@
 <div class="page">
   <header>
     <div>
-      <h1>History</h1>
-      <p>Raw samples from <code>mon/history</code>, newest first.</p>
+      <h1>{t("hist.title")}</h1>
+      <p>{t("hist.hintPrefix")}<code>mon/history</code>{t("hist.hintSuffix")}</p>
     </div>
     <div class="tools">
       <select bind:value={rangeHours}>
         {#each RANGES as range (range.hours)}
-          <option value={range.hours}>{range.label}</option>
+          <option value={range.hours}>{t(range.label)}</option>
         {/each}
       </select>
-      <button type="button" onclick={() => load()} disabled={loading}>{loading ? "Loading…" : "刷新"}</button>
-      <button type="button" onclick={copyCsv} disabled={rows.length === 0}>复制 CSV</button>
+      <button type="button" onclick={() => load()} disabled={loading}>{loading ? t("common.loading") : t("common.refresh")}</button>
+      <button type="button" onclick={copyCsv} disabled={rows.length === 0}>{t("hist.copyCsv")}</button>
     </div>
   </header>
 
   {#if toast}<div class="toast">{toast}</div>{/if}
 
   <div class="meta">
-    当前范围 {rows.length} 行 · 库内共 {formatCount(stored)} 点 · {formatBytes(bytes)}{#if file} · <code>{file}</code>{/if}
+    {t("hist.summary", { rows: rows.length, stored: formatCount(stored), bytes: formatBytes(bytes) })}{#if file} · <code>{file}</code>{/if}
   </div>
 
   {#if error === "NO_CONNECTION"}
-    <StateBlock kind="error" message="No connection selected" detail="Select a connected cluster first." />
+    <StateBlock kind="error" message={t("mc.noConnection")} detail={t("mc.noConnectionDetail")} />
   {:else if error}
-    <StateBlock kind="error" message="Could not read the monitoring series" detail={error} />
+    <StateBlock kind="error" message={t("mc.readFailed")} detail={error} />
   {:else if loading && samples.length === 0}
-    <StateBlock kind="loading" message="Reading samples…" detail="mon/history" />
+    <StateBlock kind="loading" message={t("hist.reading")} detail="mon/history" />
   {:else if rows.length === 0}
-    <StateBlock kind="empty" message="该范围内没有采样点" detail="换个时间范围，或先去 Cluster Metrics 开始采集" />
+    <StateBlock kind="empty" message={t("hist.empty")} detail={t("hist.emptyDetail")} />
   {:else}
     {#if showCsv}
       <textarea class="csv" readonly rows="10" value={toCsv()}></textarea>
@@ -143,16 +144,16 @@
     <table class="hist">
       <thead>
         <tr>
-          <th>Time</th>
-          <th>Health</th>
-          <th class="right">Nodes</th>
-          <th class="right" title="主分片数">Primary</th>
-          <th class="right" title="活跃分片总数">Active</th>
-          <th class="right" title="未分配分片数">Unassigned</th>
-          <th class="right">Docs</th>
-          <th class="right">Store</th>
-          <th class="right">Heap</th>
-          <th class="right">CPU</th>
+          <th>{t("hist.col.time")}</th>
+          <th>{t("hist.col.health")}</th>
+          <th class="right">{t("hist.col.nodes")}</th>
+          <th class="right" title={t("hist.tip.primary")}>{t("hist.col.primary")}</th>
+          <th class="right" title={t("hist.tip.active")}>{t("hist.col.active")}</th>
+          <th class="right" title={t("hist.tip.unassigned")}>{t("hist.col.unassigned")}</th>
+          <th class="right">{t("hist.col.docs")}</th>
+          <th class="right">{t("hist.col.store")}</th>
+          <th class="right">{t("hist.col.heap")}</th>
+          <th class="right">{t("hist.col.cpu")}</th>
         </tr>
       </thead>
       <tbody>
@@ -177,7 +178,7 @@
       </tbody>
     </table>
     {#if samples.length > MAX_ROWS}
-      <p class="note">仅显示最新 {MAX_ROWS} 行；完整范围可用「复制 CSV」导出（{samples.length} 行）。</p>
+      <p class="note">{t("hist.note", { max: MAX_ROWS, rows: samples.length })}</p>
     {/if}
   {/if}
 </div>
@@ -185,28 +186,28 @@
 <style>
   .page { max-width: 1180px; }
   header { display: flex; justify-content: space-between; align-items: start; gap: 16px; margin-bottom: 12px; flex-wrap: wrap; }
-  h1 { margin: 0 0 4px; font-size: 18px; }
+  h1 { margin: 0 0 4px; font-size: var(--es-fs-3xl); }
   header p { margin: 0; color: var(--es-muted); }
-  header code { font-family: var(--es-mono); font-size: 11px; }
+  header code { font-family: var(--es-mono); font-size: var(--es-fs-xs); }
   .tools { display: flex; gap: 8px; align-items: center; }
   select { padding: 5px 8px; border: 1px solid var(--es-border); border-radius: 6px; background: var(--es-surface); color: var(--es-text); }
   button { padding: 5px 12px; border: 1px solid var(--es-border); border-radius: 6px; background: var(--es-surface); color: var(--es-text); cursor: pointer; white-space: nowrap; }
   button:hover:not(:disabled) { background: var(--es-surface-2); }
   button:disabled { opacity: 0.55; cursor: default; }
-  .toast { padding: 8px 12px; margin-bottom: 12px; border: 1px solid var(--es-border); border-radius: 6px; background: var(--es-surface-2); font-size: 12px; }
-  .meta { font-size: 11px; color: var(--es-muted); font-family: var(--es-mono); margin-bottom: 10px; }
-  .meta code { font-size: 10px; }
-  .csv { width: 100%; font-family: var(--es-mono); font-size: 11px; padding: 8px 10px; border: 1px solid var(--es-border); border-radius: 6px; background: var(--es-surface); color: var(--es-text); margin-bottom: 12px; }
-  table.hist { width: 100%; border-collapse: collapse; font-size: 12px; border: 1px solid var(--es-border); border-radius: var(--es-radius); overflow: hidden; }
+  .toast { padding: 8px 12px; margin-bottom: 12px; border: 1px solid var(--es-border); border-radius: 6px; background: var(--es-surface-2); font-size: var(--es-fs-sm); }
+  .meta { font-size: var(--es-fs-xs); color: var(--es-muted); font-family: var(--es-mono); margin-bottom: 10px; }
+  .meta code { font-size: var(--es-fs-2xs); }
+  .csv { width: 100%; font-family: var(--es-mono); font-size: var(--es-fs-xs); padding: 8px 10px; border: 1px solid var(--es-border); border-radius: 6px; background: var(--es-surface); color: var(--es-text); margin-bottom: 12px; }
+  table.hist { width: 100%; border-collapse: collapse; font-size: var(--es-fs-sm); border: 1px solid var(--es-border); border-radius: var(--es-radius); overflow: hidden; }
   .hist th, .hist td { padding: 6px 10px; border-bottom: 1px solid var(--es-border); text-align: left; white-space: nowrap; }
-  .hist th { background: var(--es-surface-2); color: var(--es-muted); font-weight: 600; font-size: 11px; }
+  .hist th { background: var(--es-surface-2); color: var(--es-muted); font-weight: 600; font-size: var(--es-fs-xs); }
   .hist tbody tr:hover { background: var(--es-surface-2); }
   .right { text-align: right; }
   .mono { font-family: var(--es-mono); }
   .bad { color: var(--es-red); }
-  .tag { display: inline-block; padding: 1px 6px; border-radius: 4px; font-size: 10px; font-family: var(--es-mono); border: 1px solid var(--es-border); }
+  .tag { display: inline-block; padding: 1px 6px; border-radius: 4px; font-size: var(--es-fs-2xs); font-family: var(--es-mono); border: 1px solid var(--es-border); }
   .tag.green { color: var(--es-green); border-color: var(--es-green); }
   .tag.yellow { color: var(--es-yellow); border-color: var(--es-yellow); }
   .tag.red { color: var(--es-red); border-color: var(--es-red); }
-  .note { margin: 8px 0 0; font-size: 11px; color: var(--es-muted); }
+  .note { margin: 8px 0 0; font-size: var(--es-fs-xs); color: var(--es-muted); }
 </style>

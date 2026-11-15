@@ -156,7 +156,7 @@ def _run(base_url, out_dir, mirror_url):
 
         # ---------------------------------------------------------------- Shards
         try:
-            click_nav(page, "Shards")
+            click_nav(page, "分片")
             wait_text(page, "分配中", timeout=20000)
             cards = page.locator(".summary .card")
             labels = page.locator(".summary .card .lbl").all_inner_texts()
@@ -180,7 +180,7 @@ def _run(base_url, out_dir, mirror_url):
 
         # --------------------------------------------------------------- Aliases
         try:
-            click_nav(page, "Aliases")
+            click_nav(page, "别名")
             wait_text(page, "prod-view", timeout=20000)
             op_head = page.inner_text("section.panel.op h2")
             query_head = page.inner_text("section.panel:not(.op) h2")
@@ -193,7 +193,7 @@ def _run(base_url, out_dir, mirror_url):
             check("Aliases 索引下拉里有真实索引", any("products" in o for o in opts), opts[:4])
             alias_form = page.inner_text("section.panel.op")
             check("Aliases 新建表单补齐 filter / routing / index_routing / search_routing / is_write_index / is_hidden",
-                  all(k in alias_form for k in ("Filter", "Routing", "index_routing", "search_routing",
+                  all(k in alias_form for k in ("过滤查询", "路由", "index_routing", "search_routing",
                                                 "is_write_index", "is_hidden")), alias_form[:160])
             alias_head = page.inner_text("div.page header")
             check("Aliases 头部只留一行接口说明（与其它页风格统一）",
@@ -201,7 +201,7 @@ def _run(base_url, out_dir, mirror_url):
             filter_th = page.locator("table.ax thead th").nth(3)
             tip = filter_th.get_attribute("title") or ""
             check("Aliases Filter 列的语义放在表头 tooltip", "过滤查询" in tip, tip)
-            check("Aliases 表格有 Hidden 列", "Hidden" in page.inner_text("table.ax thead"), "")
+            check("Aliases 表格有 Hidden 列", "隐藏" in page.inner_text("table.ax thead"), "")
             total_before = page.locator("table.ax tbody tr").count()
             page.fill('input[placeholder="筛选：别名 / 索引 / 过滤条件"]', "prod-view")
             page.wait_for_timeout(300)
@@ -258,7 +258,7 @@ def _run(base_url, out_dir, mirror_url):
             # 关闭状态必须由 ES 决定，页面不许自己猜：先真关一个索引再验按钮
             req = urllib.request.Request(f"{es}/archived-2023/_close", method="POST")
             urllib.request.urlopen(req, timeout=60).read()
-            click_nav(page, "Index List")
+            click_nav(page, "索引列表")
             wait_text(page, "archived-2023", timeout=20000)
             page.fill('input[placeholder="按索引名过滤"]', "arch")
             page.wait_for_timeout(400)
@@ -266,19 +266,19 @@ def _run(base_url, out_dir, mirror_url):
             check("Index List 按索引名过滤生效（arch -> 1 行）", rows.count() == 1, rows.count())
             btns = rows.first.locator("button").all_inner_texts()
             check("关闭的索引只给 Open、不给 Close",
-                  any("Open" in t for t in btns) and not any("Close" in t for t in btns), btns)
-            rows.first.locator('button:has-text("Open")').click()
+                  any("打开索引" in t for t in btns) and not any("关闭索引" in t for t in btns), btns)
+            rows.first.locator('button:has-text("打开索引")').click()
             page.wait_for_selector(".overlay .ack input", timeout=10000)
             page.locator(".overlay .ack input").check()
             page.locator('.overlay button:has-text("打开索引")').click()
             page.wait_for_function(
                 "() => { const r = document.querySelector('table.ix tbody tr'); if (!r) return false;"
-                " return [...r.querySelectorAll('button')].some(b => b.innerText.includes('Close')); }",
+                " return [...r.querySelectorAll('button')].some(b => b.innerText.includes('关闭索引')); }",
                 timeout=30000,
             )
             btns2 = page.locator("table.ix tbody tr").first.locator("button").all_inner_texts()
             check("打开的索引只给 Close、不给 Open",
-                  any("Close" in t for t in btns2) and not any("Open" in t for t in btns2), btns2)
+                  any("关闭索引" in t for t in btns2) and not any("打开索引" in t for t in btns2), btns2)
             shot("ux-indexlist")
         except Exception as e:
             shot("ux-indexlist-FAIL")
@@ -286,8 +286,8 @@ def _run(base_url, out_dir, mirror_url):
 
         # --------------------------------------------------------------- Browser
         try:
-            click_nav(page, "Browser")
-            wait_text(page, "Search documents", timeout=20000)
+            click_nav(page, "文档浏览")
+            wait_text(page, "搜索文档", timeout=20000)
             plan = page.locator("p.plan code").inner_text()
             check("Browser 显示将执行的查询（空关键字=match_all）", "match_all" in plan, plan)
             page.locator("section.bar select").first.select_option("products")
@@ -299,7 +299,7 @@ def _run(base_url, out_dir, mirror_url):
             page.wait_for_timeout(300)
             plan3 = page.locator("p.plan code").inner_text()
             check("Browser 选字段后计划变成 match on name", "on name" in plan3, plan3)
-            page.click('button.primary:has-text("Search documents")')
+            page.click('button.primary:has-text("搜索文档")')
             wait_text(page, "total", timeout=20000)
             shot("ux-browser")
             check("Browser 关键字搜索有结果", "total" in page.inner_text(".meta"), "")
@@ -309,8 +309,8 @@ def _run(base_url, out_dir, mirror_url):
 
         # --------------------------------------------------------- Query Builder
         try:
-            click_nav(page, "Query Builder")
-            wait_text(page, "CONDITIONS", timeout=20000)
+            click_nav(page, "查询构建器")
+            wait_text(page, "条件", timeout=20000)
             page.locator("section.bar select").first.select_option("products")
             page.wait_for_function(
                 "() => { const el = document.querySelector('.fcount');"
@@ -337,7 +337,7 @@ def _run(base_url, out_dir, mirror_url):
             page.wait_for_timeout(200)
             page.locator("div.clause select.occur").first.select_option("must_not")
             page.locator("div.clause input.value").first.fill("peripheral")
-            page.click('button:has-text("Run query")')
+            page.click('button:has-text("执行查询")')
             wait_text(page, "total", timeout=20000)
             meta = page.locator("p.meta").inner_text()
             check("Query Builder must_not 生效（peripheral -> 3/6）", "total 3 hits" in meta, meta)
@@ -354,7 +354,7 @@ def _run(base_url, out_dir, mirror_url):
                 row.locator("input.value").fill(value)
             page.wait_for_timeout(300)
             check("Query Builder 出现 minimum_should_match 输入", page.locator('input[placeholder="默认 1"]').count() == 1)
-            page.click('button:has-text("Run query")')
+            page.click('button:has-text("执行查询")')
             wait_text(page, "total", timeout=20000)
             meta2 = page.locator("p.meta").inner_text()
             check("Query Builder should 组合生效（display|accessory -> 3/6）", "total 3 hits" in meta2, meta2)
@@ -385,7 +385,7 @@ def _run(base_url, out_dir, mirror_url):
 
         # ------------------------------------------------------------- DSL Editor
         try:
-            click_nav(page, "DSL Editor")
+            click_nav(page, "DSL 编辑器")
             wait_text(page, "Tab 插入 2 空格", timeout=20000)
             check("DSL Editor 有索引下拉", page.locator("section.bar select").count() == 1)
             page.locator("section.bar select").select_option("products")
@@ -410,8 +410,8 @@ def _run(base_url, out_dir, mirror_url):
 
         # ------------------------------------------- Analyzer / Snapshots 下拉
         try:
-            click_nav(page, "Analyzer")
-            wait_text(page, "Context index", timeout=20000)
+            click_nav(page, "分词分析")
+            wait_text(page, "上下文索引", timeout=20000)
             sel = page.locator("section.form select").first
             opts = sel.locator("option").all_inner_texts()
             check("Analyzer 索引是下拉且有真实索引", any("products" in o for o in opts), opts[:4])
@@ -420,15 +420,15 @@ def _run(base_url, out_dir, mirror_url):
             fopts = page.locator("section.form select").nth(1).locator("option").all_inner_texts()
             check("Analyzer 字段下拉来自 mapping", any("name · text" in o for o in fopts), fopts[:4])
             page.locator("section.form select").nth(1).select_option("name")
-            page.get_by_role("button", name="Analyze", exact=True).click()
-            wait_text(page, "tokens", timeout=20000)
+            page.get_by_role("button", name="分析", exact=True).click()
+            wait_text(page, "词元", timeout=20000)
             shot("ux-analyzer")
         except Exception as e:
             shot("ux-analyzer-FAIL")
             check("Analyzer 索引是下拉且有真实索引", False, e)
 
         try:
-            click_nav(page, "Snapshots")
+            click_nav(page, "快照")
             wait_text(page, "p3-fs-repo", timeout=20000)
             chips = page.locator(".ix-chips .chip")
             check("Snapshots 索引用 chips 多选而不是手填", chips.count() >= 5, chips.count())
@@ -453,15 +453,15 @@ def _run(base_url, out_dir, mirror_url):
 
         # ------------------------------------------ Templates / Component 弹层
         for nav, marker, shot_name in (
-            ("Templates", "p3-demo-template", "ux-templates"),
-            ("Component Templates", "p3-demo-component", "ux-component"),
+            ("索引模板", "p3-demo-template", "ux-templates"),
+            ("组件模板", "p3-demo-component", "ux-component"),
         ):
             try:
                 click_nav(page, nav)
                 wait_text(page, marker, timeout=20000)
                 rows_n = page.locator("table tbody tr").count()
                 check(f"{nav} 列出了真实模板", rows_n > 5, rows_n)
-                page.locator("table tbody tr").first.locator('button:has-text("View")').click()
+                page.locator("table tbody tr").first.locator('button:has-text("查看")').click()
                 page.wait_for_selector(".overlay .panel", timeout=20000)
                 check(f"{nav} 的 View 在弹层里展示（不用滚到页尾）",
                       page.locator(".overlay .panel pre.json").count() == 1)
@@ -475,7 +475,7 @@ def _run(base_url, out_dir, mirror_url):
 
         # ------------------------------------------------------- Cluster Settings
         try:
-            click_nav(page, "Cluster Settings")
+            click_nav(page, "集群设置")
             page.wait_for_selector("input.key-input", timeout=20000)
             list_id = page.get_attribute("input.key-input", "list")
             datalist_n = page.locator(f"datalist#{list_id} option").count()
@@ -510,7 +510,7 @@ def _run(base_url, out_dir, mirror_url):
 
         # ------------------------------------------------------- Monitoring (P4)
         try:
-            click_nav(page, "Cluster Metrics")
+            click_nav(page, "集群指标")
             page.wait_for_selector("section.bar .dot", timeout=20000)
             page.wait_for_function(
                 "() => document.querySelectorAll('.panel svg path.line').length >= 4",
@@ -548,7 +548,7 @@ def _run(base_url, out_dir, mirror_url):
             check("四张集群图都画出了折线", False, e)
 
         try:
-            click_nav(page, "Node Metrics")
+            click_nav(page, "节点指标")
             page.wait_for_function(
                 "() => document.querySelectorAll('.panel svg path.line').length >= 3",
                 timeout=40000,
@@ -569,7 +569,7 @@ def _run(base_url, out_dir, mirror_url):
             check("Latest sample 表列出真实节点", False, e)
 
         try:
-            click_nav(page, "History")
+            click_nav(page, "历史")
             page.wait_for_selector("table.hist tbody tr", timeout=30000)
             hist_rows = page.locator("table.hist tbody tr").count()
             check("History 列出已落盘的采样点", hist_rows >= 2, hist_rows)
@@ -586,7 +586,7 @@ def _run(base_url, out_dir, mirror_url):
 
         # ------------------------------------------------------- Diagnostics (P4-b)
         try:
-            click_nav(page, "Cluster Diagnostics")
+            click_nav(page, "集群诊断")
             page.wait_for_selector("table.findings tbody tr", timeout=30000)
             body_text = page.inner_text("main")
             findings = page.locator("table.findings tbody tr")
@@ -638,7 +638,7 @@ def _run(base_url, out_dir, mirror_url):
             # pass, the page really rendered both clusters' own numbers.
             left_facts = fetch_facts(LOCAL_ES)
             right_facts = fetch_facts(mirror_url)
-            click_nav(page, "Multi-Cluster Compare")
+            click_nav(page, "多集群对比")
             page.wait_for_selector("table.diff tbody tr", timeout=40000)
             head = page.inner_text("div.meta")
             table_text = page.inner_text("table.diff")
@@ -682,7 +682,7 @@ def _run(base_url, out_dir, mirror_url):
 
         # ------------------------------------------------------- MCP (P5)
         try:
-            click_nav(page, "MCP Tool Service")
+            click_nav(page, "MCP 工具服务")
             page.wait_for_selector("table.tools tbody tr", timeout=30000)
             tool_rows = page.locator("table.tools tbody tr").count()
             check("MCP 工具目录列出 40+ 只读工具", tool_rows >= 40, tool_rows)
@@ -734,7 +734,7 @@ def _run(base_url, out_dir, mirror_url):
 
         # --------------------------------------------------------- REST Console
         try:
-            click_nav(page, "REST Console")
+            click_nav(page, "REST 控制台")
             wait_text(page, "Tab 缩进", timeout=20000)
             page.fill("input.path", "/products/_search")
             ta = page.locator("textarea.body")

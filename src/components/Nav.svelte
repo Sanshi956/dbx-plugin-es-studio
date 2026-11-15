@@ -1,5 +1,6 @@
 <script lang="ts">
   import type { NavGroup } from "../lib/stores";
+  import { t } from "../lib/i18n.svelte.js";
 
   interface Props {
     groups: NavGroup[];
@@ -9,25 +10,19 @@
   let { groups, active, onselect }: Props = $props();
 </script>
 
-<nav aria-label="ES Studio navigation">
+<nav aria-label={t("nav.aria")}>
   {#each groups as group (group.id)}
     <section>
-      <h2>{group.label}</h2>
+      <h2>{t(group.label)}</h2>
       {#each group.items as item (item.id)}
-        {#if item.enabled}
-          <button
-            type="button"
-            class:active={active === item.id}
-            aria-current={active === item.id ? "page" : undefined}
-            onclick={() => onselect(item.id)}
-          >
-            <span>{item.label}</span>
-          </button>
-        {:else}
-          <div class="pending" aria-disabled="true" title="Planned for {item.phase}">
-            <span>{item.label}</span><span class="phase">{item.phase}</span>
-          </div>
-        {/if}
+        <button
+          type="button"
+          class:active={active === item.id}
+          aria-current={active === item.id ? "page" : undefined}
+          onclick={() => onselect(item.id)}
+        >
+          <span>{t(item.label)}</span>
+        </button>
       {/each}
     </section>
   {/each}
@@ -39,12 +34,12 @@
   h2 {
     margin: 12px 10px 4px;
     color: var(--es-muted);
-    font-size: 10px;
+    font-size: var(--es-fs-2xs);
     font-weight: 700;
     letter-spacing: 0.09em;
     text-transform: uppercase;
   }
-  button, .pending {
+  button {
     display: flex;
     justify-content: space-between;
     align-items: center;
@@ -63,14 +58,5 @@
     background: var(--es-accent-soft);
     color: var(--es-accent);
     font-weight: 600;
-  }
-  .pending { color: var(--es-muted); cursor: not-allowed; }
-  .phase {
-    font-family: var(--es-mono);
-    font-size: 10px;
-    color: var(--es-muted);
-    border: 1px solid var(--es-border);
-    border-radius: 4px;
-    padding: 0 4px;
   }
 </style>

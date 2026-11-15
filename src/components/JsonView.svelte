@@ -41,7 +41,7 @@
     border: 1px solid var(--es-border);
     border-radius: var(--es-radius);
     font-family: var(--es-mono);
-    font-size: 12px;
+    font-size: var(--es-fs-sm);
     line-height: 1.6;
     white-space: pre-wrap;
     word-break: break-word;

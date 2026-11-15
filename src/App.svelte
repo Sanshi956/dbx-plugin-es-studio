@@ -32,6 +32,8 @@
   import type { DbxBridge, ConnectionSummary } from "./lib/bridge";
   import { listConnections } from "./lib/api";
   import { NAV_GROUPS, DEFAULT_PAGE } from "./lib/stores";
+  import { t, normalizeLocale, setLocale } from "./lib/i18n.svelte.js";
+  import { syncTypeScale } from "./lib/hostTheme";
 
   let bridge: DbxBridge | null = $state(null);
   let connections: ConnectionSummary[] = $state([]);
@@ -40,6 +42,7 @@
   let booting: boolean = $state(true);
   let bootError: string = $state("");
   let unsubscribe: (() => void) | null = null;
+  let unsubscribeEnv: (() => void) | null = null;
 
   function ensureConnection(id: string): void {
     // The host context is authoritative for the frame's active connection. In
@@ -55,6 +58,17 @@
       try {
         const host = await ready(); // never touch the bridge before host init
         bridge = host;
+        setLocale(normalizeLocale(host.locale));
+        syncTypeScale(host.theme);
+        // The host re-sends locale + theme in an `env` message when the user
+        // switches language; the runtime mirrors it into bridge.locale and
+        // dispatches this event, so the UI flips without a remount.
+        const onEnv = (): void => {
+          setLocale(normalizeLocale(host.locale));
+          syncTypeScale(host.theme);
+        };
+        window.addEventListener("dbx-plugin-env", onEnv);
+        unsubscribeEnv = () => window.removeEventListener("dbx-plugin-env", onEnv);
         await host.workbench.setTitle("ES Studio");
         connections = await listConnections(host);
 
@@ -81,6 +95,7 @@
 
   onDestroy(() => {
     unsubscribe?.();
+    unsubscribeEnv?.();
   });
 
   function changeConnection(id: string): void {
@@ -93,7 +108,7 @@
   <header class="topbar">
     <div class="brand">
       <span class="logo">ES</span>
-      <div><strong>ES Studio</strong><small>DBX Elasticsearch workbench</small></div>
+      <div><strong>ES Studio</strong><small>{t("app.tagline")}</small></div>
     </div>
     <ClusterPicker
       connections={connections}
@@ -102,7 +117,7 @@
       onchange={changeConnection}
     />
     <div class="spacer"></div>
-    <span class="phase-chip">P5 · MCP Tool Service</span>
+    <span class="version-chip">v{__PLUGIN_VERSION__}</span>
   </header>
 
   <div class="shell">
@@ -111,14 +126,12 @@
     </aside>
     <main>
       {#if booting}
-        <StateBlock kind="loading" message="Waiting for the DBX host…" detail="window.dbxPlugin.ready" />
+        <StateBlock kind="loading" message={t("app.boot.waiting")} detail={t("app.boot.detail")} />
       {:else if bootError}
         <StateBlock
           kind="error"
-          message="ES Studio must run inside DBX"
-          detail={bootError === "NOT_IN_DBX_HOST"
-            ? "The DBX host bridge is not available. Open this workbench from DBX or the official dbx-plugin dev host."
-            : bootError}
+          message={t("app.error.title")}
+          detail={bootError === "NOT_IN_DBX_HOST" ? t("app.error.notInHost") : bootError}
         />
       {:else if bridge}
         {#if page === "overview"}
@@ -198,17 +211,17 @@
     background: var(--es-accent);
     color: var(--es-surface);
     font-weight: 800;
-    font-size: 12px;
+    font-size: var(--es-fs-sm);
   }
-  .brand strong { display: block; font-size: 14px; }
-  .brand small { display: block; color: var(--es-muted); font-size: 11px; }
+  .brand strong { display: block; font-size: var(--es-fs-lg); }
+  .brand small { display: block; color: var(--es-muted); font-size: var(--es-fs-xs); }
   .spacer { flex: 1; }
-  .phase-chip {
+  .version-chip {
     padding: 4px 10px;
     border: 1px solid var(--es-border);
     border-radius: 999px;
     color: var(--es-muted);
-    font-size: 11px;
+    font-size: var(--es-fs-xs);
     font-family: var(--es-mono);
   }
   .shell { display: flex; flex: 1; min-height: 0; }

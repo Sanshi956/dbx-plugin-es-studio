@@ -15,7 +15,7 @@ export interface SettingMeta {
   /** Clickable candidates: the full enum, or the common values for the kind. */
   options: string[];
   /** One-line meaning, shown as a tooltip only (never as page copy). */
-  hint: string;
+  hintKey: string;
 }
 
 const BOOL = ["true", "false"];
@@ -27,52 +27,52 @@ const WATERMARKS = ["85%", "90%", "95%", "5gb"];
 
 /** Curated keys, in the order they are offered in the picker. */
 const CURATED: { key: string; meta: SettingMeta }[] = [
-  { key: "cluster.routing.allocation.enable", meta: { kind: "enum", options: ALLOC_ENABLE, hint: "分片分配开关；滚动重启前设为 none（默认 all）" } },
-  { key: "cluster.routing.allocation.allow_rebalance", meta: { kind: "enum", options: ALLOW_REBALANCE, hint: "允许重平衡的时机（默认 indices_all_active）" } },
-  { key: "cluster.routing.rebalance.enable", meta: { kind: "enum", options: REBALANCE_ENABLE, hint: "允许哪类分片参与重平衡（默认 all）" } },
-  { key: "cluster.routing.allocation.type", meta: { kind: "enum", options: ["balanced", "desired_balance"], hint: "分配算法：balanced 按权重，desired_balance 按目标分片数（默认 balanced）" } },
-  { key: "cluster.routing.allocation.disk.threshold_enabled", meta: { kind: "boolean", options: BOOL, hint: "是否启用磁盘水位线检查（默认 true）" } },
-  { key: "cluster.routing.allocation.disk.include_relocations", meta: { kind: "boolean", options: BOOL, hint: "水位线统计是否计入正在迁出的分片（默认 true）" } },
-  { key: "cluster.routing.allocation.disk.watermark.low", meta: { kind: "size", options: WATERMARKS, hint: "低水位：不再往该节点分配新分片（默认 85%）" } },
-  { key: "cluster.routing.allocation.disk.watermark.high", meta: { kind: "size", options: WATERMARKS, hint: "高水位：尝试把分片迁走（默认 90%）" } },
-  { key: "cluster.routing.allocation.disk.watermark.flood_stage", meta: { kind: "size", options: WATERMARKS, hint: "洪泛水位：命中索引被置为只读（默认 95%）" } },
-  { key: "cluster.routing.allocation.node_concurrent_recoveries", meta: { kind: "number", options: ["1", "2", "4"], hint: "单节点并发分片恢复数（默认 2）" } },
-  { key: "cluster.routing.allocation.node_initial_primaries_recoveries", meta: { kind: "number", options: ["4", "8"], hint: "单节点并发主分片恢复数（默认 4）" } },
-  { key: "cluster.routing.allocation.cluster_concurrent_rebalance", meta: { kind: "number", options: ["2", "4", "8"], hint: "全集群并发重平衡数（默认 2）" } },
-  { key: "cluster.routing.allocation.balance.shard", meta: { kind: "number", options: ["0.45"], hint: "重平衡时 shard 数量的权重（默认 0.45）" } },
-  { key: "cluster.routing.allocation.balance.index", meta: { kind: "number", options: ["0.55"], hint: "重平衡时索引数量的权重（默认 0.55）" } },
-  { key: "cluster.routing.allocation.balance.threshold", meta: { kind: "number", options: ["1.0"], hint: "触发重平衡的权重差阈值（默认 1.0）" } },
-  { key: "cluster.routing.use_adaptive_replica_selection", meta: { kind: "boolean", options: BOOL, hint: "读请求是否走自适应副本选择（默认 true）" } },
-  { key: "cluster.blocks.read_only", meta: { kind: "boolean", options: BOOL, hint: "全集群只读（元数据与写入都拒绝，默认 false）" } },
-  { key: "cluster.blocks.read_only_allow_delete", meta: { kind: "boolean", options: BOOL, hint: "只读但允许删除；磁盘满时 ES 会自动设置（默认 false）" } },
-  { key: "cluster.info.update.interval", meta: { kind: "duration", options: DURATIONS, hint: "集群元信息（磁盘等）刷新间隔（默认 30s）" } },
-  { key: "cluster.indices.close.enable", meta: { kind: "boolean", options: BOOL, hint: "是否允许关闭索引（默认 true）" } },
-  { key: "cluster.max_shards_per_node", meta: { kind: "number", options: ["1000", "2000"], hint: "单节点分片数上限（默认 1000）" } },
-  { key: "cluster.max_shards_per_node.frozen", meta: { kind: "number", options: ["3000"], hint: "单节点 frozen 分片数上限（默认 3000）" } },
-  { key: "cluster.publish.timeout", meta: { kind: "duration", options: ["30s", "60s"], hint: "集群状态发布超时（默认 30s）" } },
-  { key: "cluster.auto_shrink_voting_configuration", meta: { kind: "boolean", options: BOOL, hint: "是否自动收缩投票节点集合（默认 true）" } },
-  { key: "cluster.deprecation_indexing.enabled", meta: { kind: "boolean", options: BOOL, hint: "是否写入弃用日志（默认 true）" } },
-  { key: "cluster.fault_detection.follower.ping_interval", meta: { kind: "duration", options: DURATIONS, hint: "follower 向 leader 发 ping 的间隔（默认 10s）" } },
-  { key: "cluster.fault_detection.leader_check.interval", meta: { kind: "duration", options: DURATIONS, hint: "leader 检查 follower 的间隔（默认 10s）" } },
-  { key: "cluster.name", meta: { kind: "text", options: [], hint: "集群名；改了会触发全集群重新加入" } }
+  { key: "cluster.routing.allocation.enable", meta: { kind: "enum", options: ALLOC_ENABLE, hintKey: "cs.hint.cluster.routing.allocation.enable" } },
+  { key: "cluster.routing.allocation.allow_rebalance", meta: { kind: "enum", options: ALLOW_REBALANCE, hintKey: "cs.hint.cluster.routing.allocation.allow_rebalance" } },
+  { key: "cluster.routing.rebalance.enable", meta: { kind: "enum", options: REBALANCE_ENABLE, hintKey: "cs.hint.cluster.routing.rebalance.enable" } },
+  { key: "cluster.routing.allocation.type", meta: { kind: "enum", options: ["balanced", "desired_balance"], hintKey: "cs.hint.cluster.routing.allocation.type" } },
+  { key: "cluster.routing.allocation.disk.threshold_enabled", meta: { kind: "boolean", options: BOOL, hintKey: "cs.hint.cluster.routing.allocation.disk.threshold_enabled" } },
+  { key: "cluster.routing.allocation.disk.include_relocations", meta: { kind: "boolean", options: BOOL, hintKey: "cs.hint.cluster.routing.allocation.disk.include_relocations" } },
+  { key: "cluster.routing.allocation.disk.watermark.low", meta: { kind: "size", options: WATERMARKS, hintKey: "cs.hint.cluster.routing.allocation.disk.watermark.low" } },
+  { key: "cluster.routing.allocation.disk.watermark.high", meta: { kind: "size", options: WATERMARKS, hintKey: "cs.hint.cluster.routing.allocation.disk.watermark.high" } },
+  { key: "cluster.routing.allocation.disk.watermark.flood_stage", meta: { kind: "size", options: WATERMARKS, hintKey: "cs.hint.cluster.routing.allocation.disk.watermark.flood_stage" } },
+  { key: "cluster.routing.allocation.node_concurrent_recoveries", meta: { kind: "number", options: ["1", "2", "4"], hintKey: "cs.hint.cluster.routing.allocation.node_concurrent_recoveries" } },
+  { key: "cluster.routing.allocation.node_initial_primaries_recoveries", meta: { kind: "number", options: ["4", "8"], hintKey: "cs.hint.cluster.routing.allocation.node_initial_primaries_recoveries" } },
+  { key: "cluster.routing.allocation.cluster_concurrent_rebalance", meta: { kind: "number", options: ["2", "4", "8"], hintKey: "cs.hint.cluster.routing.allocation.cluster_concurrent_rebalance" } },
+  { key: "cluster.routing.allocation.balance.shard", meta: { kind: "number", options: ["0.45"], hintKey: "cs.hint.cluster.routing.allocation.balance.shard" } },
+  { key: "cluster.routing.allocation.balance.index", meta: { kind: "number", options: ["0.55"], hintKey: "cs.hint.cluster.routing.allocation.balance.index" } },
+  { key: "cluster.routing.allocation.balance.threshold", meta: { kind: "number", options: ["1.0"], hintKey: "cs.hint.cluster.routing.allocation.balance.threshold" } },
+  { key: "cluster.routing.use_adaptive_replica_selection", meta: { kind: "boolean", options: BOOL, hintKey: "cs.hint.cluster.routing.use_adaptive_replica_selection" } },
+  { key: "cluster.blocks.read_only", meta: { kind: "boolean", options: BOOL, hintKey: "cs.hint.cluster.blocks.read_only" } },
+  { key: "cluster.blocks.read_only_allow_delete", meta: { kind: "boolean", options: BOOL, hintKey: "cs.hint.cluster.blocks.read_only_allow_delete" } },
+  { key: "cluster.info.update.interval", meta: { kind: "duration", options: DURATIONS, hintKey: "cs.hint.cluster.info.update.interval" } },
+  { key: "cluster.indices.close.enable", meta: { kind: "boolean", options: BOOL, hintKey: "cs.hint.cluster.indices.close.enable" } },
+  { key: "cluster.max_shards_per_node", meta: { kind: "number", options: ["1000", "2000"], hintKey: "cs.hint.cluster.max_shards_per_node" } },
+  { key: "cluster.max_shards_per_node.frozen", meta: { kind: "number", options: ["3000"], hintKey: "cs.hint.cluster.max_shards_per_node.frozen" } },
+  { key: "cluster.publish.timeout", meta: { kind: "duration", options: ["30s", "60s"], hintKey: "cs.hint.cluster.publish.timeout" } },
+  { key: "cluster.auto_shrink_voting_configuration", meta: { kind: "boolean", options: BOOL, hintKey: "cs.hint.cluster.auto_shrink_voting_configuration" } },
+  { key: "cluster.deprecation_indexing.enabled", meta: { kind: "boolean", options: BOOL, hintKey: "cs.hint.cluster.deprecation_indexing.enabled" } },
+  { key: "cluster.fault_detection.follower.ping_interval", meta: { kind: "duration", options: DURATIONS, hintKey: "cs.hint.cluster.fault_detection.follower.ping_interval" } },
+  { key: "cluster.fault_detection.leader_check.interval", meta: { kind: "duration", options: DURATIONS, hintKey: "cs.hint.cluster.fault_detection.leader_check.interval" } },
+  { key: "cluster.name", meta: { kind: "text", options: [], hintKey: "cs.hint.cluster.name" } }
 ];
 
 const BY_KEY = new Map(CURATED.map((entry) => [entry.key, entry.meta]));
 
 function guess(key: string): SettingMeta {
   if (/\.(enable|enabled)$/.test(key)) {
-    return { kind: "boolean", options: BOOL, hint: "开关值：true / false" };
+    return { kind: "boolean", options: BOOL, hintKey: "cs.guess.enable" };
   }
   if (/watermark/.test(key)) {
-    return { kind: "size", options: WATERMARKS, hint: "百分比（85%）或字节值（5gb）" };
+    return { kind: "size", options: WATERMARKS, hintKey: "cs.guess.watermark" };
   }
   if (/\.(timeout|interval|delay|ttl|keep_alive|period)$/.test(key)) {
-    return { kind: "duration", options: DURATIONS, hint: "时间值需带单位：30s / 1m" };
+    return { kind: "duration", options: DURATIONS, hintKey: "cs.guess.duration" };
   }
   if (/(concurrent|recoveries|rebalance|retries|shards_per_node|threshold|\.size$|\.max$|\.min$|\.weight$)/.test(key)) {
-    return { kind: "number", options: [], hint: "数值（可为小数）" };
+    return { kind: "number", options: [], hintKey: "cs.guess.number" };
   }
-  return { kind: "text", options: [], hint: "自由文本；留空表示移除该项" };
+  return { kind: "text", options: [], hintKey: "cs.guess.text" };
 }
 
 export function settingMeta(key: string): SettingMeta {

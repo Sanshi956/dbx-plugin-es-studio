@@ -36,12 +36,12 @@
   .loading .marker { background: var(--es-accent); }
   .error .marker { background: var(--es-red); }
   .empty .marker { background: var(--es-yellow); }
-  .text strong { font-size: 14px; }
+  .text strong { font-size: var(--es-fs-lg); }
   .text p {
     margin: 6px 0 0;
     color: var(--es-muted);
     font-family: var(--es-mono);
-    font-size: 12px;
+    font-size: var(--es-fs-sm);
     line-height: 1.6;
     word-break: break-word;
   }
