@@ -378,7 +378,7 @@
   .card { border: 1px solid var(--es-border); border-radius: var(--es-radius); background: var(--es-surface); padding: 10px 12px; display: flex; flex-direction: column; gap: 4px; }
   .card .lbl { font-size: var(--es-fs-xs); color: var(--es-muted); text-transform: uppercase; letter-spacing: 0.06em; }
   .card .num-value { font-family: var(--es-mono); font-size: var(--es-fs-4xl); font-weight: 700; }
-  .panel { border: 1px solid var(--es-border); border-radius: var(--es-radius); background: var(--es-surface); padding: 10px 14px; margin-bottom: 14px; }
+  .panel { border: 1px solid var(--es-border); border-radius: var(--es-radius); background: var(--es-surface); padding: 10px 14px; margin-bottom: 14px; overflow-x: auto; }
   .panel-head { display: flex; justify-content: space-between; align-items: center; gap: 12px; }
   .panel-head h2 { margin: 0 0 6px; font-size: var(--es-fs-sm); text-transform: uppercase; letter-spacing: 0.08em; color: var(--es-muted); }
   .inline { display: flex; gap: 8px; align-items: center; }
@@ -387,6 +387,10 @@
   table { width: 100%; border-collapse: collapse; font-size: var(--es-fs-sm); margin-top: 6px; }
   th, td { padding: 6px 10px; border-bottom: 1px solid var(--es-border); text-align: left; vertical-align: top; }
   th { background: var(--es-surface-2); color: var(--es-muted); font-weight: 600; font-size: var(--es-fs-xs); }
+  /* 窄容器（DBX 侧栏 + iframe 挤压）下，auto 表格可能把某列压到几个像素，
+     表头就会逐字换行成竖排 —— 表头永远整词显示，列用 min-width 托底。 */
+  th { white-space: nowrap; }
+  .tools td:first-child, .calls td:nth-child(2) { min-width: 220px; }
   tbody tr:hover { background: var(--es-surface-2); }
   .right { text-align: right; }
   .mono { font-family: var(--es-mono); }
