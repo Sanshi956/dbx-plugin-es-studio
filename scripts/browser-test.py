@@ -23,7 +23,8 @@ CHROME = r"C:/Program Files/Google/Chrome/Application/chrome.exe"
 PAGES = [
     ("集群概览", "es-studio-test"),
     ("节点", "es-studio-node-1"),
-    ("分片与分配", "include._name"),
+    ("分片与拓扑", "products"),
+    ("分片设置", "include._name"),
     ("索引列表", "archived-2023"),
     ("别名", "prod-view"),
     # P3
@@ -284,8 +285,8 @@ def run(base_url, out_dir, ro_delete=False):
         try:
             click_nav(page, "分片诊断")
             page.wait_for_selector("table", timeout=20000)
-            page.get_by_role("button", name="解析").first.click()
-            page.wait_for_selector("text=解析结果", timeout=20000)
+            page.get_by_role("button", name="解析未分配分片").click()
+            page.wait_for_selector("text=解析结果", timeout=30000)
             text = page.locator("body").inner_text()
             assert ("allocate" in text.lower()) or ("分片" in text), text
             time.sleep(0.3)

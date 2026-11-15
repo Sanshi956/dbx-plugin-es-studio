@@ -3,19 +3,32 @@
   "manifest_version": 1,
   "id": "local.es.studio",
   "name": "ES Studio",
-  "version": "0.5.0",
+  "version": "0.5.1",
   "publisher": "xihonglei",
   "description": "Professional Elasticsearch management workbench for DBX.",
   "icon": "assets/plugin.svg",
-  "permissions": ["host.workbench", "host.storage", "host.connections:read", "host.events"],
-  "engines": { "dbx": ">=0.5.68", "host_api": "1" },
+  "permissions": [
+    "host.workbench",
+    "host.storage",
+    "host.connections:read",
+    "host.events"
+  ],
+  "engines": {
+    "dbx": ">=0.5.68",
+    "host_api": "1"
+  },
   "entrypoints": {
     "backend": {
       "executable": "bin/es-studio-sidecar",
-      "protocol_versions": [1],
+      "protocol_versions": [
+        1
+      ],
       "transport": "stdio-jsonl"
     },
-    "ui": { "root": "ui", "entry": "ui/index.html" }
+    "ui": {
+      "root": "ui",
+      "entry": "ui/index.html"
+    }
   },
   "contributions": [
     {
@@ -26,7 +39,11 @@
       "icon": "assets/connection.svg",
       "database_type": "elasticsearch",
       "workbench": "local.es.studio.workbench",
-      "capabilities": ["test", "connect", "disconnect"],
+      "capabilities": [
+        "test",
+        "connect",
+        "disconnect"
+      ],
       "fields": [
         {
           "key": "display_name",
@@ -43,11 +60,26 @@
           "binding": "config",
           "default": "Development",
           "options": [
-            { "label": "Development", "value": "Development" },
-            { "label": "Test", "value": "Test" },
-            { "label": "Staging", "value": "Staging" },
-            { "label": "Production", "value": "Production" },
-            { "label": "Custom", "value": "Custom" }
+            {
+              "label": "Development",
+              "value": "Development"
+            },
+            {
+              "label": "Test",
+              "value": "Test"
+            },
+            {
+              "label": "Staging",
+              "value": "Staging"
+            },
+            {
+              "label": "Production",
+              "value": "Production"
+            },
+            {
+              "label": "Custom",
+              "value": "Custom"
+            }
           ]
         },
         {
@@ -57,8 +89,14 @@
           "binding": "config",
           "default": "http",
           "options": [
-            { "label": "HTTP", "value": "http" },
-            { "label": "HTTPS", "value": "https" }
+            {
+              "label": "HTTP",
+              "value": "http"
+            },
+            {
+              "label": "HTTPS",
+              "value": "https"
+            }
           ]
         },
         {
@@ -84,10 +122,22 @@
           "binding": "config",
           "default": "none",
           "options": [
-            { "label": "None", "value": "none" },
-            { "label": "Basic Authentication", "value": "basic" },
-            { "label": "API Key", "value": "api_key" },
-            { "label": "Bearer Token", "value": "bearer" }
+            {
+              "label": "None",
+              "value": "none"
+            },
+            {
+              "label": "Basic Authentication",
+              "value": "basic"
+            },
+            {
+              "label": "API Key",
+              "value": "api_key"
+            },
+            {
+              "label": "Bearer Token",
+              "value": "bearer"
+            }
           ]
         },
         {
@@ -95,28 +145,48 @@
           "label": "Username",
           "type": "text",
           "binding": "username",
-          "visible_when": { "field": "auth_type", "one_of": ["basic"] }
+          "visible_when": {
+            "field": "auth_type",
+            "one_of": [
+              "basic"
+            ]
+          }
         },
         {
           "key": "password",
           "label": "Password",
           "type": "password",
           "binding": "secret",
-          "visible_when": { "field": "auth_type", "one_of": ["basic"] }
+          "visible_when": {
+            "field": "auth_type",
+            "one_of": [
+              "basic"
+            ]
+          }
         },
         {
           "key": "api_key",
           "label": "API Key",
           "type": "password",
           "binding": "secret",
-          "visible_when": { "field": "auth_type", "one_of": ["api_key"] }
+          "visible_when": {
+            "field": "auth_type",
+            "one_of": [
+              "api_key"
+            ]
+          }
         },
         {
           "key": "bearer_token",
           "label": "Bearer Token",
           "type": "password",
           "binding": "secret",
-          "visible_when": { "field": "auth_type", "one_of": ["bearer"] }
+          "visible_when": {
+            "field": "auth_type",
+            "one_of": [
+              "bearer"
+            ]
+          }
         },
         {
           "key": "tls_verify",
@@ -170,7 +240,10 @@
       "label": "Open ES Studio",
       "menu": "connection",
       "icon": "assets/plugin.svg",
-      "action": { "type": "open-workbench", "workbench": "local.es.studio.workbench" }
+      "action": {
+        "type": "open-workbench",
+        "workbench": "local.es.studio.workbench"
+      }
     },
     {
       "type": "command",
@@ -201,6 +274,242 @@
           "order": 50
         }
       ]
+    },
+    {
+      "type": "mcp",
+      "id": "local.es.studio.mcp",
+      "description": "ES Studio - 45 read-only Elasticsearch tools (health, indexes, mappings, shards, ILM, snapshots, tasks).",
+      "ai_tools": true,
+      "external_tools": true,
+      "toolsets": [
+        {
+          "id": "cluster",
+          "title": "Cluster",
+          "description": "Cluster-level health, stats, settings and nodes"
+        },
+        {
+          "id": "index",
+          "title": "Indexes",
+          "description": "Index mappings, settings, stats, shards and aliases"
+        },
+        {
+          "id": "doc",
+          "title": "Documents",
+          "description": "Document search and retrieval"
+        },
+        {
+          "id": "template",
+          "title": "Templates",
+          "description": "Index and component templates"
+        },
+        {
+          "id": "stream",
+          "title": "Data streams",
+          "description": "Data streams"
+        },
+        {
+          "id": "ilm",
+          "title": "Lifecycle (ILM)",
+          "description": "Index lifecycle management policies and status"
+        },
+        {
+          "id": "snapshot",
+          "title": "Snapshots",
+          "description": "Snapshot repositories and snapshots"
+        },
+        {
+          "id": "task",
+          "title": "Tasks",
+          "description": "Cluster task management"
+        },
+        {
+          "id": "advanced",
+          "title": "Advanced",
+          "description": "Read-only raw Elasticsearch API access"
+        }
+      ],
+      "tools": {
+        "es_analyze_text": {
+          "toolset": "doc",
+          "access": "read"
+        },
+        "es_call_readonly_api": {
+          "toolset": "advanced",
+          "access": "read"
+        },
+        "es_cat": {
+          "toolset": "cluster",
+          "access": "read"
+        },
+        "es_count_documents": {
+          "toolset": "index",
+          "access": "read"
+        },
+        "es_explain_allocation": {
+          "toolset": "cluster",
+          "access": "read"
+        },
+        "es_get_all_mappings": {
+          "toolset": "index",
+          "access": "read"
+        },
+        "es_get_all_settings": {
+          "toolset": "index",
+          "access": "read"
+        },
+        "es_get_cluster_health": {
+          "toolset": "cluster",
+          "access": "read"
+        },
+        "es_get_cluster_info": {
+          "toolset": "cluster",
+          "access": "read"
+        },
+        "es_get_cluster_pending_tasks": {
+          "toolset": "cluster",
+          "access": "read"
+        },
+        "es_get_cluster_settings": {
+          "toolset": "cluster",
+          "access": "read"
+        },
+        "es_get_cluster_stats": {
+          "toolset": "cluster",
+          "access": "read"
+        },
+        "es_get_component_template": {
+          "toolset": "template",
+          "access": "read"
+        },
+        "es_get_data_stream": {
+          "toolset": "stream",
+          "access": "read"
+        },
+        "es_get_document": {
+          "toolset": "doc",
+          "access": "read"
+        },
+        "es_get_field_caps": {
+          "toolset": "index",
+          "access": "read"
+        },
+        "es_get_ilm_policy": {
+          "toolset": "ilm",
+          "access": "read"
+        },
+        "es_get_ilm_status": {
+          "toolset": "ilm",
+          "access": "read"
+        },
+        "es_get_index": {
+          "toolset": "index",
+          "access": "read"
+        },
+        "es_get_index_aliases": {
+          "toolset": "index",
+          "access": "read"
+        },
+        "es_get_index_mapping": {
+          "toolset": "index",
+          "access": "read"
+        },
+        "es_get_index_recovery": {
+          "toolset": "index",
+          "access": "read"
+        },
+        "es_get_index_segments": {
+          "toolset": "index",
+          "access": "read"
+        },
+        "es_get_index_settings": {
+          "toolset": "index",
+          "access": "read"
+        },
+        "es_get_index_stats": {
+          "toolset": "index",
+          "access": "read"
+        },
+        "es_get_index_template": {
+          "toolset": "template",
+          "access": "read"
+        },
+        "es_get_node_stats": {
+          "toolset": "cluster",
+          "access": "read"
+        },
+        "es_get_shard_allocation": {
+          "toolset": "cluster",
+          "access": "read"
+        },
+        "es_get_snapshot": {
+          "toolset": "snapshot",
+          "access": "read"
+        },
+        "es_get_snapshot_status": {
+          "toolset": "snapshot",
+          "access": "read"
+        },
+        "es_get_task": {
+          "toolset": "task",
+          "access": "read"
+        },
+        "es_get_thread_pool_stats": {
+          "toolset": "cluster",
+          "access": "read"
+        },
+        "es_list_aliases": {
+          "toolset": "index",
+          "access": "read"
+        },
+        "es_list_component_templates": {
+          "toolset": "template",
+          "access": "read"
+        },
+        "es_list_data_streams": {
+          "toolset": "stream",
+          "access": "read"
+        },
+        "es_list_ilm_policies": {
+          "toolset": "ilm",
+          "access": "read"
+        },
+        "es_list_index_templates": {
+          "toolset": "template",
+          "access": "read"
+        },
+        "es_list_indices": {
+          "toolset": "index",
+          "access": "read"
+        },
+        "es_list_nodes": {
+          "toolset": "cluster",
+          "access": "read"
+        },
+        "es_list_shards": {
+          "toolset": "index",
+          "access": "read"
+        },
+        "es_list_snapshot_repositories": {
+          "toolset": "snapshot",
+          "access": "read"
+        },
+        "es_list_snapshots": {
+          "toolset": "snapshot",
+          "access": "read"
+        },
+        "es_list_tasks": {
+          "toolset": "task",
+          "access": "read"
+        },
+        "es_msearch": {
+          "toolset": "doc",
+          "access": "read"
+        },
+        "es_search_documents": {
+          "toolset": "doc",
+          "access": "read"
+        }
+      }
     }
   ],
   "localizations": {
@@ -212,28 +521,60 @@
           "label": "ES Studio (Elasticsearch)",
           "description": "ES Studio —— Elasticsearch / Easysearch / OpenSearch 集群连接。",
           "fields": {
-            "display_name": { "label": "连接名称" },
-            "environment": { "label": "环境" },
-            "protocol": { "label": "协议" },
-            "host": { "label": "主机" },
-            "port": { "label": "端口" },
-            "auth_type": { "label": "认证方式" },
-            "username": { "label": "用户名" },
-            "password": { "label": "密码" },
-            "api_key": { "label": "API Key" },
-            "bearer_token": { "label": "Bearer Token" },
-            "tls_verify": { "label": "校验证书" },
-            "timeout_secs": { "label": "请求超时（秒）" },
-            "description": { "label": "描述" },
-            "read_only": { "label": "只读连接" }
+            "display_name": {
+              "label": "连接名称"
+            },
+            "environment": {
+              "label": "环境"
+            },
+            "protocol": {
+              "label": "协议"
+            },
+            "host": {
+              "label": "主机"
+            },
+            "port": {
+              "label": "端口"
+            },
+            "auth_type": {
+              "label": "认证方式"
+            },
+            "username": {
+              "label": "用户名"
+            },
+            "password": {
+              "label": "密码"
+            },
+            "api_key": {
+              "label": "API Key"
+            },
+            "bearer_token": {
+              "label": "Bearer Token"
+            },
+            "tls_verify": {
+              "label": "校验证书"
+            },
+            "timeout_secs": {
+              "label": "请求超时（秒）"
+            },
+            "description": {
+              "label": "描述"
+            },
+            "read_only": {
+              "label": "只读连接"
+            }
           }
         },
         "local.es.studio.workbench": {
           "label": "ES Studio",
           "description": "Elasticsearch 管理工作台。"
         },
-        "local.es.studio.open": { "label": "打开 ES Studio" },
-        "local.es.studio.open.command": { "label": "打开 ES Studio" }
+        "local.es.studio.open": {
+          "label": "打开 ES Studio"
+        },
+        "local.es.studio.open.command": {
+          "label": "打开 ES Studio"
+        }
       }
     }
   }

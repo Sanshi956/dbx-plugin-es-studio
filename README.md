@@ -1,9 +1,9 @@
 # ES Studio
 
-DBX 内的专业 Elasticsearch 管理工作台插件。插件 ID `local.es.studio`，版本 `0.5.0`。
+DBX 内的专业 Elasticsearch 管理工作台插件。插件 ID `local.es.studio`，版本 `0.5.1`。
 
 已完成 **P1 · 插件基础设施**、**P2 · 日常运维**、**P3 · 治理与运维**、**P4 · 观测与诊断**、
-**P5 · MCP 工具服务** 与 **P6 · 国际化 + 多版本兼容**，共 **23 个导航项**全部可用（无占位按钮）。
+**P5 · MCP 工具服务** 与 **P6 · 国际化 + 多版本兼容**，共 **25 个导航项**全部可用（无占位按钮）。
 
 > 规格与实施计划见 `docs/00-SPEC.md`、`docs/01-PLAN.md`；各阶段验收结论见
 > `docs/P1-ACCEPTANCE.md` … `docs/P6-ACCEPTANCE.md`。
@@ -104,14 +104,14 @@ export PATH="/d/software/dev/Go/go/bin:$PATH"
 "D:/software/dev/Python/Python313/python.exe" scripts/check-manifest.py
 dbx-plugin package .                     # 产出未签名审核候选包，直接装会被 DBX 拒绝
 "D:/software/dev/Python/Python313/python.exe" scripts/sign-package.py \
-    --package dist/local.es.studio-0.5.0-windows-x64.dbxp \
+    --package dist/local.es.studio-0.5.1-windows-x64.dbxp \
     --key-id local.es.studio.release      # 产出 .signed.dbxp 并注册本机公钥
 
 "D:/software/dev/Python/Python313/python.exe" scripts/sign-package.py --verify \
-    --package dist/local.es.studio-0.5.0-windows-x64.signed.dbxp
-"D:/software/dev/Python/Python313/python.exe" scripts/verify-package.py --package dist/local.es.studio-0.5.0-windows-x64.signed.dbxp
+    --package dist/local.es.studio-0.5.1-windows-x64.signed.dbxp
+"D:/software/dev/Python/Python313/python.exe" scripts/verify-package.py --package dist/local.es.studio-0.5.1-windows-x64.signed.dbxp
 "D:/software/dev/Python/Python313/python.exe" scripts/check-manifest.py \
-    --package dist/local.es.studio-0.5.0-windows-x64.signed.dbxp
+    --package dist/local.es.studio-0.5.1-windows-x64.signed.dbxp
 ```
 
 安装 `dist/*.signed.dbxp` 到 DBX 插件中心。签名私钥文件
@@ -125,7 +125,7 @@ dbx-plugin package .                     # 产出未签名审核候选包，直�
 
 DBX 只提供「插件中心 → 设置 → 从 URL 安装」入口（本机无「从文件安装」按钮）；
 本机验证时在 `dist/` 起一个临时 HTTP 服务（`python -m http.server`），把
-`http://127.0.0.1:19321/local.es.studio-0.5.0-windows-x64.signed.dbxp` 填进 URL 框。
+`http://127.0.0.1:19321/local.es.studio-0.5.1-windows-x64.signed.dbxp` 填进 URL 框。
 下载后必须先在「已安装」里卸载旧版（同版本号不允许覆盖），再重装。
 
 **打开工作台有两种路径，结果不同：**
@@ -152,6 +152,7 @@ DBX 只提供「插件中心 → 设置 → 从 URL 安装」入口（本机无�
 
 | 项 | 说明 |
 |---|---|
+| MCP 工具服务 | 45 个只读工具经 manifest `type:"mcp"` 贡献挂入 DBX 设置页「MCP 服务器」列表（ai_tools + external_tools，按 9 类 toolset 分组）；外部客户端仍走 `es-studio-sidecar --mcp` + 连接级授权令牌 |
 | `go test -race` | 本机未启用 CGO / 无对应 C 工具链，暂未执行；普通 `go test` 与 `go vet` 全绿 |
 | dev host 连接列表 | 官方 mock host 的 `host.getConnections()` 恒返回 `Mock Connection / sqlite`；UI 以 `context.connectionId` 为准并补一项占位，真实 DBX 不受影响 |
 | 浏览器人工验收 | 已在本机真实 DBX 中代验：URL 安装 → 新建连接 → Test Connection → 连接树打开工作台显示真实指标；dev host `host.getConnections()` 仍恒返回 `Mock Connection / sqlite`，UI 以 `context.connectionId` 兜底，真实 DBX 不受影响 |

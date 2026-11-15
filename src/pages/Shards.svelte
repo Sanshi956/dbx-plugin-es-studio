@@ -1,11 +1,8 @@
 <script lang="ts">
   import StateBlock from "../components/StateBlock.svelte";
-  import ConfirmDanger from "../components/ConfirmDanger.svelte";
   import {
     fetchShards, buildTopology, summarizeShards,
-    fetchAllocation, setReplicas, setAllocationRule, isError,
     type ShardRow, type ShardTag, type TopologyMatrix, type ShardSummary,
-    type AllocationRow, type EsResult,
   } from "../lib/services";
   import type { DbxBridge } from "../lib/bridge";
   import { t } from "../lib/i18n.svelte.js";
@@ -62,7 +59,6 @@
       inflight = false;
       loading = false;
     }
-    await loadAllocation();
   }
 
   $effect(() => {
@@ -78,72 +74,15 @@
   });
 
   // ------------------------------------------------------------------
-  // 分配设置（原「分片分配」页并入：规则读取 + 行内编辑 + 未分配诊断）
+  // 分配设置已拆到独立「分片设置」页（0.5.1）；本页只做拓扑与明细。
   // ------------------------------------------------------------------
-  let allocRows = $state<AllocationRow[]>([]);
-  let allocError = $state("");
-  let editing = $state<AllocationRow | null>(null);
-  let form = $state({ replicas: 0, include: "", exclude: "", require: "" });
-  let pending = $state(false);
-  let toast = $state("");
 
-  // Index-name filter narrows the matrix, the shard list and the allocation
-  // settings together — one box instead of three.
+  // Index-name filter narrows the matrix and the shard list together — one box.
   const query = $derived(indexFilter.trim().toLowerCase());
   const filteredShards = $derived(
     query ? shards.filter((s) => s.index.toLowerCase().includes(query)) : shards,
   );
   const matrix = $derived.by(() => buildTopology(filteredShards));
-  const filteredAlloc = $derived(
-    query ? allocRows.filter((r) => r.index.toLowerCase().includes(query)) : allocRows,
-  );
-
-  async function loadAllocation(): Promise<void> {
-    allocError = "";
-    try {
-      allocRows = await fetchAllocation(bridge, connectionId);
-    } catch (cause) {
-      allocError = cause instanceof Error ? cause.message : String(cause);
-      allocRows = [];
-    }
-  }
-
-  function openEdit(row: AllocationRow): void {
-    editing = row;
-    form = { replicas: row.replicaShards, include: row.include, exclude: row.exclude, require: row.require };
-    toast = "";
-  }
-
-  function changes(row: AllocationRow): string[] {
-    const out: string[] = [];
-    if (form.replicas !== row.replicaShards) out.push(`number_of_replicas ${row.replicaShards} → ${form.replicas}`);
-    if (form.include !== row.include) out.push(`include._name "${row.include}" → "${form.include}"`);
-    if (form.exclude !== row.exclude) out.push(`exclude._name "${row.exclude}" → "${form.exclude}"`);
-    if (form.require !== row.require) out.push(`require._name "${row.require}" → "${form.require}"`);
-    return out;
-  }
-
-  async function save(): Promise<void> {
-    if (!editing) return;
-    const target = editing;
-    pending = false;
-    const calls: Promise<EsResult>[] = [];
-    if (form.replicas !== target.replicaShards) {
-      calls.push(setReplicas(bridge, connectionId, target.index, form.replicas));
-    }
-    if (form.include !== target.include) calls.push(setAllocationRule(bridge, connectionId, target.index, "include", form.include));
-    if (form.exclude !== target.exclude) calls.push(setAllocationRule(bridge, connectionId, target.index, "exclude", form.exclude));
-    if (form.require !== target.require) calls.push(setAllocationRule(bridge, connectionId, target.index, "require", form.require));
-    const results = await Promise.all(calls);
-    const failed = results.filter((r) => isError(r));
-    editing = null;
-    if (failed.length) {
-      toast = t("common.toast.failed", { detail: failed.map((r) => r.error?.message ?? "HTTP " + r.status).join("; ") });
-    } else {
-      toast = t("alloc.toast.updated", { index: target.index });
-    }
-    await loadAllocation();
-  }
 
   function stateClass(state: string): string {
     if (state === "UNASSIGNED") return "unassigned";
@@ -305,78 +244,9 @@
       </table>
     </div>
 
-    <h2>{t("alloc.title")}</h2>
-    <p class="section-hint">{t("alloc.hint")}</p>
-
-    {#if toast}<div class="toast">{toast}</div>{/if}
-    {#if allocError}<StateBlock kind="error" message={t("alloc.failed")} detail={allocError} />{/if}
-
-
-    {#if editing}
-      <section class="editor">
-        <h3>{t("alloc.editHeading")} <code>{editing.index}</code></h3>
-        <div class="fields">
-          <label>number_of_replicas<input type="number" min="0" max="10" bind:value={form.replicas} /></label>
-          <label>include._name<input placeholder={t("alloc.rulePlaceholder")} bind:value={form.include} /></label>
-          <label>exclude._name<input placeholder={t("alloc.rulePlaceholder")} bind:value={form.exclude} /></label>
-          <label>require._name<input placeholder={t("alloc.rulePlaceholder")} bind:value={form.require} /></label>
-        </div>
-        <div class="actions">
-          <span class="diff">{changes(editing).join("; ") || t("alloc.noChange")}</span>
-          <button type="button" onclick={() => (editing = null)}>{t("common.cancel")}</button>
-          <button type="button" class="primary" disabled={changes(editing).length === 0} onclick={() => (pending = true)}>{t("common.apply")}</button>
-        </div>
-      </section>
-    {/if}
-
-    {#if loading === false && filteredAlloc.length === 0 && !allocError}
-      <StateBlock kind="empty" message={t("alloc.empty")} />
-    {:else if filteredAlloc.length > 0}
-      <div class="table-wrap">
-        <table>
-          <thead>
-            <tr>
-              <th>{t("index.col.index")}</th>
-              <th class="right">{t("alloc.col.pri")}</th>
-              <th class="right">{t("alloc.col.rep")}</th>
-              <th>{t("alloc.col.status")}</th>
-              <th class="mono">include._name</th>
-              <th class="mono">exclude._name</th>
-              <th class="mono">require._name</th>
-              <th class="right">{t("alloc.col.actions")}</th>
-            </tr>
-          </thead>
-          <tbody>
-            {#each filteredAlloc as row (row.index)}
-              <tr>
-                <td class="mono">{row.index}</td>
-                <td class="right mono">{row.primaryShards}</td>
-                <td class="right mono">{row.replicaShards}</td>
-                <td>{row.status}</td>
-                <td class="mono">{row.include || "—"}</td>
-                <td class="mono">{row.exclude || "—"}</td>
-                <td class="mono">{row.require || "—"}</td>
-                <td class="right">
-                  <button type="button" class="mini" onclick={() => openEdit(row)} title={t("alloc.editTip")}>{t("alloc.editShort")}</button>
-                </td>
-              </tr>
-            {/each}
-          </tbody>
-        </table>
-      </div>
-    {/if}
   {/if}
 </div>
 
-<ConfirmDanger
-  open={pending && editing !== null}
-  title={t("alloc.confirm.title")}
-  message={t("alloc.confirm.message")}
-  scope={editing ? t("alloc.confirm.scope", { index: editing.index, changes: changes(editing).join("; ") }) : ""}
-  confirmLabel={t("alloc.confirm.label")}
-  onConfirm={save}
-  onCancel={() => (pending = false)}
-/>
 
 <style>
   .page { max-width: 1240px; }
@@ -393,7 +263,6 @@
   .primary { background: var(--es-accent); color: #fff; border-color: var(--es-accent); }
   .primary:hover:not(:disabled) { filter: brightness(0.92); }
   button:disabled { opacity: 0.55; cursor: default; }
-  .mini { padding: 3px 8px; font-size: var(--es-fs-xs); }
 
   .filter-bar { margin: 14px 0 0; }
   .filter { width: 320px; max-width: 100%; padding: 7px 12px; border: 1px solid var(--es-border); border-radius: 6px; background: var(--es-surface); color: var(--es-text); font-size: var(--es-fs-sm); }
@@ -426,7 +295,7 @@
   th { background: var(--es-surface-2); color: var(--es-muted); font-weight: 600; position: sticky; top: 0; }
   th.right, td.right { text-align: right; }
   th.center, td.center { text-align: center; }
-  td.mono, th.mono { font-family: var(--es-mono); }
+  td.mono { font-family: var(--es-mono); }
   tbody tr:hover { background: var(--es-surface-2); }
   td.started { color: var(--es-green); }
   td.unassigned { color: var(--es-red); font-weight: 700; }
@@ -445,18 +314,4 @@
   .shard.other { color: var(--es-muted); }
   .shard.unassigned { color: var(--es-red); border-color: var(--es-red); }
 
-  .section-hint { margin: 0 0 12px; color: var(--es-muted); font-size: var(--es-fs-sm); }
-  .toast { padding: 8px 12px; margin-bottom: 12px; border: 1px solid var(--es-border); border-radius: 6px; background: var(--es-surface-2); font-size: var(--es-fs-sm); }
-  .editor { border: 1px solid var(--es-border); border-radius: var(--es-radius); padding: 14px; margin-bottom: 16px; background: var(--es-surface); }
-  .inline-actions { margin-left: auto; display: flex; gap: 6px; }
-  .ok { color: var(--es-green); font-weight: 700; }
-  .bad { color: var(--es-red); font-weight: 700; }
-  .reason { white-space: normal; color: var(--es-muted); }
-  .note { margin: 8px 0 0; font-size: var(--es-fs-xs); color: var(--es-muted); line-height: 1.6; }
-  .editor h3 { margin: 0 0 8px; font-size: var(--es-fs-md); }
-  .fields { display: flex; gap: 12px; flex-wrap: wrap; margin-bottom: 10px; }
-  .fields label { display: flex; flex-direction: column; gap: 4px; font-size: var(--es-fs-xs); color: var(--es-muted); }
-  .fields input { padding: 6px 10px; border: 1px solid var(--es-border); border-radius: 6px; background: var(--es-surface); color: var(--es-text); min-width: 180px; }
-  .actions { display: flex; align-items: center; gap: 10px; justify-content: flex-end; }
-  .diff { margin-right: auto; font-size: var(--es-fs-xs); color: var(--es-muted); font-family: var(--es-mono); }
 </style>

@@ -161,7 +161,7 @@
       <h1>{t("mcp.title")}</h1>
       <p>{t("mcp.hint", { tools: catalogue.length, cats: Object.keys(categories).length })}</p>
     </div>
-    <div class="tools">
+    <div class="actions">
       <button onclick={() => void load()} disabled={loading}>{t("common.refresh")}</button>
     </div>
   </header>
@@ -366,7 +366,9 @@
   header { display: flex; justify-content: space-between; align-items: start; gap: 16px; margin-bottom: 12px; flex-wrap: wrap; }
   h1 { margin: 0 0 4px; font-size: var(--es-fs-3xl); }
   header p { margin: 0; color: var(--es-muted); }
-  .tools { display: flex; gap: 8px; align-items: center; }
+  /* 注意：不能叫 .tools —— 本页还有 <table class="tools">，display:flex 会把
+     表格从 table 盒改成 flex 盒，thead 脱离表头盒悬空渲染（2026-11-15 实测）。 */
+  .actions { display: flex; gap: 8px; align-items: center; }
   button { padding: 5px 12px; border: 1px solid var(--es-border); border-radius: 6px; background: var(--es-surface); color: var(--es-text); cursor: pointer; white-space: nowrap; }
   button:hover:not(:disabled):not(.primary) { background: var(--es-surface-2); }
   button:disabled { opacity: 0.55; cursor: default; }

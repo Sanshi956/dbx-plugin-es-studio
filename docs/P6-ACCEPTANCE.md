@@ -361,3 +361,21 @@ verify-package **17/17**、包内 manifest **107**、smoke（包内 exe）**125/
 `untrack(() => void load(connectionId))`。另：`each` 的 `index/shard/prirep` 组合键
 在「同一分片多个未分配副本」（replicas≥2）时**不唯一**，会抛 `each_key_duplicate`
 直接白屏——列表用索引号做键。
+
+### 第三轮反馈（2026-11-15 23:xx，0.5.1）
+
+| 反馈 | 处理 |
+|---|---|
+| 分片设置单独一个页面 | 「分配设置」从「分片与分配」拆出**独立「分片设置」页**（副本数 / include / exclude / require 编辑 + 状态列 tooltip 说明用途）；分片页更名「分片与拓扑」，「分片诊断」不变，导航 24→25 |
+| 独立 MCP server 挂进设置页列表 | manifest 新增 `type:"mcp"` 贡献：ai_tools + external_tools，45 个只读工具按 9 类 toolset 分组、逐一声明 access:read；check-manifest schema 校验通过（55→111 含包） |
+| 分配解析内容翻译 | explain 结果中文化：decision（yes/no/worse_balance/always）与 decider 名走词典（`sdiag.decision.*` / `sdiag.decider.*`），解释文本按模式表翻译常见 decider 说明（磁盘水位/过滤规则/同分片冲突/延迟分配等），未命中保留原文；服务解析补 `decider` 字段。「解析未分配分片」按钮移到「未分配分片」栏标题右侧，单次解析全部未分配分片（超过 12 个截断并提示），去掉每行操作列 |
+| MCP 表头「工具 参数」浮在列表中部 | **真 bug**：页面头部按钮容器 `<div class="tools">` 的 `.tools{display:flex}` 同时命中 `<table class="tools">`，表格被改成 flex 盒，thead 脱离表头盒悬空渲染（任意内核可复现，此前测试未盯表头位置漏过）。头部容器改名 `.actions`，Edge（WebView2 同内核）实测 thead 恢复 `table-header-group` 且渲染在表格顶部 |
+| 主回归 4 个 each_key_duplicate | 真实集群 `_cat/shards` 输出**重复行**（实测 metrics-daily 0 r 出现两次），分片诊断结果面板按分片三元组做键撞键；改用位置键（单次运行内追加、只清空不重排） |
+
+#### 0.5.1 基线（真实 ES 8.19.23）
+
+主回归 **23/23**（控制台 0）、UX **106/106**（控制台 0）、渲染 **25 页** h1 全部正常 / 0
+控制台错（门控文案断言仅对低于门限的集群有意义）、写 **7/7**、只读 **4/4**、i18n **25+25**
+（zh 13px / en 15px）、svelte-check **0/0**、go test 全绿、verify **17/17**、包内 manifest
+**111**、smoke（包内 exe）**125/125**、mcp-client **32/32**。词典 zh/en 各 **1032** 键、
+键集一致。包 `dist/local.es.studio-0.5.1-windows-x64.signed.dbxp`（4,701,528 B）。

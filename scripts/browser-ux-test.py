@@ -698,7 +698,7 @@ def _run(base_url, out_dir, mirror_url):
 
         # ---------------------------------------------- Shards: filter + allocation
         try:
-            click_nav(page, "分片与分配")
+            click_nav(page, "分片与拓扑")
             page.wait_for_selector("table.matrix", timeout=30000)
             rows_all = page.locator("table.matrix tbody tr").count()
             page.fill("input.filter", "products")
@@ -706,15 +706,18 @@ def _run(base_url, out_dir, mirror_url):
             rows_filtered = page.locator("table.matrix tbody tr").count()
             check("索引名筛选让拓扑矩阵收窄", rows_all > 1 and rows_filtered == 1,
                   f"all={rows_all} filtered={rows_filtered}")
-            check("分配设置表随筛选收窄且带行内编辑",
-                  page.locator("table tbody tr").count() >= 1
-                  and page.locator('button:has-text("编辑")').count() >= 1,
-                  page.locator('button:has-text("编辑")').count())
             page.fill("input.filter", "")
             page.wait_for_timeout(400)
             check("清空筛选后矩阵恢复", page.locator("table.matrix tbody tr").count() == rows_all,
                   page.locator("table.matrix tbody tr").count())
             shot("ux-shards-filter")
+            click_nav(page, "分片设置")
+            page.wait_for_selector("table", timeout=30000)
+            check("分片设置独立页有分配规则表与行内编辑",
+                  page.locator("table tbody tr").count() >= 1
+                  and page.locator('button:has-text("编辑")').count() >= 1,
+                  page.locator('button:has-text("编辑")').count())
+            shot("ux-shard-settings")
         except Exception as e:
             shot("ux-shards-filter-FAIL")
             check("索引名筛选让拓扑矩阵收窄", False, e)

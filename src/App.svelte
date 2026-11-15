@@ -4,8 +4,9 @@
   import StateBlock from "./components/StateBlock.svelte";
   import Overview from "./pages/Overview.svelte";
   import Nodes from "./pages/Nodes.svelte";
-  import Shards from "./pages/Shards.svelte";
-  import ShardDiagnosis from "./pages/ShardDiagnosis.svelte";
+import Shards from "./pages/Shards.svelte";
+import ShardSettings from "./pages/ShardSettings.svelte";
+import ShardDiagnosis from "./pages/ShardDiagnosis.svelte";
   import IndexList from "./pages/IndexList.svelte";
   import Aliases from "./pages/Aliases.svelte";
   import Browser from "./pages/Browser.svelte";
@@ -131,6 +132,8 @@
           <Nodes bridge={bridge} connectionId={activeId} />
         {:else if page === "shards"}
           <Shards bridge={bridge} connectionId={activeId} />
+        {:else if page === "shard-settings"}
+          <ShardSettings bridge={bridge} connectionId={activeId} />
         {:else if page === "shard-diagnosis"}
           <ShardDiagnosis bridge={bridge} connectionId={activeId} />
         {:else if page === "index-list"}

@@ -1028,6 +1028,8 @@ export async function setAllocationRule(
 export interface AllocationDecision {
   node: string;
   decision: string;
+  /** Decider name (e.g. same_shard, filter, disk_threshold) — finite enum, translatable. */
+  decider: string;
   reason: string;
 }
 
@@ -1084,6 +1086,7 @@ export async function explainAllocation(
         return {
           node: str(node.node_name),
           decision: str(node.node_decision),
+          decider: str(first.decider),
           reason: str(first.explanation) || str(node.transport_address),
         };
       })
