@@ -340,6 +340,45 @@ def main():
                 c.check("real search finds document", hits >= 1, str(found))
                 deleted = real("/" + index, "DELETE")
                 c.check("real delete index (cleanup)", deleted.get("status") == 200, str(deleted))
+
+                # ---- P2 endpoint coverage: the Workbench pages read the same APIs ----
+                nodes = real("/_cat/nodes?format=json")
+                c.check("P2 /_cat/nodes -> 200", nodes.get("status") == 200, str(nodes))
+                node_list = nodes.get("body") or []
+                c.check("P2 /_cat/nodes has >=1 entry", isinstance(node_list, list) and len(node_list) >= 1, str(nodes))
+                c.check("P2 /_nodes detail -> 200", real("/_nodes").get("status") == 200)
+                shards = real("/_cat/shards?format=json&bytes=b")
+                c.check("P2 /_cat/shards -> 200", shards.get("status") == 200, str(shards))
+                c.check("P2 /_cat/shards is a list", isinstance(shards.get("body"), list), str(shards))
+                aliases = real("/_cat/aliases?format=json")
+                c.check("P2 /_cat/aliases -> 200", aliases.get("status") == 200, str(aliases))
+                analyze = real("/_analyze", "POST", {"text": "the quick brown fox", "analyzer": "standard"})
+                c.check("P2 /_analyze -> 200", analyze.get("status") == 200, str(analyze))
+                tokens = (analyze.get("body") or {}).get("tokens") or []
+                c.check("P2 /_analyze returns tokens", isinstance(tokens, list) and len(tokens) >= 1, str(analyze))
+
+                # ---- P2 write gate: read-only connection must be rejected at the service layer ----
+                s.call("connection/connect", {"connection_id": "real-es-ro", "direct": {"url": args.es_url, "read_only": True}})
+
+                def real_ro(path, method="GET", body=None):
+                    p = {"connection_id": "real-es-ro", "method": method, "path": path}
+                    if body is not None:
+                        p["body"] = body
+                    # Rejected writes come back as a top-level JSON-RPC error with
+                    # no "result", so return the full response (like the `req`
+                    # helper) and let err_code() read error.code.
+                    return s.call("es/request", p)
+
+                c.check("P2 read-only rejects DELETE index -> -32003",
+                        err_code(real_ro("/es-studio-smoke-p2", "DELETE")) == -32003)
+                c.check("P2 read-only rejects POST /_aliases -> -32003",
+                        err_code(real_ro("/_aliases", "POST", {"actions": [{"add": {"index": "x", "alias": "y"}}]})) == -32003)
+                c.check("P2 read-only rejects POST /_close -> -32003",
+                        err_code(real_ro("/es-studio-smoke-p2/_close", "POST")) == -32003)
+                c.check("P2 read-only allows GET /_cluster/health",
+                        (real_ro("/_cluster/health").get("result") or {}).get("status") == 200)
+                s.call("connection/disconnect", {"connection_id": "real-es-ro"})
+
                 s.call("connection/disconnect", {"connection_id": "real-es"})
     finally:
         s.close()

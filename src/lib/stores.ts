@@ -19,32 +19,32 @@ export const NAV_GROUPS: NavGroup[] = [
   { id: "overview", label: "Overview", items: [{ id: "overview", label: "Cluster Overview", phase: "P1", enabled: true }] },
   {
     id: "cluster", label: "Cluster", items: [
-      { id: "nodes", label: "Nodes", phase: "P2", enabled: false },
-      { id: "shards", label: "Shards", phase: "P2", enabled: false },
+      { id: "nodes", label: "Nodes", phase: "P2", enabled: true },
+      { id: "shards", label: "Shards", phase: "P2", enabled: true },
       { id: "allocation", label: "Allocation", phase: "P3", enabled: false },
       { id: "cluster-settings", label: "Cluster Settings", phase: "P3", enabled: false },
     ],
   },
   {
     id: "indices", label: "Indices", items: [
-      { id: "index-list", label: "Index List", phase: "P2", enabled: false },
-      { id: "aliases", label: "Aliases", phase: "P2", enabled: false },
+      { id: "index-list", label: "Index List", phase: "P2", enabled: true },
+      { id: "aliases", label: "Aliases", phase: "P2", enabled: true },
       { id: "templates", label: "Templates", phase: "P3", enabled: false },
       { id: "component-templates", label: "Component Templates", phase: "P3", enabled: false },
       { id: "data-streams", label: "Data Streams", phase: "P3", enabled: false },
       { id: "lifecycle", label: "Lifecycle", phase: "P3", enabled: false },
     ],
   },
-  { id: "documents", label: "Documents", items: [{ id: "browser", label: "Browser", phase: "P2", enabled: false }] },
+  { id: "documents", label: "Documents", items: [{ id: "browser", label: "Browser", phase: "P2", enabled: true }] },
   {
     id: "query", label: "Query Studio", items: [
-      { id: "query-builder", label: "Query Builder", phase: "P2", enabled: false },
-      { id: "dsl-editor", label: "DSL Editor", phase: "P2", enabled: false },
+      { id: "query-builder", label: "Query Builder", phase: "P2", enabled: true },
+      { id: "dsl-editor", label: "DSL Editor", phase: "P2", enabled: true },
       { id: "query-profiler", label: "Query Profiler", phase: "P3", enabled: false },
-      { id: "analyzer", label: "Analyzer", phase: "P2", enabled: false },
+      { id: "analyzer", label: "Analyzer", phase: "P2", enabled: true },
     ],
   },
-  { id: "rest", label: "REST Console", items: [{ id: "rest-console", label: "REST Console", phase: "P2", enabled: false }] },
+  { id: "rest", label: "REST Console", items: [{ id: "rest-console", label: "REST Console", phase: "P2", enabled: true }] },
   {
     id: "monitoring", label: "Monitoring", items: [
       { id: "cluster-metrics", label: "Cluster Metrics", phase: "P4", enabled: false },

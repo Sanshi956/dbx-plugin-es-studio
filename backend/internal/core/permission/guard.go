@@ -108,6 +108,12 @@ func DescribeRisk(req es.Request) (Risk, bool) {
 	case strings.Contains(clean, "/_close"):
 		name, scope, reason = "Close Index", "the target index",
 			"Closing an index makes its data unavailable until reopened."
+	case strings.Contains(clean, "/_open"):
+		name, scope, reason = "Open Index", "the target index",
+			"Opening a previously closed index restores its availability."
+	case strings.Contains(clean, "/_aliases"):
+		name, scope, reason = "Modify Aliases", "the index alias mapping",
+			"Changing aliases reroutes queries and can hide or expose indices."
 	}
 	return Risk{Name: name, Target: target, Scope: scope, Reason: reason}, true
 }

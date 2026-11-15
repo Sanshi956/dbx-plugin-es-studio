@@ -2,7 +2,7 @@ import type { DbxBridge, ConnectionSummary } from "./bridge";
 
 export interface EsResult {
   status: number;
-  body: unknown;
+  body?: unknown;
   headers?: Record<string, string[]>;
   duration_ms?: number;
   error?: { code: number; message: string };

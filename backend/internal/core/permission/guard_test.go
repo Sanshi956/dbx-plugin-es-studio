@@ -75,6 +75,48 @@ func TestGuardValidatePath(t *testing.T) {
 	}
 }
 
+// T13 (P2): every P2 write entry point must be blocked on a read-only
+// connection and allowed on a read-write one.
+func TestGuardP2WritePaths(t *testing.T) {
+	ro := connection.Config{ID: "prod-es", ReadOnly: true}
+	rw := ro
+	rw.ReadOnly = false
+	writes := []es.Request{
+		{Method: "DELETE", Path: "/orders"},
+		{Method: "DELETE", Path: "/orders/_doc/42"},
+		{Method: "POST", Path: "/orders/_close"},
+		{Method: "POST", Path: "/orders/_open"},
+		{Method: "POST", Path: "/orders/_forcemerge"},
+		{Method: "POST", Path: "/_aliases"},
+		{Method: "PUT", Path: "/new-index"},
+	}
+	for _, r := range writes {
+		if err := Check(ro, r); !errors.Is(err, ErrReadOnlyViolation) {
+			t.Fatalf("read-only must reject P2 write %s %s, got %v", r.Method, r.Path, err)
+		}
+		if err := Check(rw, r); err != nil {
+			t.Fatalf("rw must allow P2 write %s %s: %v", r.Method, r.Path, err)
+		}
+	}
+}
+
+// T13 (P2): read-only connections may still run search and analysis.
+func TestGuardP2ReadsAllowedOnReadOnly(t *testing.T) {
+	ro := connection.Config{ID: "prod-es", ReadOnly: true}
+	safe := []es.Request{
+		{Method: "POST", Path: "/orders/_search"},
+		{Method: "POST", Path: "/_search"},
+		{Method: "POST", Path: "/_analyze"},
+		{Method: "POST", Path: "/orders/_analyze"},
+		{Method: "POST", Path: "/_count"},
+	}
+	for _, r := range safe {
+		if err := Check(ro, r); err != nil {
+			t.Fatalf("read-only must allow P2 read %s %s: %v", r.Method, r.Path, err)
+		}
+	}
+}
+
 func TestGuardDescribeRisk(t *testing.T) {
 	cases := []es.Request{
 		{Method: "DELETE", Path: "/prod-orders"},

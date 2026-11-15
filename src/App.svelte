@@ -4,6 +4,15 @@
   import ClusterPicker from "./components/ClusterPicker.svelte";
   import StateBlock from "./components/StateBlock.svelte";
   import Overview from "./pages/Overview.svelte";
+  import Nodes from "./pages/Nodes.svelte";
+  import Shards from "./pages/Shards.svelte";
+  import IndexList from "./pages/IndexList.svelte";
+  import Aliases from "./pages/Aliases.svelte";
+  import Browser from "./pages/Browser.svelte";
+  import QueryBuilder from "./pages/QueryBuilder.svelte";
+  import DslEditor from "./pages/DslEditor.svelte";
+  import Analyzer from "./pages/Analyzer.svelte";
+  import RestConsole from "./pages/RestConsole.svelte";
   import { ready } from "./lib/bridge";
   import type { DbxBridge, ConnectionSummary } from "./lib/bridge";
   import { listConnections } from "./lib/api";
@@ -78,7 +87,7 @@
       onchange={changeConnection}
     />
     <div class="spacer"></div>
-    <span class="phase-chip">P1 · Infrastructure</span>
+    <span class="phase-chip">P2 · Cluster & Data</span>
   </header>
 
   <div class="shell">
@@ -99,6 +108,24 @@
       {:else if bridge}
         {#if page === "overview"}
           <Overview bridge={bridge} connectionId={activeId} />
+        {:else if page === "nodes"}
+          <Nodes bridge={bridge} connectionId={activeId} />
+        {:else if page === "shards"}
+          <Shards bridge={bridge} connectionId={activeId} />
+        {:else if page === "index-list"}
+          <IndexList bridge={bridge} connectionId={activeId} />
+        {:else if page === "aliases"}
+          <Aliases bridge={bridge} connectionId={activeId} />
+        {:else if page === "browser"}
+          <Browser bridge={bridge} connectionId={activeId} />
+        {:else if page === "query-builder"}
+          <QueryBuilder bridge={bridge} connectionId={activeId} />
+        {:else if page === "dsl-editor"}
+          <DslEditor bridge={bridge} connectionId={activeId} />
+        {:else if page === "analyzer"}
+          <Analyzer bridge={bridge} connectionId={activeId} />
+        {:else if page === "rest-console"}
+          <RestConsole bridge={bridge} connectionId={activeId} />
         {/if}
       {/if}
     </main>
