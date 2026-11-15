@@ -177,7 +177,8 @@
     color: var(--es-text);
     cursor: pointer;
   }
-  button:hover:not(:disabled) { background: var(--es-surface-2); }
+  button:hover:not(:disabled):not(.primary) { background: var(--es-surface-2); }
+  .primary:hover:not(:disabled) { filter: brightness(0.92); }
   button:disabled { opacity: 0.55; cursor: default; }
   .summary {
     padding: 16px;

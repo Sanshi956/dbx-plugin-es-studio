@@ -84,15 +84,47 @@ def run(base_url, out_dir, ro_delete=False):
                 except Exception: pass
             results.append(rec)
 
-        # ---- Browser (select products, search) ----
-        rec = {"step": "interact:browser", "expect": "Mechanical Keyboard", "ok": False}
+        # ---- Browser: field list from mapping + keyword search + field scoping ----
+        rec = {"step": "interact:browser", "expect": "field list + keyword search", "ok": False}
         try:
             click_nav(page, "Browser")
             page.locator('label:has-text("Index") select').select_option("products")
+
+            # The field dropdown must be fed by GET /products/_mapping, so the
+            # user never has to type a field name by hand.
+            # <option> inside a closed <select> has no layout box, so it never
+            # counts as "visible" — wait for attachment instead.
+            page.wait_for_selector(
+                'label:has-text("Field") select option[value="name"]',
+                state="attached", timeout=20000,
+            )
+            opts = page.locator('label:has-text("Field") select option').all_inner_texts()
+            assert any(o.startswith("All fields") for o in opts), opts
+            for expect_field in ("name", "name.kw", "category", "price"):
+                assert any(o.startswith(expect_field + " ·") for o in opts), (expect_field, opts)
+            rec["fields"] = opts
+
+            # 1) empty keyword -> match_all
             page.get_by_role("button", name="Search", exact=True).click()
-            wait_text(page, "Mechanical Keyboard", timeout=20000)
-            time.sleep(0.3)
-            shot("ix-browser-products")
+            wait_text(page, "match_all", timeout=20000)
+
+            # 2) keyword with no field -> multi_match over all fields
+            page.locator("label.grow input").fill("Mouse")
+            page.get_by_role("button", name="Search", exact=True).click()
+            wait_text(page, "Wireless Mouse", timeout=20000)
+            shot("ix-browser-search-all")
+
+            # 3) scope to a concrete field -> metadata says which field matched
+            page.locator('label:has-text("Field") select').select_option("name")
+            page.get_by_role("button", name="Search", exact=True).click()
+            wait_text(page, 'name ~ "Mouse"', timeout=20000)
+            shot("ix-browser-search-field")
+
+            # 4) scoping must actually narrow: "Mouse" is not in category
+            page.locator('label:has-text("Field") select').select_option("category")
+            page.get_by_role("button", name="Search", exact=True).click()
+            wait_text(page, "No documents matched", timeout=20000)
+            shot("ix-browser-scoped-empty")
             rec["ok"] = True
         except Exception as e:
             rec["error"] = str(e)

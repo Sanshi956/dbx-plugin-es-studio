@@ -81,13 +81,14 @@ REST Console 对危险方法实时标记，并提示「只读连接上会被 Go 
 | 写路径 | Close/Open `logs-app`、Refresh、REST `PUT` 建索引、UI 删除索引（每步回查 ES） | **5/5** |
 | 只读拒绝 | Index List 删除被拒且索引存活、REST 删除被拒 | **3/3** |
 
-**浏览器实测发现并修复的 3 个真实缺陷**（均为自动化 smoke 无法暴露的问题）：
+**浏览器实测发现并修复的 4 个真实缺陷**（均为自动化 smoke 无法暴露的问题）：
 
 | # | 缺陷 | 根因 | 修复 |
 |---|---|---|---|
 | 1 | **Shards 页整页渲染崩溃**（`svelte.dev/e/each_key_duplicate`，页面卡在 Loading） | 拓扑芯片 key 用 `shard+prirep:state`、表格 rowKey 用 `index-shard-prirep`；当一个分片有多个**同状态副本**（如 `replicas: 2` 单节点 → 两个 `0r:UNASSIGNED`）时 key 重复，Svelte keyed each 直接抛错 | `buildTopology()` 改为返回 `ShardTag { key, label }`（key 带出现序号），表格改用位置 `__rowId` |
 | 2 | **所有数字列恒为 0**（Docs / Store / Heap% / CPU% / pri / rep） | `num()` 只接受 `number`，而 `_cat/*` 全部返回**字符串**（`"2"`、`"12915"`、`"30"`） | `num()` 接受数字字符串（空串/非数字仍归 0） |
 | 3 | Sidecar 错误码被吞成通用 `-32000` | `single()` 的 catch 只保留 message | 保留 `cause.code`，`-32003`（只读）/`-32004`（不安全路径）可区分 |
+| 4 | **主按钮悬停后文字"隐形"**（浅底白字） | `button:hover:not(:disabled)` 特异性 0,2,1 高于 `.primary` 的 0,1,0，悬停时把主按钮背景改成 `--es-surface-2` | hover 规则排除 `.primary`，主按钮悬停改用 `filter: brightness(0.92)`；8 个页面统一 |
 
 同时修掉 3 个**测试基建缺陷**（非产品代码）：桥启动时缓存 UI 导致改完必须重启（改为每次请求读取）；`es-cluster.py clean_stale()` 无条件清空 `data/` 导致每次重启丢数据并触发批量删除守卫（改为仅在缺 `_state` 时清理）；测试脚本 `page.select_option("select", …)` 因页面存在两个 `select` 而二义（改为 `section.bar select`）。
 
@@ -98,6 +99,20 @@ node scripts/browser-bridge.mjs                                # 读写桥 :5199
 python scripts/browser-test.py --out screenshots/rw            # 全页面：12/12
 python scripts/browser-write-test.py --out screenshots/write   # 写路径 + 只读拒绝：5/5、3/3
 ```
+
+### 1.6 搜索不再要求手填字段名（用户反馈驱动）
+
+初版 Browser 只有 Index + Size，完全没有关键字输入；Query Builder 的 `field` 是裸 `<input>`，必须自己记住并敲对字段名——字段名写错只会得到静默的 0 命中。现已改为**从索引 mapping 取字段**：
+
+| 页面 | 改进 |
+|---|---|
+| Document Browser | 新增关键字输入框 + `Field` 下拉（默认 `All fields (n)`），回车上即搜；空关键字 = `match_all`，不选字段 = `multi_match { fields: ["*"] }`（已在 ES 8.19 实测展开到全部可搜字段），选字段 = `match { field: kw }`；结果摘要显示 `name ~ "Mouse"` 明确当前命中维度 |
+| Query Builder | `field` 输入改为 **datalist 候选**（仍允许自由输入），旁边以灰色徽标显示该字段类型（如 `text`）；`Sort field` 同样带候选；标题显示可用字段数 |
+| 通用 | 新增 `fetchFields()`（`GET /{index}/_mapping`，递归展开对象与 multi-field，别名跨索引去重，关闭索引返回空而不报错）、`simpleSearchBody()` |
+
+浏览器断言（真实数据，非文案）：字段下拉必须含 `name`、`name.kw`、`category`、`price`；`All fields` + `Mouse` → 1 命中；`Field=name` + `Mouse` → 1 命中且摘要显示 `name ~ "Mouse"`；`Field=category` + `Mouse` → **0 命中**（证明字段限定真的下推到查询，而不是摆设）。
+
+顺带修掉两个布局缺陷：搜索按钮被 flex 压缩到 40 px 导致文字被裁（改为 `flex: 0 0 auto` + `nowrap`），以及上表第 4 项的主按钮 hover 失效。
 
 ---
 
@@ -146,7 +161,7 @@ python scripts/browser-write-test.py --out screenshots/write   # 写路径 + 只
 
 ## 4. 两段式评审
 
-**① 符合任务定义**：T1–T16 全部达成；17 项 Head 功能逐项实测通过；10 页面无错误；危险确认与 ReadOnly 拒绝均落地。浏览器实测（§1.5）进一步确认 UI 在真实数据下可用，并暴露 3 个已修复的真实缺陷。
+**① 符合任务定义**：T1–T16 全部达成；17 项 Head 功能逐项实测通过；10 页面无错误；危险确认与 ReadOnly 拒绝均落地。浏览器实测（§1.5）进一步确认 UI 在真实数据下可用，并暴露 4 个已修复的真实缺陷；§1.6 按用户反馈补齐了「搜索必须手填字段名」的可用性缺口。
 
 **② 可读性 / DRY / YAGNI**：
 - 业务解析集中在前端 `services.ts`，复用 P1 的通用 `es/request`/`es/batch`，**未新增 Go RPC 方法**（避免后端面膨胀与双份解析），与 `docs/02-PLAN-P2.md` §2 架构决策一致。

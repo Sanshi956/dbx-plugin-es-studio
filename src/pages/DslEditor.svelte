@@ -160,7 +160,8 @@
   h1 { margin: 0 0 4px; font-size: 18px; }
   header p { margin: 0; color: var(--es-muted); }
   button { padding: 6px 14px; border: 1px solid var(--es-border); border-radius: 6px; background: var(--es-surface); color: var(--es-text); cursor: pointer; }
-  button:hover:not(:disabled) { background: var(--es-surface-2); }
+  button:hover:not(:disabled):not(.primary) { background: var(--es-surface-2); }
+  .primary:hover:not(:disabled) { filter: brightness(0.92); }
   button:disabled { opacity: 0.55; cursor: default; }
   .bar { display: flex; gap: 12px; align-items: end; margin-bottom: 10px; }
   .bar label { display: flex; flex-direction: column; gap: 4px; font-size: 11px; color: var(--es-muted); }

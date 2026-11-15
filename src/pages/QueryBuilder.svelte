@@ -2,7 +2,8 @@
   import StateBlock from "../components/StateBlock.svelte";
   import JsonView from "../components/JsonView.svelte";
   import {
-    fetchIndices, searchIndex, buildDsl, type IndexRow, type DocHit, type QueryClause,
+    fetchIndices, fetchFields, searchIndex, buildDsl,
+    type IndexRow, type DocHit, type QueryClause, type FieldInfo,
   } from "../lib/services";
   import type { DbxBridge } from "../lib/bridge";
 
@@ -23,6 +24,8 @@
 
   let loadingIndices = $state(true);
   let loading = $state(false);
+  let fields = $state<FieldInfo[]>([]);
+  let loadingFields = $state(false);
   let hits = $state<DocHit[]>([]);
   let raw = $state<unknown>(null);
   let error = $state("");
@@ -43,6 +46,30 @@
   $effect(() => {
     void loadIndices(connectionId);
   });
+
+  async function loadFields(id: string): Promise<void> {
+    if (!id) return;
+    loadingFields = true;
+    try {
+      const next = await fetchFields(bridge, connectionId, id);
+      if (selectedIndex === id) fields = next;
+    } catch {
+      if (selectedIndex === id) fields = [];
+    } finally {
+      if (selectedIndex === id) loadingFields = false;
+    }
+  }
+
+  // Field names come from the index mapping so the user does not have to
+  // remember them; existing clause values are kept (they may still be valid).
+  $effect(() => {
+    const ix = selectedIndex;
+    if (ix) void loadFields(ix);
+  });
+
+  function fieldType(name: string): string {
+    return fields.find((f) => f.name === name)?.type ?? "";
+  }
 
   function addClause(): void {
     clauses = [...clauses, { type: "term", field: "", value: "", gte: "", lte: "" }];
@@ -115,14 +142,14 @@
       </select>
     </label>
     <label>Size<input type="number" min="1" max="1000" bind:value={size} /></label>
-    <label>Sort field<input placeholder="(optional)" bind:value={sortField} /></label>
+    <label>Sort field<input placeholder="(optional)" list="qb-fields" bind:value={sortField} /></label>
     <label>Order
       <select bind:value={sortOrder}><option value="asc">asc</option><option value="desc">desc</option></select>
     </label>
   </section>
 
   <section class="clauses">
-    <h2>Clauses</h2>
+    <h2>Clauses <span class="count">{loadingFields ? "loading fields…" : `${fields.length} fields`}</span></h2>
     {#each clauses as c, i (i)}
       <div class="clause">
         <select bind:value={c.type}>
@@ -133,7 +160,8 @@
           <option value="wildcard">wildcard</option>
         </select>
         {#if c.type !== "match_all"}
-          <input class="field" placeholder="field" bind:value={c.field} />
+          <input class="field" placeholder="field（可从下拉选）" list="qb-fields" bind:value={c.field} />
+          {#if fieldType(c.field)}<span class="ftype">{fieldType(c.field)}</span>{/if}
         {/if}
         {#if c.type === "range"}
           <input class="value" placeholder="gte" bind:value={c.gte} />
@@ -148,6 +176,9 @@
     <button type="button" class="primary" onclick={run} disabled={!selectedIndex || loading}>
       {loading ? "Running…" : "Run query"}
     </button>
+    <datalist id="qb-fields">
+      {#each fields as f (f.name)}<option value={f.name}>{f.name} · {f.type}</option>{/each}
+    </datalist>
   </section>
 
   {#if error}
@@ -177,20 +208,23 @@
   h1 { margin: 0 0 4px; font-size: 18px; }
   header p { margin: 0; color: var(--es-muted); }
   header code { font-family: var(--es-mono); font-size: 11px; }
-  button { padding: 6px 14px; border: 1px solid var(--es-border); border-radius: 6px; background: var(--es-surface); color: var(--es-text); cursor: pointer; }
-  button:hover:not(:disabled) { background: var(--es-surface-2); }
+  button { padding: 6px 14px; border: 1px solid var(--es-border); border-radius: 6px; background: var(--es-surface); color: var(--es-text); cursor: pointer; white-space: nowrap; }
+  button:hover:not(:disabled):not(.primary) { background: var(--es-surface-2); }
+  .primary:hover:not(:disabled) { filter: brightness(0.92); }
   button:disabled { opacity: 0.55; cursor: default; }
   .bar { display: flex; gap: 12px; align-items: end; flex-wrap: wrap; margin-bottom: 16px; }
   .bar label { display: flex; flex-direction: column; gap: 4px; font-size: 11px; color: var(--es-muted); }
   .bar select, .bar input { padding: 6px 10px; border: 1px solid var(--es-border); border-radius: 6px; background: var(--es-surface); color: var(--es-text); }
   .clauses { border: 1px solid var(--es-border); border-radius: var(--es-radius); padding: 14px; margin-bottom: 16px; }
   .clauses h2 { margin: 0 0 10px; font-size: 12px; text-transform: uppercase; letter-spacing: 0.08em; color: var(--es-muted); }
+  .clauses h2 .count { margin-left: 8px; font-family: var(--es-mono); font-size: 10px; letter-spacing: 0; text-transform: none; }
+  .ftype { font-family: var(--es-mono); font-size: 10px; color: var(--es-muted); border: 1px solid var(--es-border); border-radius: 4px; padding: 2px 6px; white-space: nowrap; }
   .clause { display: flex; gap: 8px; margin-bottom: 8px; align-items: center; }
   .clause select, .clause input { padding: 6px 8px; border: 1px solid var(--es-border); border-radius: 6px; background: var(--es-surface); color: var(--es-text); }
   .clause .field { flex: 1; }
   .clause .value { width: 140px; }
   .add { margin-right: 10px; }
-  .primary { background: var(--es-accent); color: #fff; border-color: var(--es-accent); }
+  .primary { background: var(--es-accent); color: #fff; border-color: var(--es-accent); min-width: 104px; }
   .mini { padding: 3px 8px; font-size: 11px; }
   .meta { font-size: 11px; color: var(--es-muted); font-family: var(--es-mono); }
   table.docs { width: 100%; border-collapse: collapse; font-size: 12px; border: 1px solid var(--es-border); border-radius: var(--es-radius); overflow: hidden; }

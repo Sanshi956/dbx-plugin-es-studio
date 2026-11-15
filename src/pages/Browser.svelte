@@ -3,8 +3,8 @@
   import JsonView from "../components/JsonView.svelte";
   import ConfirmDanger from "../components/ConfirmDanger.svelte";
   import {
-    fetchIndices, searchIndex, getDocument, deleteDocument, isError,
-    type IndexRow, type DocHit, type SearchResult,
+    fetchIndices, fetchFields, searchIndex, simpleSearchBody, getDocument, deleteDocument, isError,
+    type IndexRow, type DocHit, type SearchResult, type FieldInfo,
   } from "../lib/services";
   import type { DbxBridge } from "../lib/bridge";
 
@@ -17,6 +17,10 @@
   let indices = $state<IndexRow[]>([]);
   let selectedIndex = $state("");
   let size = $state(20);
+  let keyword = $state("");
+  let field = $state("");
+  let fields = $state<FieldInfo[]>([]);
+  let loadingFields = $state(false);
   let result = $state<SearchResult | null>(null);
   let hits = $state<DocHit[]>([]);
   let loadingIndices = $state(true);
@@ -46,6 +50,29 @@
     void loadIndices(connectionId);
   });
 
+  async function loadFields(id: string): Promise<void> {
+    if (!id) return;
+    loadingFields = true;
+    try {
+      const next = await fetchFields(bridge, connectionId, id);
+      // A slow response for a previously selected index must not overwrite the
+      // field list of the index now on screen.
+      if (selectedIndex === id) fields = next;
+    } catch {
+      if (selectedIndex === id) fields = [];
+    } finally {
+      if (selectedIndex === id) loadingFields = false;
+    }
+  }
+
+  // Reload the field list whenever the index changes; a field name from the
+  // previous index would produce a silent zero-hit search.
+  $effect(() => {
+    const ix = selectedIndex;
+    field = "";
+    if (ix) void loadFields(ix);
+  });
+
   async function runSearch(): Promise<void> {
     if (!selectedIndex) {
       searchError = "请先选择索引";
@@ -55,7 +82,7 @@
     searchError = "";
     selected = null;
     try {
-      result = await searchIndex(bridge, connectionId, selectedIndex, { size });
+      result = await searchIndex(bridge, connectionId, selectedIndex, simpleSearchBody(keyword, field, size));
       hits = result.hits;
       if (result.error) searchError = result.error;
     } catch (cause) {
@@ -64,6 +91,10 @@
     } finally {
       loadingSearch = false;
     }
+  }
+
+  function onKeywordKey(event: KeyboardEvent): void {
+    if (event.key === "Enter") void runSearch();
   }
 
   async function openDoc(id: string): Promise<void> {
@@ -124,6 +155,20 @@
         {#each indices as ix (ix.index)}<option value={ix.index}>{ix.index}</option>{/each}
       </select>
     </label>
+    <label class="grow">Search
+      <input
+        placeholder="关键字，留空 = 全部文档（回车搜索）"
+        bind:value={keyword}
+        onkeydown={onKeywordKey}
+        disabled={!selectedIndex}
+      />
+    </label>
+    <label>Field
+      <select bind:value={field} disabled={!selectedIndex || loadingFields || fields.length === 0}>
+        <option value="">{loadingFields ? "Loading fields…" : `All fields (${fields.length})`}</option>
+        {#each fields as f (f.name)}<option value={f.name}>{f.name} · {f.type}</option>{/each}
+      </select>
+    </label>
     <label>Size
       <input type="number" min="1" max="1000" bind:value={size} />
     </label>
@@ -131,6 +176,10 @@
       {loadingSearch ? "Searching…" : "Search"}
     </button>
   </section>
+
+  {#if selectedIndex && !loadingFields && fields.length === 0}
+    <p class="hint">取不到字段列表（索引可能已关闭或无 mapping）：搜索将按全部字段进行。</p>
+  {/if}
 
   {#if searchError}
     <StateBlock kind="error" message="Search failed" detail={searchError} />
@@ -141,7 +190,10 @@
   {:else if hits.length > 0}
     <div class="grid">
       <div class="results">
-        <p class="meta">total {result?.total ?? 0} · took {result?.took ?? 0} ms</p>
+        <p class="meta">total {result?.total ?? 0} · took {result?.took ?? 0} ms
+          {keyword.trim()
+            ? `· ${field ? field : "all fields"} ~ "${keyword.trim()}"`
+            : "· match_all"}</p>
         <table class="docs">
           <thead><tr><th>_id</th><th>Score</th><th>_source</th><th></th></tr></thead>
           <tbody>
@@ -193,13 +245,18 @@
   header p { margin: 0; color: var(--es-muted); }
   header code { font-family: var(--es-mono); font-size: 11px; }
   button { padding: 6px 14px; border: 1px solid var(--es-border); border-radius: 6px; background: var(--es-surface); color: var(--es-text); cursor: pointer; }
-  button:hover:not(:disabled) { background: var(--es-surface-2); }
+  button:hover:not(:disabled):not(.primary) { background: var(--es-surface-2); }
+  .primary:hover:not(:disabled) { filter: brightness(0.92); }
   button:disabled { opacity: 0.55; cursor: default; }
   .toast { padding: 8px 12px; margin-bottom: 12px; border: 1px solid var(--es-border); border-radius: 6px; background: var(--es-surface-2); font-size: 12px; }
   .bar { display: flex; gap: 12px; align-items: end; margin-bottom: 16px; flex-wrap: wrap; }
   .bar label { display: flex; flex-direction: column; gap: 4px; font-size: 11px; color: var(--es-muted); }
+  .bar > label { flex: 0 0 auto; }
   .bar select, .bar input { padding: 6px 10px; border: 1px solid var(--es-border); border-radius: 6px; background: var(--es-surface); color: var(--es-text); }
-  .bar .primary { background: var(--es-accent); color: #fff; border-color: var(--es-accent); align-self: flex-end; }
+  .bar .primary { background: var(--es-accent); color: #fff; border-color: var(--es-accent); align-self: flex-end; flex: 0 0 auto; white-space: nowrap; }
+  .bar .grow { flex: 1 1 220px; min-width: 180px; }
+  .bar .grow input { width: 100%; }
+  .hint { margin: -6px 0 14px; font-size: 11px; color: var(--es-muted); }
 
   .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; align-items: start; }
   .meta { font-size: 11px; color: var(--es-muted); font-family: var(--es-mono); margin: 0 0 8px; }

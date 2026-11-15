@@ -87,6 +87,6 @@
   header p { margin: 0; color: var(--es-muted); }
   header code { font-family: var(--es-mono); font-size: 11px; }
   button { padding: 6px 14px; border: 1px solid var(--es-border); border-radius: 6px; background: var(--es-surface); color: var(--es-text); cursor: pointer; }
-  button:hover:not(:disabled) { background: var(--es-surface-2); }
+  button:hover:not(:disabled):not(.primary) { background: var(--es-surface-2); }
   button:disabled { opacity: 0.55; cursor: default; }
 </style>

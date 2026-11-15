@@ -309,6 +309,81 @@ export async function fetchIndices(bridge: DbxBridge, connectionId: string): Pro
 }
 
 // ---------------------------------------------------------------------------
+// Fields (from _mapping) — so the UI can offer real field names instead of
+// asking the user to remember them.
+// ---------------------------------------------------------------------------
+
+export interface FieldInfo {
+  /** Dotted path, e.g. `name`, `name.kw`, `address.city`. */
+  name: string;
+  type: string;
+}
+
+function collectFields(
+  props: Record<string, unknown>,
+  prefix: string,
+  out: Map<string, string>,
+  depth: number,
+): void {
+  if (depth > 8) return;
+  for (const [name, raw] of Object.entries(props)) {
+    const def = record(raw);
+    const path = prefix ? `${prefix}.${name}` : name;
+    const type = str(def.type);
+    if (type) out.set(path, type);
+    // multi-fields: name.kw -> keyword
+    for (const [sub, subRaw] of Object.entries(record(def.fields))) {
+      out.set(`${path}.${sub}`, str(record(subRaw).type) || "text");
+    }
+    const nested = record(def.properties);
+    if (Object.keys(nested).length) collectFields(nested, path, out, depth + 1);
+  }
+}
+
+/**
+ * Read field names + types from `GET /{index}/_mapping`.
+ * Works for aliases (mapping spans several indices, names are deduped) and
+ * returns `[]` for a closed/missing index instead of throwing.
+ */
+export async function fetchFields(
+  bridge: DbxBridge,
+  connectionId: string,
+  index: string,
+): Promise<FieldInfo[]> {
+  const res = await single(bridge, connectionId, "GET", `/${encodeURIComponent(index)}/_mapping`);
+  if (isError(res)) return [];
+  const found = new Map<string, string>();
+  const body = record(res.body);
+  for (const indexKey of Object.keys(body)) {
+    const mappings = record(record(body[indexKey]).mappings);
+    collectFields(record(mappings.properties), "", found, 0);
+  }
+  return [...found.entries()]
+    .map(([name, type]) => ({ name, type }))
+    .sort((a, b) => a.name.localeCompare(b.name));
+}
+
+/**
+ * Search body for the plain "keyword box" flow.
+ * Empty keyword -> match_all. Empty field -> multi_match across all fields
+ * (verified against ES 8.19: `fields: ["*"]` expands to every searchable field).
+ */
+export function simpleSearchBody(
+  keyword: string,
+  field: string,
+  size: number,
+): Record<string, unknown> {
+  const q = keyword.trim();
+  if (!q) return { size, query: { match_all: {} } };
+  return {
+    size,
+    query: field
+      ? { match: { [field]: q } }
+      : { multi_match: { query: q, fields: ["*"] } },
+  };
+}
+
+// ---------------------------------------------------------------------------
 // Aliases
 // ---------------------------------------------------------------------------
 
