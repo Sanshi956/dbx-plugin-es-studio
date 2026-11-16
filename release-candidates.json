@@ -1,0 +1,23 @@
+{
+  "plugin": {
+    "id": "local.es.studio",
+    "publisher": "xihonglei",
+    "version": "0.5.1",
+    "name": "ES Studio",
+    "description": "Professional Elasticsearch management workbench for DBX.",
+    "permissions": [
+      "host.workbench",
+      "host.storage",
+      "host.connections:read",
+      "host.events"
+    ]
+  },
+  "artifacts": [
+    {
+      "target": "windows-x64",
+      "url": "local.es.studio-0.5.1-windows-x64.dbxp",
+      "sha256": "fff7c9340a1d800618f9d5ce2a3d9b4ef592418ccd6e52ba6d494d14fcd66051",
+      "size": 4760785
+    }
+  ]
+}

@@ -1,0 +1,28 @@
+{
+  "name": "ES Studio",
+  "description": "Professional Elasticsearch management workbench for DBX.",
+  "icon": "assets/plugin.svg",
+  "tags": [
+    "elasticsearch",
+    "database",
+    "monitoring",
+    "cluster",
+    "developer-tools"
+  ],
+  "permissions": [
+    "host.workbench",
+    "host.storage",
+    "host.connections:read",
+    "host.events"
+  ],
+  "source": "https://github.com/Sanshi956/dbx-plugin-es-studio/tree/v0.5.1",
+  "homepage": "https://github.com/Sanshi956/dbx-plugin-es-studio",
+  "license": "MIT",
+  "releaseNotes": "0.5.1: standalone Shard Settings page; MCP contribution listed in DBX settings; localized allocation-explain results; fixed MCP table-header flex class collision and duplicate each-key crash on unassigned shards.",
+  "localizations": {
+    "zh-CN": {
+      "name": "ES Studio",
+      "description": "DBX 内的 Elasticsearch 专业管理工作台。"
+    }
+  }
+}
