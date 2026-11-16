@@ -78,7 +78,20 @@ def main() -> None:
 
     token = os.environ.get("GITHUB_TOKEN", "").strip()
     if not token:
-        raise SystemExit("GITHUB_TOKEN is not set. Export a PAT with repo creation/push/release rights.")
+        # Prefer env var; fall back to a gitignored local file so the token never
+        # has to appear in a chat transcript or shell history.
+        token_file = ROOT / ".dbx-dev" / "github-token.env"
+        if token_file.exists():
+            for line in token_file.read_text(encoding="utf-8").splitlines():
+                line = line.strip()
+                if line and not line.startswith("#"):
+                    token = line.split("=", 1)[-1].strip().strip('"').strip("'")
+                    break
+    if not token:
+        raise SystemExit(
+            "No GitHub token. Either export GITHUB_TOKEN, or put the PAT in "
+            ".dbx-dev/github-token.env (gitignored, one line)."
+        )
 
     me = api("GET", "/user", token)
     owner = args.owner or me["login"]
