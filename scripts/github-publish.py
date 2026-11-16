@@ -32,6 +32,12 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
 API = "https://api.github.com"
+_TOKEN = ""
+
+
+def safe(text: str) -> str:
+    """Never echo the PAT into logs or error messages."""
+    return text.replace(_TOKEN, "***") if _TOKEN else text
 
 
 def api(method: str, path: str, token: str, payload=None, host: str = API, allow_404: bool = False):
@@ -60,16 +66,17 @@ def api(method: str, path: str, token: str, payload=None, host: str = API, allow
 
 
 def run(cmd: list[str], *, check: bool = True) -> subprocess.CompletedProcess:
-    print("+", " ".join(cmd))
+    print("+", safe(" ".join(cmd)))
     proc = subprocess.run(cmd, cwd=ROOT, text=True, capture_output=True)
     if check and proc.returncode:
-        raise SystemExit(f"command failed: {cmd}\n{proc.stdout}\n{proc.stderr}")
+        raise SystemExit(f"command failed: {safe(str(cmd))}\n{safe(proc.stdout)}\n{safe(proc.stderr)}")
     if proc.stdout.strip():
-        print(proc.stdout.strip()[-2000:])
+        print(safe(proc.stdout.strip()[-2000:]))
     return proc
 
 
 def main() -> None:
+    global _TOKEN
     ap = argparse.ArgumentParser()
     ap.add_argument("--repo-name", default="dbx-plugin-es-studio")
     ap.add_argument("--owner", default=None, help="defaults to the token owner")
@@ -92,6 +99,7 @@ def main() -> None:
             "No GitHub token. Either export GITHUB_TOKEN, or put the PAT in "
             ".dbx-dev/github-token.env (gitignored, one line)."
         )
+    _TOKEN = token
 
     me = api("GET", "/user", token)
     owner = args.owner or me["login"]
