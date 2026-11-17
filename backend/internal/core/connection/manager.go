@@ -170,7 +170,9 @@ func ParseLifecycle(raw json.RawMessage) (Config, error) {
 		cfg.Port = 9200
 	}
 	if cfg.Timeout <= 0 {
-		cfg.Timeout = 10 * time.Second
+		// Large clusters (thousands of shards) need more than 10s for O(indices)
+		// endpoints; connections can still override via query_timeout_secs.
+		cfg.Timeout = 60 * time.Second
 	}
 	if cfg.Name == "" {
 		cfg.Name = cfg.ID

@@ -58,7 +58,7 @@ function sidecarCall(method, params) {
     const timer = setTimeout(() => {
       pending.delete(id);
       reject(new Error("sidecar timeout for " + method));
-    }, 30000);
+    }, 120000);
     pending.set(id, (msg) => {
       clearTimeout(timer);
       resolve(msg);

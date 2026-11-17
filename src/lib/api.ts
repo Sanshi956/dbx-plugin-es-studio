@@ -34,7 +34,9 @@ export interface OverviewSnapshot {
 }
 
 export function invoke<T>(bridge: DbxBridge, method: string, params: unknown): Promise<T> {
-  return bridge.invoke<T>(method, params, { timeoutMs: 30000 });
+  // Backend default is 60s (large clusters); the UI must not bail out first.
+  // Batches can fan out to several 60s requests, so leave ample headroom.
+  return bridge.invoke<T>(method, params, { timeoutMs: 120000 });
 }
 
 export async function listConnections(bridge: DbxBridge): Promise<ConnectionSummary[]> {
@@ -73,11 +75,10 @@ export async function fetchOverview(bridge: DbxBridge, connectionId: string): Pr
       { method: "GET", path: "/_cluster/health" },
       { method: "GET", path: "/_cluster/stats" },
       { method: "GET", path: "/_cat/nodes?format=json" },
-      { method: "GET", path: "/_cat/indices?format=json&bytes=b" },
     ],
   });
   const rows = Array.isArray(batch?.results) ? batch.results : [];
-  const labels = ["GET /", "GET /_cluster/health", "GET /_cluster/stats", "GET /_cat/nodes", "GET /_cat/indices"];
+  const labels = ["GET /", "GET /_cluster/health", "GET /_cluster/stats", "GET /_cat/nodes"];
   const partialErrors: string[] = [];
   rows.forEach((row, index) => {
     if (row?.error) partialErrors.push(`${labels[index] ?? "request"}: ${row.error.message}`);
@@ -88,7 +89,6 @@ export async function fetchOverview(bridge: DbxBridge, connectionId: string): Pr
   const health = record(rows[1]?.body);
   const stats = record(rows[2]?.body);
   const nodes = Array.isArray(rows[3]?.body) ? (rows[3].body as unknown[]) : [];
-  const indices = Array.isArray(rows[4]?.body) ? (rows[4].body as unknown[]) : [];
 
   if (!root.version || !health.status) {
     throw new Error(
@@ -106,7 +106,7 @@ export async function fetchOverview(bridge: DbxBridge, connectionId: string): Pr
     health: str(health.status),
     nodeCount: num(health.number_of_nodes) || nodes.length,
     dataNodeCount: num(health.number_of_data_nodes),
-    indexCount: num(indicesStats.count) || indices.length,
+    indexCount: num(indicesStats.count),
     docCount: num(nested(indicesStats, "docs", "count")),
     storeBytes: num(nested(indicesStats, "store", "size_in_bytes")),
     activePrimaryShards: num(health.active_primary_shards),

@@ -84,6 +84,16 @@
   );
   const matrix = $derived.by(() => buildTopology(filteredShards));
 
+  // Detail table pagination — the matrix above stays whole (one row per index),
+  // but thousands of shard copies must not all mount into the DOM at once.
+  const DETAIL_PAGE_SIZE = 100;
+  let detailPage = $state(1);
+  const detailPages = $derived(Math.max(1, Math.ceil(filteredShards.length / DETAIL_PAGE_SIZE)));
+  $effect(() => {
+    if (detailPage > detailPages) detailPage = detailPages;
+  });
+  const detailRows = $derived(filteredShards.slice((detailPage - 1) * DETAIL_PAGE_SIZE, detailPage * DETAIL_PAGE_SIZE));
+
   function stateClass(state: string): string {
     if (state === "UNASSIGNED") return "unassigned";
     if (state === "INITIALIZING") return "initializing";
@@ -227,7 +237,7 @@
           </tr>
         </thead>
         <tbody>
-          {#each filteredShards as s, i (i)}
+          {#each detailRows as s, i ((detailPage - 1) * DETAIL_PAGE_SIZE + i)}
             <tr>
               <td class="mono">{s.index}</td>
               <td class="right mono">{s.shard}</td>
@@ -242,6 +252,13 @@
           {/each}
         </tbody>
       </table>
+      {#if detailPages > 1}
+        <div class="pager">
+          <button type="button" onclick={() => (detailPage = Math.max(1, detailPage - 1))} disabled={detailPage <= 1}>{t("common.prev")}</button>
+          <span>{t("common.pageInfo", { page: detailPage, pages: detailPages, total: filteredShards.length })}</span>
+          <button type="button" onclick={() => (detailPage = Math.min(detailPages, detailPage + 1))} disabled={detailPage >= detailPages}>{t("common.next")}</button>
+        </div>
+      {/if}
     </div>
 
   {/if}
@@ -313,5 +330,10 @@
   .shard.relocating { color: var(--es-yellow); border-color: var(--es-yellow); }
   .shard.other { color: var(--es-muted); }
   .shard.unassigned { color: var(--es-red); border-color: var(--es-red); }
+
+  .pager { display: flex; align-items: center; justify-content: flex-end; gap: 12px; padding: 8px 12px; border-top: 1px solid var(--es-border); font-size: var(--es-fs-xs); color: var(--es-muted); }
+  .pager button { padding: 3px 10px; border: 1px solid var(--es-border); border-radius: 6px; background: var(--es-surface); color: var(--es-text); cursor: pointer; }
+  .pager button:hover:not(:disabled) { background: var(--es-surface-2); }
+  .pager button:disabled { opacity: 0.45; cursor: default; }
 
 </style>

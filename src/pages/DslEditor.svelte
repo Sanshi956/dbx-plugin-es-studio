@@ -178,7 +178,7 @@
         <table class="docs">
           <thead><tr><th>_id</th><th>{t("dsl.col.score")}</th><th>_source</th></tr></thead>
           <tbody>
-            {#each hits as hit (hit.id)}<tr><td class="mono">{hit.id}</td><td class="mono">{hit.score}</td><td class="mono src">{preview(hit.source)}</td></tr>{/each}
+            {#each hits as hit (hit.id)}<tr><td class="mono">{hit.id}</td><td class="mono">{hit.score}</td><td class="mono src" title={JSON.stringify(hit.source)}>{preview(hit.source)}</td></tr>{/each}
           </tbody>
         </table>
         <button type="button" class="link" onclick={() => (showRaw = !showRaw)}>{showRaw ? t("qb.hideRaw") : t("qb.showRaw")}</button>

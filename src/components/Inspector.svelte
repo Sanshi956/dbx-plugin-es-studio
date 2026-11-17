@@ -23,7 +23,7 @@
     <div class="panel" role="dialog" aria-modal="true" aria-label={title}>
       <header>
         <div class="titles">
-          <h3>{title}</h3>
+          <h3 title={title}>{title}</h3>
           {#if subtitle}<span class="sub">{subtitle}</span>{/if}
         </div>
         <button type="button" class="close" aria-label={t("common.close")} onclick={onClose}>✕ Esc</button>

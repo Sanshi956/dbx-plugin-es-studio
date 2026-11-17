@@ -306,7 +306,7 @@
               <tr>
                 <td class="mono">{snap.snapshot}</td>
                 <td><span class="state {snap.state}">{snap.state || "-"}</span></td>
-                <td class="small">{snap.indices.length}（{snap.indices.slice(0, 3).join(", ")}{snap.indices.length > 3 ? "…" : ""}）</td>
+                <td class="small" title={snap.indices.join(", ")}>{snap.indices.length}（{snap.indices.slice(0, 3).join(", ")}{snap.indices.length > 3 ? "…" : ""}）</td>
                 <td class="mono">{snap.successful}/{snap.total}{snap.failed ? ` · failed ${snap.failed}` : ""}</td>
                 <td class="mono small">{snap.startTime ? new Date(Number(snap.startTime)).toLocaleString() : "-"}</td>
                 <td class="mono small">{snap.duration ? `${(Number(snap.duration) / 1000).toFixed(1)}s` : "-"}</td>

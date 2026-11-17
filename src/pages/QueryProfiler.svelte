@@ -80,8 +80,12 @@
     }
   }
 
+  /** Adaptive time unit so sub-microsecond values stay readable instead of looking like 0.000. */
   function ms(nanos: number): string {
-    return (nanos / 1_000_000).toFixed(3);
+    if (!Number.isFinite(nanos) || nanos <= 0) return "0";
+    if (nanos < 1_000) return `${nanos.toFixed(0)} ns`;
+    if (nanos < 1_000_000) return `${(nanos / 1_000).toFixed(1)} µs`;
+    return `${(nanos / 1_000_000).toFixed(3)} ms`;
   }
 
   function treeNodes(rows: ProfileShard[]): { shard: string; node: ProfileNode }[] {
@@ -133,7 +137,7 @@
           <tr>
             <td class="mono">{shard.shard}</td>
             <td class="mono">{shard.index || "-"}</td>
-            <td class="mono small">{shard.node.slice(0, 10)}…</td>
+            <td class="mono small node" title={shard.node}>{shard.node}</td>
             <td class="mono">{ms(shard.queryNanos)}</td>
             <td class="mono">{ms(shard.rewriteNanos)}</td>
             <td class="mono">{ms(shard.collectorNanos)}</td>
@@ -192,6 +196,7 @@
   th { background: var(--es-surface-2); color: var(--es-muted); font-size: var(--es-fs-xs); font-weight: 600; }
   .mono { font-family: var(--es-mono); }
   .small { font-size: var(--es-fs-xs); }
+  .node { min-width: 180px; max-width: 320px; word-break: break-all; white-space: normal; }
   .sub { font-size: var(--es-fs-sm); text-transform: uppercase; letter-spacing: 0.08em; color: var(--es-muted); margin: 4px 0 8px; }
   .indent { display: inline-block; }
   .type { font-family: var(--es-mono); font-size: var(--es-fs-xs); }

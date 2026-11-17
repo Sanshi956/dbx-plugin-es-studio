@@ -384,7 +384,6 @@
   .panel-head { display: flex; justify-content: space-between; align-items: center; gap: 12px; }
   .panel-head h2 { margin: 0 0 6px; font-size: var(--es-fs-sm); text-transform: uppercase; letter-spacing: 0.08em; color: var(--es-muted); }
   .inline { display: flex; gap: 8px; align-items: center; }
-  select, input.search, textarea { border: 1px solid var(--es-border); border-radius: 6px; background: var(--es-bg); color: var(--es-text); padding: 5px 8px; font-size: var(--es-fs-sm); font-family: inherit; }
   input.search { width: 240px; }
   table { width: 100%; border-collapse: collapse; font-size: var(--es-fs-sm); margin-top: 6px; }
   th, td { padding: 6px 10px; border-bottom: 1px solid var(--es-border); text-align: left; vertical-align: top; }

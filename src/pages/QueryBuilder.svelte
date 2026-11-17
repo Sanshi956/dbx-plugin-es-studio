@@ -244,12 +244,71 @@
     }
   }
 
-  function preview(source: unknown): string {
+  interface ResultColumn {
+    key: string;
+    type: string;
+  }
+
+  // A single source field (dotted paths supported) may be present in the mapping
+  // or appear only in the returned _source (dynamic fields / 6.x typed mappings).
+  function sourceValue(source: unknown, path: string): unknown {
+    let cur: unknown = source;
+    for (const part of path.split(".")) {
+      if (cur === null || typeof cur !== "object") return undefined;
+      cur = (cur as Record<string, unknown>)[part];
+    }
+    return cur;
+  }
+
+  function collectColumns(tab: Tab): ResultColumn[] {
+    const seen = new Set<string>();
+    const cols: ResultColumn[] = [];
+    const add = (name: string, type: string) => {
+      if (!name || seen.has(name)) return;
+      seen.add(name);
+      cols.push({ key: name, type });
+    };
+    // Mapping order first.
+    for (const f of fieldsOf(tab)) add(f.name, f.type);
+    // Then any field present in the hits but missing from the mapping.
+    for (const hit of tab.hits) {
+      if (!hit.source || typeof hit.source !== "object") continue;
+      const walk = (obj: Record<string, unknown>, prefix: string) => {
+        for (const [key, value] of Object.entries(obj)) {
+          const path = prefix ? `${prefix}.${key}` : key;
+          if (value !== null && typeof value === "object" && !Array.isArray(value)) {
+            walk(value as Record<string, unknown>, path);
+          } else {
+            add(path, fieldTypeOf(tab, path) || inferredType(value));
+          }
+        }
+      };
+      walk(hit.source as Record<string, unknown>, "");
+    }
+    return cols;
+  }
+
+  function inferredType(value: unknown): string {
+    if (typeof value === "number") return "number";
+    if (typeof value === "boolean") return "boolean";
+    return "";
+  }
+
+  const MAX_COLUMNS = 30;
+  let showAllColumns = $state(false);
+  const allColumns = $derived(collectColumns(active));
+  const visibleColumns = $derived(showAllColumns ? allColumns : allColumns.slice(0, MAX_COLUMNS));
+  let detailHit = $state<DocHit | null>(null);
+
+  function cellText(value: unknown): string {
+    if (value === undefined) return "";
+    if (value === null) return "null";
+    if (typeof value === "string") return value;
+    if (typeof value === "number" || typeof value === "boolean") return String(value);
     try {
-      const s = JSON.stringify(source);
-      return s.length > 90 ? s.slice(0, 90) + "…" : s;
+      return JSON.stringify(value);
     } catch {
-      return String(source);
+      return String(value);
     }
   }
 
@@ -389,16 +448,44 @@
       <StateBlock kind="loading" message={t("qb.runningQuery")} detail={`POST /${active.index}/_search`} />
     {:else if active.hits.length > 0}
       <p class="meta">total {totalOf(active)} hits · took {tookOf(active)} ms</p>
-      <table class="docs">
-        <thead><tr><th>_id</th><th>{t("qb.col.score")}</th><th>_source</th></tr></thead>
-        <tbody>
-          {#each active.hits as hit (hit.id)}
-            <tr><td class="mono">{hit.id}</td><td class="mono">{hit.score}</td><td class="mono src">{preview(hit.source)}</td></tr>
-          {/each}
-        </tbody>
-      </table>
+      <div class="docs-wrap">
+        <table class="docs">
+          <thead>
+            <tr>
+              <th>_id</th><th>{t("qb.col.score")}</th>
+              {#each visibleColumns as col (col.key)}<th title={col.type}>{col.key}{#if col.type}<span class="ftype">{col.type}</span>{/if}</th>{/each}
+              <th></th>
+            </tr>
+          </thead>
+          <tbody>
+            {#each active.hits as hit, ri (`${hit.id}-${ri}`)}
+              <tr>
+                <td class="mono">{hit.id}</td>
+                <td class="mono">{hit.score}</td>
+                {#each visibleColumns as col (col.key)}<td class="mono cell">{cellText(sourceValue(hit.source, col.key))}</td>{/each}
+                <td><button type="button" class="mini detail" onclick={() => (detailHit = hit)} title={t("qb.row.detail")}>{t("qb.row.detail")}</button></td>
+              </tr>
+            {/each}
+          </tbody>
+        </table>
+      </div>
+      {#if allColumns.length > MAX_COLUMNS}
+        <button type="button" class="link" onclick={() => (showAllColumns = !showAllColumns)}>
+          {showAllColumns ? t("qb.hideExtraColumns") : t("qb.showAllColumns", { count: allColumns.length })}
+        </button>
+      {/if}
       <button type="button" class="link" onclick={() => (showRaw = !showRaw)}>{showRaw ? t("qb.hideRaw") : t("qb.showRaw")}</button>
       {#if showRaw}<JsonView value={active.raw} />{/if}
+
+      {#if detailHit}
+        <div class="detail-panel">
+          <div class="detail-head">
+            <strong class="mono">{detailHit.id}</strong>
+            <button type="button" class="mini" onclick={() => (detailHit = null)}>✕</button>
+          </div>
+          <JsonView value={detailHit.source} />
+        </div>
+      {/if}
     {:else if active.ran}
       <StateBlock kind="empty" message={t("qb.noMatch")} />
     {/if}
@@ -428,7 +515,8 @@
 
   .bar { display: flex; gap: 12px; align-items: end; flex-wrap: wrap; margin-bottom: 14px; }
   .bar label { display: flex; flex-direction: column; gap: 4px; font-size: var(--es-fs-xs); color: var(--es-muted); }
-  .bar select, .bar input { padding: 6px 10px; border: 1px solid var(--es-border); border-radius: 6px; background: var(--es-surface); color: var(--es-text); }
+  /* Control chrome comes from the global tokens.css baseline; only widths,
+     fonts and semantic colors are page-specific here. */
   .fcount { font-family: var(--es-mono); font-size: var(--es-fs-2xs); color: var(--es-muted); padding-bottom: 8px; }
 
   .clauses { border: 1px solid var(--es-border); border-radius: var(--es-radius); padding: 14px; margin-bottom: 12px; }
@@ -436,7 +524,6 @@
   .clauses h2 .count { margin-left: 8px; font-family: var(--es-mono); font-size: var(--es-fs-2xs); letter-spacing: 0; text-transform: none; }
   .none { margin: 0 0 10px; font-size: var(--es-fs-sm); color: var(--es-muted); }
   .clause { display: flex; gap: 8px; margin-bottom: 8px; align-items: center; flex-wrap: wrap; }
-  .clause select, .clause input { padding: 6px 8px; border: 1px solid var(--es-border); border-radius: 6px; background: var(--es-surface); color: var(--es-text); }
   .clause .occur { font-family: var(--es-mono); font-size: var(--es-fs-xs); width: 92px; }
   .clause .occur.must { color: var(--es-green); border-color: var(--es-green); }
   .clause .occur.filter { color: var(--es-accent); border-color: var(--es-accent); }
@@ -456,10 +543,14 @@
   .dsl pre { margin: 8px 0 0; padding: 10px 12px; background: var(--es-surface-2); border: 1px solid var(--es-border); border-radius: var(--es-radius); font-family: var(--es-mono); font-size: var(--es-fs-xs); overflow: auto; max-height: 260px; }
 
   .meta { font-size: var(--es-fs-xs); color: var(--es-muted); font-family: var(--es-mono); }
-  table.docs { width: 100%; border-collapse: collapse; font-size: var(--es-fs-sm); border: 1px solid var(--es-border); border-radius: var(--es-radius); overflow: hidden; }
-  .docs th, .docs td { padding: 6px 8px; border-bottom: 1px solid var(--es-border); }
-  .docs th { background: var(--es-surface-2); color: var(--es-muted); text-align: left; font-weight: 600; }
+  .docs-wrap { width: 100%; overflow-x: auto; border: 1px solid var(--es-border); border-radius: var(--es-radius); margin-bottom: 8px; }
+  table.docs { border-collapse: collapse; font-size: var(--es-fs-sm); min-width: 100%; }
+  .docs th, .docs td { padding: 6px 8px; border-bottom: 1px solid var(--es-border); text-align: left; white-space: nowrap; }
+  .docs th { background: var(--es-surface-2); color: var(--es-muted); font-weight: 600; position: sticky; top: 0; }
   .docs td.mono { font-family: var(--es-mono); }
-  .docs td.src { max-width: 460px; overflow: hidden; text-overflow: ellipsis; }
+  .docs th .ftype { display: block; font-size: var(--es-fs-2xs); font-weight: 400; color: var(--es-muted); }
   .link { background: none; border: none; color: var(--es-accent); cursor: pointer; padding: 8px 0; }
+  .detail-panel { margin-top: 12px; border: 1px solid var(--es-border); border-radius: var(--es-radius); padding: 10px 12px; background: var(--es-surface); }
+  .detail-head { display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; font-size: var(--es-fs-sm); }
+  .detail { padding: 2px 8px; font-size: var(--es-fs-2xs); }
 </style>

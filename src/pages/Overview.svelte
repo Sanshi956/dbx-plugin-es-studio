@@ -94,7 +94,7 @@
   </header>
 
   {#if loading && !data}
-    <StateBlock kind="loading" message={t("overview.loadingMessage")} detail="GET / · /_cluster/health · /_cluster/stats · /_cat/nodes · /_cat/indices" />
+    <StateBlock kind="loading" message={t("overview.loadingMessage")} detail="GET / · /_cluster/health · /_cluster/stats · /_cat/nodes" />
   {:else if error}
     <StateBlock
       kind="error"

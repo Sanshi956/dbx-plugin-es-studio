@@ -1,0 +1,31 @@
+{
+  "took": 3,
+  "hits": { "total": { "value": 1, "relation": "eq" }, "hits": [] },
+  "profile": {
+    "shards": [
+      {
+        "id": "[Oi8FlatNode][prof-test][0]",
+        "node_id": "Oi8FlatNode",
+        "index": "prof-test",
+        "shard_id": 0,
+        "searches": [
+          {
+            "query": [
+              {
+                "type": "MatchAllDocsQuery",
+                "description": "*:*",
+                "time_in_nanos": 888000,
+                "children": []
+              }
+            ],
+            "rewrite_time": 9100,
+            "collector": [
+              { "name": "CancellableCollector", "time_in_nanos": 7300 }
+            ]
+          }
+        ],
+        "aggregations": []
+      }
+    ]
+  }
+}

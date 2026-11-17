@@ -7,8 +7,11 @@
 import type { DbxBridge } from "./bridge";
 import { t } from "./i18n.svelte.js";
 import { invoke, type EsResult } from "./api";
+import { mapProfileShards } from "./profile-parse";
+import type { ProfileNode, ProfileShard } from "./profile-parse";
 
 export type { EsResult } from "./api";
+export type { ProfileNode, ProfileShard } from "./profile-parse";
 
 // ---------------------------------------------------------------------------
 // small parsing helpers (defensive: ES field names vary across versions)
@@ -1601,39 +1604,6 @@ export async function putIlmPolicy(
 // P3 · Query profiler
 // ---------------------------------------------------------------------------
 
-export interface ProfileNode {
-  type: string;
-  description: string;
-  timeNanos: number;
-  depth: number;
-}
-
-export interface ProfileShard {
-  node: string;
-  index: string;
-  shard: string;
-  queryNanos: number;
-  rewriteNanos: number;
-  collectorNanos: number;
-  nodes: ProfileNode[];
-}
-
-/** Walks the ES 7/8/9 profile query tree (`{type, description, time_in_nanos, children}`). */
-function flattenProfile(entries: unknown, depth: number, out: ProfileNode[]): void {
-  for (const entry of Array.isArray(entries) ? entries : []) {
-    const node = record(entry);
-    const type = str(node.type) || Object.keys(node).find((k) => !["children", "description"].includes(k)) || "query";
-    const inner = node.type === undefined ? record(node[type]) : {};
-    out.push({
-      type,
-      description: str(node.description) || str(inner.description),
-      timeNanos: num(node.time_in_nanos) || num(inner.time_in_nanos),
-      depth,
-    });
-    if (depth < 24) flattenProfile(node.children ?? inner.children, depth + 1, out);
-  }
-}
-
 export async function runProfile(
   bridge: DbxBridge,
   connectionId: string,
@@ -1653,35 +1623,7 @@ export async function runProfile(
   const payload = record(res.body);
   const profile = record(payload.profile);
   const rawShards = Array.isArray(profile.shards) ? (profile.shards as unknown[]) : [];
-  const shards: ProfileShard[] = rawShards.map((entry, i) => {
-    // ES 8.x: profile.shards[i] is flat -> {id, node_id, shard_id, index, searches, ...}
-    // ES 7.x: profile.shards[i] = { "<nodeId>": { searches: [...] } }
-    const wrapped = record(entry);
-    let nodeId = str(wrapped.node_id);
-    let node = wrapped;
-    if (!nodeId) {
-      const key = Object.keys(wrapped)[0] ?? "";
-      nodeId = key;
-      node = record(wrapped[key]);
-    }
-    const searches = Array.isArray(node.searches) ? (node.searches as unknown[]) : [];
-    const first = record(searches[0]);
-    const nodes: ProfileNode[] = [];
-    flattenProfile(first.query, 0, nodes);
-    const collectorList = Array.isArray(first.collector) ? (first.collector as unknown[]) : [];
-    const rootCollector = record(collectorList[0]);
-    const shardId = wrapped.shard_id !== undefined ? num(wrapped.shard_id) : i;
-    return {
-      node: nodeId,
-      index: str(wrapped.index),
-      shard: `#${shardId}`,
-      // The root query node's time already includes its children.
-      queryNanos: nodes.length ? nodes[0].timeNanos : 0,
-      rewriteNanos: num(first.rewrite_time),
-      collectorNanos: num(rootCollector.time_in_nanos),
-      nodes,
-    };
-  });
+  const shards: ProfileShard[] = mapProfileShards(rawShards);
   const hitsTotal = record(record(payload.hits).total).value ?? record(payload.hits).total ?? 0;
   return { ok: true, took: num(payload.took), hits: num(hitsTotal), shards, raw: payload };
 }

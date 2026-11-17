@@ -48,10 +48,19 @@
     void load(connectionId);
   });
 
+  const PAGE_SIZE = 100;
+  let page = $state(1);
+
   function visible(): IndexRow[] {
     const q = filter.trim().toLowerCase();
     return q ? indices.filter((r) => r.index.toLowerCase().includes(q)) : indices;
   }
+  const visibleRows = $derived(visible());
+  const totalPages = $derived(Math.max(1, Math.ceil(visibleRows.length / PAGE_SIZE)));
+  $effect(() => {
+    if (page > totalPages) page = totalPages;
+  });
+  const pageRows = $derived(visibleRows.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE));
 
   function isClosed(row: IndexRow): boolean {
     return row.status === "close";
@@ -147,7 +156,7 @@
           </tr>
         </thead>
         <tbody>
-          {#each visible() as row (row.index)}
+          {#each pageRows as row (row.index)}
             <tr>
               <td class="mono">{row.index}</td>
               <td><HealthBadge health={row.health} /></td>
@@ -170,6 +179,13 @@
           {/each}
         </tbody>
       </table>
+      {#if totalPages > 1}
+        <div class="pager">
+          <button type="button" onclick={() => (page = Math.max(1, page - 1))} disabled={page <= 1}>{t("common.prev")}</button>
+          <span>{t("common.pageInfo", { page, pages: totalPages, total: visibleRows.length })}</span>
+          <button type="button" onclick={() => (page = Math.min(totalPages, page + 1))} disabled={page >= totalPages}>{t("common.next")}</button>
+        </div>
+      {/if}
     {/if}
   {/if}
 </div>
@@ -210,4 +226,8 @@
   .mini { padding: 3px 8px; font-size: var(--es-fs-xs); }
   .mini.danger { color: var(--es-red); border-color: var(--es-red); }
   .mini.danger:hover { background: var(--es-red); color: #fff; }
+  .pager { display: flex; align-items: center; justify-content: flex-end; gap: 12px; padding: 8px 12px; border: 1px solid var(--es-border); border-top: none; border-radius: 0 0 var(--es-radius) var(--es-radius); font-size: var(--es-fs-xs); color: var(--es-muted); }
+  .pager button { padding: 3px 10px; border: 1px solid var(--es-border); border-radius: 6px; background: var(--es-surface); color: var(--es-text); cursor: pointer; }
+  .pager button:hover:not(:disabled) { background: var(--es-surface-2); }
+  .pager button:disabled { opacity: 0.45; cursor: default; }
 </style>

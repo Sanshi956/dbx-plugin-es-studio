@@ -158,8 +158,7 @@
   .form { display: grid; grid-template-columns: repeat(2, 1fr); gap: 12px; margin-bottom: 16px; }
   .form .full { grid-column: 1 / -1; }
   .form label { display: flex; flex-direction: column; gap: 4px; font-size: var(--es-fs-xs); color: var(--es-muted); }
-  .form select { padding: 6px 10px; border: 1px solid var(--es-border); border-radius: 6px; background: var(--es-surface); color: var(--es-text); font-family: var(--es-mono); font-size: var(--es-fs-sm); }
-  .form input, .form textarea { padding: 6px 10px; border: 1px solid var(--es-border); border-radius: 6px; background: var(--es-surface); color: var(--es-text); font-family: var(--es-mono); font-size: var(--es-fs-sm); }
+  .form input, .form textarea { font-family: var(--es-mono); font-size: var(--es-fs-sm); }
   .form textarea { min-height: 70px; resize: vertical; }
   .run { grid-column: 1 / -1; display: flex; justify-content: flex-end; }
   .meta { font-size: var(--es-fs-xs); color: var(--es-muted); font-family: var(--es-mono); }

@@ -50,10 +50,11 @@ type Config struct {
 	TLSVerify        bool
 }
 
-// DefaultConfig uses safe defaults: verify TLS, 10s timeout, 8 MiB cap.
+// DefaultConfig uses safe defaults: verify TLS, 60s timeout, 8 MiB cap.
+// 60s accommodates O(indices) endpoints on large clusters (thousands of shards).
 func DefaultConfig() Config {
 	return Config{
-		Timeout:          10 * time.Second,
+		Timeout:          60 * time.Second,
 		MaxResponseBytes: 8 << 20,
 		TLSVerify:        true,
 	}
@@ -94,7 +95,7 @@ func NewClient(cfg Config) (*Client, error) {
 	}
 	timeout := cfg.Timeout
 	if timeout <= 0 {
-		timeout = 10 * time.Second
+		timeout = 60 * time.Second
 	}
 	max := cfg.MaxResponseBytes
 	if max <= 0 {

@@ -23,7 +23,7 @@ import (
 const (
 	pluginID = "local.es.studio"
 	// Keep in sync with manifest.json — check-manifest.py asserts the two match.
-	pluginVersion = "0.5.1"
+	pluginVersion = "0.5.2"
 )
 
 func main() {

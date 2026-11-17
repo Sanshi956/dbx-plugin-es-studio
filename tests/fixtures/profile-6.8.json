@@ -1,0 +1,250 @@
+{
+  "took" : 46,
+  "timed_out" : false,
+  "_shards" : {
+    "total" : 5,
+    "successful" : 5,
+    "skipped" : 0,
+    "failed" : 0
+  },
+  "hits" : {
+    "total" : 1,
+    "max_score" : 1.0,
+    "hits" : [
+      {
+        "_index" : "prof-test",
+        "_type" : "doc",
+        "_id" : "1",
+        "_score" : 1.0,
+        "_source" : {
+          "title" : "hello world",
+          "n" : 1
+        }
+      }
+    ]
+  },
+  "profile" : {
+    "shards" : [
+      {
+        "id" : "[OI1lfqdRSD6Zyx5gGJPufg][prof-test][0]",
+        "searches" : [
+          {
+            "query" : [
+              {
+                "type" : "MatchAllDocsQuery",
+                "description" : "*:*",
+                "time_in_nanos" : 423801,
+                "breakdown" : {
+                  "score" : 0,
+                  "build_scorer_count" : 0,
+                  "match_count" : 0,
+                  "create_weight" : 423800,
+                  "next_doc" : 0,
+                  "match" : 0,
+                  "create_weight_count" : 1,
+                  "next_doc_count" : 0,
+                  "score_count" : 0,
+                  "build_scorer" : 0,
+                  "advance" : 0,
+                  "advance_count" : 0
+                }
+              }
+            ],
+            "rewrite_time" : 5200,
+            "collector" : [
+              {
+                "name" : "CancellableCollector",
+                "reason" : "search_cancelled",
+                "time_in_nanos" : 4400,
+                "children" : [
+                  {
+                    "name" : "SimpleTopScoreDocCollector",
+                    "reason" : "search_top_hits",
+                    "time_in_nanos" : 400
+                  }
+                ]
+              }
+            ]
+          }
+        ],
+        "aggregations" : [ ]
+      },
+      {
+        "id" : "[OI1lfqdRSD6Zyx5gGJPufg][prof-test][1]",
+        "searches" : [
+          {
+            "query" : [
+              {
+                "type" : "MatchAllDocsQuery",
+                "description" : "*:*",
+                "time_in_nanos" : 414501,
+                "breakdown" : {
+                  "score" : 0,
+                  "build_scorer_count" : 0,
+                  "match_count" : 0,
+                  "create_weight" : 414500,
+                  "next_doc" : 0,
+                  "match" : 0,
+                  "create_weight_count" : 1,
+                  "next_doc_count" : 0,
+                  "score_count" : 0,
+                  "build_scorer" : 0,
+                  "advance" : 0,
+                  "advance_count" : 0
+                }
+              }
+            ],
+            "rewrite_time" : 4200,
+            "collector" : [
+              {
+                "name" : "CancellableCollector",
+                "reason" : "search_cancelled",
+                "time_in_nanos" : 4300,
+                "children" : [
+                  {
+                    "name" : "SimpleTopScoreDocCollector",
+                    "reason" : "search_top_hits",
+                    "time_in_nanos" : 900
+                  }
+                ]
+              }
+            ]
+          }
+        ],
+        "aggregations" : [ ]
+      },
+      {
+        "id" : "[OI1lfqdRSD6Zyx5gGJPufg][prof-test][2]",
+        "searches" : [
+          {
+            "query" : [
+              {
+                "type" : "MatchAllDocsQuery",
+                "description" : "*:*",
+                "time_in_nanos" : 427001,
+                "breakdown" : {
+                  "score" : 0,
+                  "build_scorer_count" : 0,
+                  "match_count" : 0,
+                  "create_weight" : 427000,
+                  "next_doc" : 0,
+                  "match" : 0,
+                  "create_weight_count" : 1,
+                  "next_doc_count" : 0,
+                  "score_count" : 0,
+                  "build_scorer" : 0,
+                  "advance" : 0,
+                  "advance_count" : 0
+                }
+              }
+            ],
+            "rewrite_time" : 4700,
+            "collector" : [
+              {
+                "name" : "CancellableCollector",
+                "reason" : "search_cancelled",
+                "time_in_nanos" : 900,
+                "children" : [
+                  {
+                    "name" : "SimpleTopScoreDocCollector",
+                    "reason" : "search_top_hits",
+                    "time_in_nanos" : 300
+                  }
+                ]
+              }
+            ]
+          }
+        ],
+        "aggregations" : [ ]
+      },
+      {
+        "id" : "[OI1lfqdRSD6Zyx5gGJPufg][prof-test][3]",
+        "searches" : [
+          {
+            "query" : [
+              {
+                "type" : "MatchAllDocsQuery",
+                "description" : "*:*",
+                "time_in_nanos" : 743806,
+                "breakdown" : {
+                  "score" : 1200,
+                  "build_scorer_count" : 2,
+                  "match_count" : 0,
+                  "create_weight" : 417000,
+                  "next_doc" : 1700,
+                  "match" : 0,
+                  "create_weight_count" : 1,
+                  "next_doc_count" : 2,
+                  "score_count" : 1,
+                  "build_scorer" : 323900,
+                  "advance" : 0,
+                  "advance_count" : 0
+                }
+              }
+            ],
+            "rewrite_time" : 4800,
+            "collector" : [
+              {
+                "name" : "CancellableCollector",
+                "reason" : "search_cancelled",
+                "time_in_nanos" : 512000,
+                "children" : [
+                  {
+                    "name" : "SimpleTopScoreDocCollector",
+                    "reason" : "search_top_hits",
+                    "time_in_nanos" : 296700
+                  }
+                ]
+              }
+            ]
+          }
+        ],
+        "aggregations" : [ ]
+      },
+      {
+        "id" : "[OI1lfqdRSD6Zyx5gGJPufg][prof-test][4]",
+        "searches" : [
+          {
+            "query" : [
+              {
+                "type" : "MatchAllDocsQuery",
+                "description" : "*:*",
+                "time_in_nanos" : 413601,
+                "breakdown" : {
+                  "score" : 0,
+                  "build_scorer_count" : 0,
+                  "match_count" : 0,
+                  "create_weight" : 413600,
+                  "next_doc" : 0,
+                  "match" : 0,
+                  "create_weight_count" : 1,
+                  "next_doc_count" : 0,
+                  "score_count" : 0,
+                  "build_scorer" : 0,
+                  "advance" : 0,
+                  "advance_count" : 0
+                }
+              }
+            ],
+            "rewrite_time" : 5200,
+            "collector" : [
+              {
+                "name" : "CancellableCollector",
+                "reason" : "search_cancelled",
+                "time_in_nanos" : 4400,
+                "children" : [
+                  {
+                    "name" : "SimpleTopScoreDocCollector",
+                    "reason" : "search_top_hits",
+                    "time_in_nanos" : 900
+                  }
+                ]
+              }
+            ]
+          }
+        ],
+        "aggregations" : [ ]
+      }
+    ]
+  }
+}

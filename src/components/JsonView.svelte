@@ -1,9 +1,13 @@
 <script lang="ts">
+  import { t } from "../lib/i18n.svelte.js";
+
   interface Props {
     value: unknown;
     compact?: boolean;
+    /** Show a "copy JSON" button. Defaults on; pass false to suppress. */
+    copyable?: boolean;
   }
-  let { value, compact = false }: Props = $props();
+  let { value, compact = false, copyable = true }: Props = $props();
 
   function escapeHtml(s: string): string {
     return s
@@ -22,18 +26,52 @@
       .replace(/\b(true|false|null)\b/g, '<span class="b">$1</span>');
   }
 
-  let html = $derived.by(() => {
+  let raw = $derived.by(() => {
     try {
-      return highlight(JSON.stringify(value, null, compact ? 0 : 2));
+      return JSON.stringify(value, null, compact ? 0 : 2);
     } catch {
-      return escapeHtml(String(value));
+      return String(value);
     }
   });
+  let html = $derived(highlight(raw));
+  let copied = $state(false);
+
+  async function copy(): Promise<void> {
+    try {
+      await navigator.clipboard.writeText(raw);
+      copied = true;
+      window.setTimeout(() => (copied = false), 1500);
+    } catch {
+      copied = false;
+    }
+  }
 </script>
 
-<pre class="json">{@html html}</pre>
+<div class="json-wrap">
+  {#if copyable}
+    <button type="button" class="copy" onclick={copy} title={t("common.copyJson")}>
+      {copied ? t("common.copied") : t("common.copyJson")}
+    </button>
+  {/if}
+  <pre class="json">{@html html}</pre>
+</div>
 
 <style>
+  .json-wrap { position: relative; }
+  .copy {
+    position: absolute;
+    top: 6px;
+    right: 6px;
+    z-index: 1;
+    padding: 2px 8px;
+    font-size: var(--es-fs-2xs);
+    border: 1px solid var(--es-border);
+    border-radius: 4px;
+    background: var(--es-surface);
+    color: var(--es-muted);
+    cursor: pointer;
+  }
+  .copy:hover { color: var(--es-text); background: var(--es-surface-2); }
   .json {
     margin: 0;
     padding: 12px 14px;
