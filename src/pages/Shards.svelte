@@ -94,6 +94,20 @@
   });
   const detailRows = $derived(filteredShards.slice((detailPage - 1) * DETAIL_PAGE_SIZE, detailPage * DETAIL_PAGE_SIZE));
 
+  // Matrix pagination — one row per index, but a big cluster has hundreds of
+  // indices; cap mounted rows (and therefore shard chips) to keep the DOM small.
+  // buildTopology still runs over all filtered shards so cellTags can look up any
+  // index on the current page without rebuilding per page.
+  const MATRIX_PAGE_SIZE = 50;
+  let matrixPage = $state(1);
+  const matrixPages = $derived(Math.max(1, Math.ceil(matrix.indices.length / MATRIX_PAGE_SIZE)));
+  $effect(() => {
+    if (matrixPage > matrixPages) matrixPage = matrixPages;
+  });
+  const matrixIndexRows = $derived(
+    matrix.indices.slice((matrixPage - 1) * MATRIX_PAGE_SIZE, matrixPage * MATRIX_PAGE_SIZE),
+  );
+
   function stateClass(state: string): string {
     if (state === "UNASSIGNED") return "unassigned";
     if (state === "INITIALIZING") return "initializing";
@@ -198,7 +212,7 @@
             </tr>
           </thead>
           <tbody>
-            {#each matrix.indices as index (index)}
+            {#each matrixIndexRows as index (index)}
               <tr>
                 <th class="rowhead">{index}</th>
                 {#each matrix.nodes as node (node)}
@@ -218,6 +232,13 @@
           </tbody>
         </table>
       </div>
+      {#if matrixPages > 1}
+        <div class="pager matrix-pager">
+          <button type="button" onclick={() => (matrixPage = Math.max(1, matrixPage - 1))} disabled={matrixPage <= 1}>{t("common.prev")}</button>
+          <span>{t("common.pageInfo", { page: matrixPage, pages: matrixPages, total: matrix.indices.length })}</span>
+          <button type="button" onclick={() => (matrixPage = Math.min(matrixPages, matrixPage + 1))} disabled={matrixPage >= matrixPages}>{t("common.next")}</button>
+        </div>
+      {/if}
     {/if}
 
     <h2>{t("shards.table.title")} <span class="asof">{t("shards.table.copies", { count: summary.total })}</span></h2>
