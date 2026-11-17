@@ -524,13 +524,13 @@
   .clauses h2 .count { margin-left: 8px; font-family: var(--es-mono); font-size: var(--es-fs-2xs); letter-spacing: 0; text-transform: none; }
   .none { margin: 0 0 10px; font-size: var(--es-fs-sm); color: var(--es-muted); }
   .clause { display: flex; gap: 8px; margin-bottom: 8px; align-items: center; flex-wrap: wrap; }
-  .clause .occur { font-family: var(--es-mono); font-size: var(--es-fs-xs); width: 92px; }
+  .clause .occur { font-size: var(--es-fs-xs); width: 92px; }
   .clause .occur.must { color: var(--es-green); border-color: var(--es-green); }
   .clause .occur.filter { color: var(--es-accent); border-color: var(--es-accent); }
   .clause .occur.should { color: var(--es-yellow); border-color: var(--es-yellow); }
   .clause .occur.must_not { color: var(--es-red); border-color: var(--es-red); }
   .clause .op { font-size: var(--es-fs-xs); width: 168px; }
-  .clause .field { flex: 1 1 200px; min-width: 160px; font-family: var(--es-mono); font-size: var(--es-fs-xs); }
+  .clause .field { flex: 1 1 200px; min-width: 160px; font-size: var(--es-fs-xs); }
   .clause .value { width: 150px; }
   .novalue { font-size: var(--es-fs-xs); color: var(--es-muted); }
   .ftype { font-family: var(--es-mono); font-size: var(--es-fs-2xs); color: var(--es-muted); border: 1px solid var(--es-border); border-radius: 4px; padding: 2px 6px; white-space: nowrap; }
