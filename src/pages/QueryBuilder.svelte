@@ -1,6 +1,7 @@
 <script lang="ts">
   import StateBlock from "../components/StateBlock.svelte";
   import JsonView from "../components/JsonView.svelte";
+  import Combobox from "../components/Combobox.svelte";
   import {
     fetchIndices, fetchFields, searchIndex, buildDsl,
     operatorsForType, defaultOperatorForType, clauseHasNoValue, nestedPathsOf,
@@ -118,6 +119,9 @@
   function fieldsOf(tab: Tab): FieldInfo[] {
     return fieldsByIndex[tab.index] ?? [];
   }
+  const sortFieldOptions = $derived(
+    fieldsOf(active).map((f) => ({ value: f.name, label: `${f.name} · ${f.type}` })),
+  );
   function fieldTypeOf(tab: Tab, name: string): string {
     if (name === "_id" || name === "_index") return "keyword";
     return fieldsOf(tab).find((f) => f.name === name)?.type ?? "";
@@ -366,7 +370,12 @@
       </label>
       <label>{t("qb.form.size")}<input type="number" min="1" max="1000" bind:value={active.size} /></label>
       <label>{t("qb.form.sortField")}
-        <input placeholder={t("qb.form.sortOptional")} list="qb-fields-{active.id}" bind:value={active.sortField} />
+        <Combobox
+          listId="qb-fields-{active.id}"
+          placeholder={t("qb.form.sortOptional")}
+          options={sortFieldOptions}
+          bind:value={active.sortField}
+        />
       </label>
       <label>{t("qb.form.order")}
         <select bind:value={active.sortOrder}><option value="asc">asc</option><option value="desc">desc</option></select>
@@ -432,9 +441,6 @@
         </button>
       </div>
 
-      <datalist id="qb-fields-{active.id}">
-        {#each fieldsOf(active) as f (f.name)}<option value={f.name}>{f.name} · {f.type}</option>{/each}
-      </datalist>
     </section>
 
     <details class="dsl" bind:open={showDsl}>
