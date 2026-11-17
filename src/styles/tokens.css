@@ -3,6 +3,11 @@
    consume semantic --es-* variables, so no business component hardcodes color.
    Fallbacks keep the UI readable in the official dev host when tokens are absent. */
 :root {
+  /* Native controls (select dropdown popup, scrollbars, date pickers) ignore
+     --es-* CSS vars and follow the OS preference. Without this, a light-themed
+     page on a dark-mode host renders a black dropdown (docs/08 control parity). */
+  color-scheme: light;
+
   /* Follow the host text size instead of pinning 13px. DBX writes its tokens
      with setProperty on :root, but the exact name differs between host builds,
      so the candidates are chained here rather than probed in JS. Everything
@@ -35,6 +40,7 @@
 }
 
 :root[data-dbx-theme="dark"] {
+  color-scheme: dark;
   --es-bg: var(--dbx-bg, #0d1117);
   --es-surface: var(--dbx-surface, #161b22);
   --es-surface-2: var(--dbx-surface-secondary, #21262d);
