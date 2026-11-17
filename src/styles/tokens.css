@@ -71,4 +71,7 @@ select, input:not([type="checkbox"]):not([type="radio"]), textarea {
   border-radius: 6px;
   background: var(--es-surface);
   color: var(--es-text);
+  /* Browsers compute `normal` line-height differently for <input> vs <select>,
+     making same-row controls differ by 2px. Pin it so all controls align. */
+  line-height: 1.5;
 }

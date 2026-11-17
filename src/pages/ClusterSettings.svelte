@@ -1,6 +1,7 @@
 <script lang="ts">
   import StateBlock from "../components/StateBlock.svelte";
   import ConfirmDanger from "../components/ConfirmDanger.svelte";
+  import Combobox from "../components/Combobox.svelte";
   import { fetchClusterSettings, updateClusterSettings, isError, type ClusterSettingsSnapshot } from "../lib/services";
   import { settingMeta, settingKeyCandidates, type SettingMeta } from "../lib/clusterSettings";
   import type { DbxBridge } from "../lib/bridge";
@@ -144,16 +145,14 @@
         </select>
       </label>
       <label class="wide">{t("cs.key")}
-        <input
-          list="cluster-setting-keys"
+        <Combobox
+          listId="cluster-setting-keys"
           class="key-input"
           placeholder={t("cs.keyPlaceholder")}
           value={editKey}
-          oninput={(e) => onKeyChange(e.currentTarget.value)}
+          options={keyCandidates.map((k) => ({ value: k }))}
+          onValueChange={onKeyChange}
         />
-        <datalist id="cluster-setting-keys">
-          {#each keyCandidates as key (key)}<option value={key}></option>{/each}
-        </datalist>
       </label>
       <label class="wide">{t("cs.value")}
         <input class="value-input" title={t(meta.hintKey)} placeholder={valuePlaceholder()} bind:value={editValue} />

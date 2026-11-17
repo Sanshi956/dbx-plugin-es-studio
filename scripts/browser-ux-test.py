@@ -542,13 +542,14 @@ def _run(base_url, out_dir, mirror_url):
         try:
             click_nav(page, "集群设置")
             page.wait_for_selector("input.key-input", timeout=20000)
-            list_id = page.get_attribute("input.key-input", "list")
-            datalist_n = page.locator(f"datalist#{list_id} option").count()
-            check("Cluster Settings 设置项可从列表选（datalist 候选 > 20）",
-                  bool(list_id) and datalist_n > 20, f"list={list_id} n={datalist_n}")
+            list_id = page.get_attribute("input.key-input", "data-list")
+            options_n = int(page.get_attribute("input.key-input", "data-options-count") or 0)
+            check("Cluster Settings 设置项可从列表选（候选 > 20）",
+                  bool(list_id) and options_n > 20, f"list={list_id} n={options_n}")
 
             key_input = page.locator("input.key-input")
             key_input.fill("cluster.routing.allocation.enable")
+            page.keyboard.press("Escape")  # close combobox popup before touching sibling controls
             page.wait_for_timeout(300)
             chip_texts = page.locator("section.writer .chip").all_inner_texts()
             check("值候选随设置项动态变化（allocation.enable -> all/primaries/new_primaries/none）",
@@ -559,6 +560,7 @@ def _run(base_url, out_dir, mirror_url):
                   page.input_value("input.value-input"))
 
             key_input.fill("cluster.blocks.read_only")
+            page.keyboard.press("Escape")  # close combobox popup
             page.wait_for_timeout(300)
             chip_texts2 = page.locator("section.writer .chip").all_inner_texts()
             check("换设置项后值候选跟着换成 true/false", chip_texts2 == ["true", "false"], chip_texts2)

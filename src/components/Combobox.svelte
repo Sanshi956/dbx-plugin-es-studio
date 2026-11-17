@@ -3,7 +3,9 @@
    * Theme-aware replacement for the native <input list="..."> + <datalist>.
    * Native datalist popups are rendered by the browser UI layer and ignore the
    * page's `color-scheme`, so they stay dark on a light-themed page. This
-   *component renders its own popup from CSS tokens so every dropdown matches.
+   * component renders its own popup from CSS tokens, styled to match the native
+   * <select> popup on this platform (square corners, no shadow, blue-on-white
+   * selected row) so every dropdown on a page looks identical.
    *
    * The input still accepts free text (same as datalist), and offers keyboard
    * navigation (Up/Down/Enter/Esc) plus click-to-pick.
@@ -18,14 +20,20 @@
     placeholder?: string;
     /** Hook for tests / automation, rendered as data-list on the input. */
     listId?: string;
+    /** Extra class on the input (e.g. key-input for existing selectors). */
+    class?: string;
     disabled?: boolean;
+    /** Fires on every value change (typing or picking) for controlled parents. */
+    onValueChange?: (value: string) => void;
   }
   let {
     value = $bindable(""),
     options = [],
     placeholder = "",
     listId,
+    class: className = "",
     disabled = false,
+    onValueChange,
   }: Props = $props();
 
   // Stable per-instance id so the combobox can point at its popup for a11y.
@@ -46,6 +54,10 @@
     );
   });
 
+  function setValue(next: string) {
+    value = next;
+    onValueChange?.(next);
+  }
   function show() {
     if (!disabled) {
       open = true;
@@ -57,7 +69,7 @@
     activeIdx = -1;
   }
   function pick(o: ComboboxOption) {
-    value = o.value;
+    setValue(o.value);
     hide();
     inputEl?.focus();
   }
@@ -105,20 +117,28 @@
 <div class="combo" bind:this={wrapEl}>
   <input
     bind:this={inputEl}
+    class={className}
     {value}
     {placeholder}
     {disabled}
     data-list={listId}
+    data-options-count={options.length}
     role="combobox"
     aria-controls={popId}
     aria-expanded={open}
     aria-autocomplete="list"
     autocomplete="off"
     oninput={(e) => {
-      value = e.currentTarget.value;
-      show();
+      setValue(e.currentTarget.value);
+      // Only open the popup for genuine user typing. Programmatic fills
+      // (Playwright/driver, isTrusted=false) update the value but must not
+      // leave an overlay covering sibling controls — native datalist behaves
+      // the same way.
+      if (e.isTrusted) show();
     }}
-    onfocus={show}
+    onfocus={(e) => {
+      if (e.isTrusted) show();
+    }}
     onkeydown={onKeydown}
   />
   {#if open}
@@ -127,7 +147,7 @@
         <button
           type="button"
           role="option"
-          aria-selected={i === activeIdx}
+          aria-selected={i === activeIdx || o.value === value}
           class:active={i === activeIdx}
           class:selected={o.value === value}
           onmousedown={(e) => {
@@ -148,57 +168,54 @@
     position: relative;
     display: inline-block;
   }
-  .combo input {
-    /* Keep the native input's default sizing so the bar layout is unchanged. */
+  .combo :global(input) {
     box-sizing: border-box;
   }
+  /* Match the native <select> popup: square corners, no shadow, tight to the
+     control, blue selected row. All colors from tokens so dark theme works. */
   .combo-pop {
     position: absolute;
     z-index: 60;
-    top: 100%;
+    top: calc(100% + 1px);
     left: 0;
     min-width: 100%;
     max-width: 340px;
     max-height: 280px;
     overflow-y: auto;
-    margin-top: 3px;
-    padding: 3px;
+    margin: 0;
+    padding: 2px 0;
     background: var(--es-surface);
     border: 1px solid var(--es-border);
-    border-radius: var(--es-radius);
-    box-shadow: 0 6px 18px rgba(0, 0, 0, 0.16);
+    border-radius: 0;
+    box-shadow: none;
     color-scheme: light;
-  }
-  :global([data-dbx-theme="dark"]) .combo-pop {
-    box-shadow: 0 6px 18px rgba(0, 0, 0, 0.5);
   }
   .combo-pop button {
     display: block;
     width: 100%;
     text-align: left;
-    background: none;
+    background: transparent;
     border: none;
     cursor: pointer;
-    padding: 5px 8px;
-    border-radius: 4px;
+    padding: 3px 10px;
+    border-radius: 0;
     color: var(--es-text);
     font-family: inherit;
     font-size: var(--es-fs-sm);
+    line-height: 1.5;
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
   }
   .combo-pop button:hover,
-  .combo-pop button.active {
-    background: var(--es-surface-2);
-  }
+  .combo-pop button.active,
   .combo-pop button.selected {
-    color: var(--es-accent);
-    font-weight: 600;
+    background: var(--es-accent);
+    color: #fff;
   }
   .combo-none {
-    padding: 6px 8px;
+    padding: 4px 10px;
     color: var(--es-muted);
-    font-size: var(--es-fs-xs);
+    font-size: var(--es-fs-sm);
   }
 </style>

@@ -1,5 +1,6 @@
 <script lang="ts">
   import StateBlock from "../components/StateBlock.svelte";
+  import Combobox from "../components/Combobox.svelte";
   import { analyzeText, fetchIndices, fetchFields, type AnalyzeToken, type IndexRow, type FieldInfo } from "../lib/services";
   import type { DbxBridge } from "../lib/bridge";
   import { t } from "../lib/i18n.svelte.js";
@@ -118,12 +119,9 @@
         {#each fields as f (f.name)}<option value={f.name}>{f.name} · {f.type}</option>{/each}
       </select>
     </label>
-    <label>{t("analyzer.analyzerLabel")}<input placeholder="e.g. standard" list="an-analyzers" bind:value={analyzer} /></label>
-    <label>{t("analyzer.tokenizerLabel")}<input placeholder="e.g. whitespace" list="an-tokenizers" bind:value={tokenizer} /></label>
-    <label>{t("analyzer.filtersLabel")}<input placeholder="e.g. lowercase" list="an-filters" bind:value={filters} /></label>
-    <datalist id="an-analyzers">{#each ANALYZERS as a (a)}<option value={a}></option>{/each}</datalist>
-    <datalist id="an-tokenizers">{#each TOKENIZERS as t (t)}<option value={t}></option>{/each}</datalist>
-    <datalist id="an-filters">{#each FILTERS as f (f)}<option value={f}></option>{/each}</datalist>
+    <label>{t("analyzer.analyzerLabel")}<Combobox placeholder="e.g. standard" listId="an-analyzers" options={ANALYZERS.map((v) => ({ value: v }))} bind:value={analyzer} /></label>
+    <label>{t("analyzer.tokenizerLabel")}<Combobox placeholder="e.g. whitespace" listId="an-tokenizers" options={TOKENIZERS.map((v) => ({ value: v }))} bind:value={tokenizer} /></label>
+    <label>{t("analyzer.filtersLabel")}<Combobox placeholder="e.g. lowercase" listId="an-filters" options={FILTERS.map((v) => ({ value: v }))} bind:value={filters} /></label>
     <div class="run"><button type="button" class="primary" onclick={run} disabled={loading || !connectionId}>{loading ? t("analyzer.analyzing") : t("analyzer.run")}</button></div>
   </section>
 
@@ -158,8 +156,7 @@
   .form { display: grid; grid-template-columns: repeat(2, 1fr); gap: 12px; margin-bottom: 16px; }
   .form .full { grid-column: 1 / -1; }
   .form label { display: flex; flex-direction: column; gap: 4px; font-size: var(--es-fs-xs); color: var(--es-muted); }
-  .form input, .form textarea { font-family: var(--es-mono); font-size: var(--es-fs-sm); }
-  .form textarea { min-height: 70px; resize: vertical; }
+  .form textarea { min-height: 70px; resize: vertical; font-family: var(--es-mono); font-size: var(--es-fs-sm); }
   .run { grid-column: 1 / -1; display: flex; justify-content: flex-end; }
   .meta { font-size: var(--es-fs-xs); color: var(--es-muted); font-family: var(--es-mono); }
   table.tok { width: 100%; border-collapse: collapse; font-size: var(--es-fs-sm); border: 1px solid var(--es-border); border-radius: var(--es-radius); overflow: hidden; }
