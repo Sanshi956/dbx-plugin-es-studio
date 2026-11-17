@@ -154,9 +154,12 @@ revocable); the built-in DBX AI channel uses the same 45 read-only tools without
 
 ## Native sidecar behavior
 
-Yes: `bin/windows-x64/es-studio-sidecar.exe` (Go, current-host build, vendored SDK). It runs as a
-stdio-jsonl child process, opens no listening ports, spawns no external commands, and writes only
-rolling monitoring time series (JSONL, 7-day / 20000-point / 8 MiB caps) under `DBX_PLUGIN_DATA_DIR`.
+Yes: each platform package ships `bin/<target>/es-studio-sidecar[.exe]` (Go, per-target native
+build on a matching runner, vendored SDK). The Release covers windows-x64, darwin-x64,
+darwin-arm64, linux-x64 and linux-arm64; the exact targets and digests are pinned in
+`release-candidates.json`. It runs as a stdio-jsonl child process, opens no listening ports,
+spawns no external commands, and writes only rolling monitoring time series
+(JSONL, 7-day / 20000-point / 8 MiB caps) under `DBX_PLUGIN_DATA_DIR`.
 No other filesystem writes and no subprocesses.
 
 ## License

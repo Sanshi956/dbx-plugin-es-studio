@@ -1,27 +1,29 @@
 #!/usr/bin/env python3
-"""Publish ES Studio to GitHub: create repo, push source/tag, create Release with store assets.
+"""Publish ES Studio to GitHub: create a Release with all platform store assets.
 
-Requires a GitHub Personal Access Token in the GITHUB_TOKEN environment variable.
-Classic token needs `repo` scope; fine-grained token needs Contents + Metadata
-(read/write) plus repository creation permission. The token is never written
-to disk or to git config.
+Requires a GitHub token in the GITHUB_TOKEN environment variable (or the gitignored
+.dbx-dev/github-token.env). Classic token needs `repo` scope; fine-grained token
+needs Contents + Metadata (read/write) plus repository creation permission (not
+required with --release-only). The token is never written to disk or git config.
 
 Usage:
-    GITHUB_TOKEN=ghp_xxx python scripts/github-publish.py \
-        --repo-name dbx-plugin-es-studio --license MIT
+    GITHUB_TOKEN=ghp_xxx python scripts/github-publish.py --repo-name dbx-plugin-es-studio
+    GITHUB_TOKEN=ghp_xxx python scripts/github-publish.py --repo OWNER/REPO --release-only
 
 What it does (idempotent where possible):
-  1. Resolve token owner via GET /user
-  2. Create the public repository if it does not exist
+  1. Resolve token owner via GET /user, or take the full slug from --repo
+  2. Create the public repository if it does not exist (skipped by --release-only)
   3. Generate store metadata with the real repo slug (scripts/prepare-store-submission.py)
-  4. Commit .dbx-store.json + release-candidates.json, tag v<version>
-  5. Push branch as main and push the tag
-  6. Create the GitHub Release and upload unsigned candidate + artifact + release-candidates
+  4. Commit .dbx-store.json + release-candidates.json, tag v<version> (skipped by --release-only)
+  5. Push branch as main and push the tag (skipped by --release-only)
+  6. Create the GitHub Release and upload every platform .dbxp + .artifact.json
+     listed in release-candidates.json, plus release-candidates.json itself
 """
 
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import os
 import subprocess
@@ -75,12 +77,42 @@ def run(cmd: list[str], *, check: bool = True) -> subprocess.CompletedProcess:
     return proc
 
 
+def ensure_repository(token: str, slug: str, repo_name: str) -> None:
+    """Create the public repository if it does not exist yet (idempotent)."""
+    existing = api("GET", f"/repos/{slug}", token, allow_404=True)
+    if existing.get("full_name"):
+        print("repository already exists:", existing["html_url"])
+        return
+    created = api(
+        "POST",
+        "/user/repos",
+        token,
+        {
+            "name": repo_name,
+            "description": "ES Studio - professional Elasticsearch workbench plugin for DBX",
+            "homepage": "https://dbxio.com",
+            "private": False,
+            "has_issues": True,
+            "has_wiki": False,
+            "auto_init": False,
+        },
+    )
+    print("created:", created["html_url"])
+
+
 def main() -> None:
     global _TOKEN
     ap = argparse.ArgumentParser()
     ap.add_argument("--repo-name", default="dbx-plugin-es-studio")
     ap.add_argument("--owner", default=None, help="defaults to the token owner")
+    ap.add_argument("--repo", default=None, help="full OWNER/REPO slug; overrides --owner/--repo-name")
+    ap.add_argument("--tag", default=None, help="release tag (default: v<manifest version>)")
     ap.add_argument("--license", default="MIT")
+    ap.add_argument(
+        "--release-only",
+        action="store_true",
+        help="only create the Release and upload assets from dist/ (used by CI on a tag)",
+    )
     args = ap.parse_args()
 
     token = os.environ.get("GITHUB_TOKEN", "").strip()
@@ -101,62 +133,66 @@ def main() -> None:
         )
     _TOKEN = token
 
-    me = api("GET", "/user", token)
-    owner = args.owner or me["login"]
-    slug = f"{owner}/{args.repo_name}"
+    if args.repo:
+        slug = args.repo.strip().strip("/")
+        owner, separator, repo_name = slug.partition("/")
+        if not separator or not owner or not repo_name:
+            raise SystemExit(f"invalid --repo: {args.repo!r} (expected OWNER/REPO)")
+    else:
+        me = api("GET", "/user", token)
+        owner = args.owner or me["login"]
+        slug = f"{owner}/{args.repo_name}"
     print(f"GitHub owner: {owner}, repository: {slug}")
 
-    existing = api("GET", f"/repos/{slug}", token, allow_404=True)
-    if existing.get("full_name"):
-        print("repository already exists:", existing["html_url"])
-    else:
-        created = api(
-            "POST",
-            "/user/repos",
-            token,
-            {
-                "name": args.repo_name,
-                "description": "ES Studio - professional Elasticsearch workbench plugin for DBX",
-                "homepage": "https://dbxio.com",
-                "private": False,
-                "has_issues": True,
-                "has_wiki": False,
-                "auto_init": False,
-            },
-        )
-        print("created:", created["html_url"])
+    if not args.release_only:
+        ensure_repository(token, slug, args.repo_name)
 
     manifest = json.loads((ROOT / "manifest.json").read_text(encoding="utf-8"))
     version = manifest["version"]
-    tag = f"v{version}"
+    tag = args.tag or f"v{version}"
     plugin_id = manifest["id"]
 
-    # Metadata must reference the final repository before the tag is cut.
-    py = sys.executable
-    run([py, "scripts/prepare-store-submission.py", "--repo", slug, "--tag", tag, "--license", args.license])
-    run(["git", "add", ".dbx-store.json", "release-candidates.json"])
-    has_staged = run(["git", "diff", "--cached", "--quiet"], check=False).returncode != 0
-    if has_staged:
-        run(["git", "commit", "-m", f"chore(store): submission metadata for {slug} @ {tag}"])
+    if args.release_only:
+        # CI already prepared the metadata from the built artifacts; never
+        # create tags or push from a detached HEAD in a workflow run.
+        assert (ROOT / "release-candidates.json").exists(), "release-candidates.json is missing"
+        print("release-only: using existing release-candidates.json")
     else:
-        print("store metadata already committed")
+        # Metadata must reference the final repository before the tag is cut.
+        py = sys.executable
+        run([py, "scripts/prepare-store-submission.py", "--repo", slug, "--tag", tag, "--license", args.license])
+        run(["git", "add", ".dbx-store.json", "release-candidates.json"])
+        has_staged = run(["git", "diff", "--cached", "--quiet"], check=False).returncode != 0
+        if has_staged:
+            run(["git", "commit", "-m", f"chore(store): submission metadata for {slug} @ {tag}"])
+        else:
+            print("store metadata already committed")
 
-    if run(["git", "rev-parse", "-q", "--verify", f"refs/tags/{tag}"], check=False).returncode:
-        run(["git", "tag", "-a", tag, "-m", f"ES Studio {version}"])
-    else:
-        print("tag already exists:", tag)
+        if run(["git", "rev-parse", "-q", "--verify", f"refs/tags/{tag}"], check=False).returncode:
+            run(["git", "tag", "-a", tag, "-m", f"ES Studio {version}"])
+        else:
+            print("tag already exists:", tag)
 
-    remote = f"https://x-access-token:{token}@github.com/{slug}.git"
-    run(["git", "push", remote, "HEAD:refs/heads/main"])
-    run(["git", "push", remote, tag])
+        remote = f"https://x-access-token:{token}@github.com/{slug}.git"
+        run(["git", "push", remote, "HEAD:refs/heads/main"])
+        run(["git", "push", remote, tag])
+
+    # Enumerate every platform artifact from release-candidates.json, verify each
+    # package against its pinned digest, then upload .dbxp + .artifact.json pairs.
+    candidates = json.loads((ROOT / "release-candidates.json").read_text(encoding="utf-8"))
+    artifacts = candidates["artifacts"]
+    assert isinstance(artifacts, list) and artifacts, "release-candidates.json has no artifacts"
+    targets = [item["target"] for item in artifacts]
+    print(f"Release targets ({len(targets)}): {', '.join(targets)}")
 
     notes = (
-        f"ES Studio {version} — unsigned review candidate for DBX Store.\n\n"
+        f"ES Studio {version} — unsigned review candidates for DBX Store.\n\n"
         "Highlights: standalone Shard Settings page; MCP contribution in DBX settings; "
         "localized allocation explain; fixed MCP table-header class collision and duplicate "
         "each-key crash. See SUBMISSION.md in the marketplace bundle for the full checklist.\n\n"
-        "Assets: unsigned .dbxp + .artifact.json + release-candidates.json. "
-        "DBX Store syncs these and signs centrally after review."
+        f"Platforms ({len(targets)}): {', '.join(targets)}. Each target ships an unsigned "
+        ".dbxp + .artifact.json. DBX Store syncs release-candidates.json, then signs "
+        "centrally after review. Built natively per target by .github/workflows/release.yml."
     )
     releases = api("GET", f"/repos/{slug}/releases/tags/{tag}", token, allow_404=True)
     if releases.get("id"):
@@ -178,13 +214,24 @@ def main() -> None:
         print("created release:", release["html_url"])
 
     upload_url = release["upload_url"].split("{", 1)[0]
-    assets = [
-        ROOT / "dist" / f"{plugin_id}-{version}-windows-x64.dbxp",
-        ROOT / "dist" / f"{plugin_id}-{version}-windows-x64.artifact.json",
-        ROOT / "release-candidates.json",
-    ]
+    assets: list[Path] = []
+    seen_targets: set[str] = set()
+    for artifact in artifacts:
+        target = artifact["target"]
+        assert target not in seen_targets, f"duplicate target in release-candidates.json: {target}"
+        seen_targets.add(target)
+        package = ROOT / "dist" / artifact["url"]
+        assert package.exists(), f"missing asset: {package}"
+        digest = hashlib.sha256(package.read_bytes()).hexdigest()
+        assert digest == artifact["sha256"], f"sha256 mismatch for {target}: {digest}"
+        assert package.stat().st_size == artifact["size"], f"size mismatch for {target}"
+        assets.append(package)
+        metadata = package.with_name(package.name.replace(".dbxp", ".artifact.json"))
+        assert metadata.exists(), f"missing asset: {metadata}"
+        assets.append(metadata)
+    assets.append(ROOT / "release-candidates.json")
+
     for asset in assets:
-        assert asset.exists(), f"missing asset: {asset}"
         req = urllib.request.Request(
             f"{upload_url}?name={asset.name}",
             data=asset.read_bytes(),
@@ -206,8 +253,8 @@ def main() -> None:
                 raise SystemExit(f"upload failed {asset.name}: HTTP {exc.code} {exc.read()[:300]}") from exc
 
     print("\nDONE. Next: open a PR against t8y2/dbx-store:main with")
-    print(f"  dist/marketplace-0.5.1/store/candidates/{plugin_id}.json")
-    print("Full checklist: dist/marketplace-0.5.1/store/REPO-AND-PR.md")
+    print(f"  dist/marketplace-{version}/store/candidates/{plugin_id}.json")
+    print(f"Full checklist: dist/marketplace-{version}/store/REPO-AND-PR.md")
 
 
 if __name__ == "__main__":

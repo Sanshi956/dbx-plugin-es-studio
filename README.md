@@ -98,11 +98,17 @@ iframe document → host bridge → Sidecar → 真实 ES），不是另写的�
 
 ## 打包 / 签名 / 安装
 
+> **多平台**：DBX CLI 对带 Go 后端的插件强制 `--target` 等于构建主机，不能单机交叉打包。
+> 五个平台（windows-x64 / darwin-x64 / darwin-arm64 / linux-x64 / linux-arm64）由
+> `.github/workflows/release.yml` 在各自原生 runner 上构建；本机打包默认取当前平台。
+
 ```bash
 export PATH="/d/software/dev/Go/go/bin:$PATH"
 
 "D:/software/dev/Python/Python313/python.exe" scripts/check-manifest.py
 dbx-plugin package .                     # 产出未签名审核候选包，直接装会被 DBX 拒绝
+# 显式指定 target（须与当前构建主机一致，否则 CLI 报错）：
+# dbx-plugin package . --target windows-x64
 "D:/software/dev/Python/Python313/python.exe" scripts/sign-package.py \
     --package dist/local.es.studio-0.5.1-windows-x64.dbxp \
     --key-id local.es.studio.release      # 产出 .signed.dbxp 并注册本机公钥
@@ -127,16 +133,28 @@ dbx-plugin package .                     # 产出未签名审核候选包，直�
 CLI 没有 publish 子命令，商店也**不从 tag 源码打包**。完整物料在 `dist/marketplace-0.5.1/`，
 逐字依据见 `t8y2/dbx-store` 的 CONTRIBUTING.md。
 
-```bash
-# 1) 用真实仓库 slug 生成提交元数据（会复校候选包 sha256/size）
-python scripts/prepare-store-submission.py --repo OWNER/REPO --tag v0.5.1 --license MIT
+**推荐（多平台，一键）**：打 `v<version>` tag 或到 Actions 手动触发 `Release (multi-platform)`。
+工作流在 5 个原生 runner 上分别打包，合并到同一个 Release：
+`release-candidates.json` 的 `artifacts` 会列出全部 5 个 target，dbx-store 同步器逐个生成候选。
+可用 `workflow_dispatch` 的 `tag` 输入重发已有 tag。
 
-# 2) 有 GitHub PAT 时可一键建仓、推源码/tag、发 Release 并上传四项资产
+**手动（单机单平台）**：
+
+```bash
+# 1) 生成提交元数据：自动发现 dist/ 下全部 <id>-<version>-<target>.artifact.json，
+#    逐个复校 sha256/size；N 个平台 ⇒ N 个 artifacts / N 个 candidate targets
+python scripts/prepare-store-submission.py --repo OWNER/REPO --tag v0.5.1 --license MIT
+# 只要部分平台：--targets windows-x64,darwin-arm64
+
+# 2) 一键建仓、推源码/tag、发 Release 并上传「每个平台 .dbxp + .artifact.json
+#    再加 release-candidates.json」的全部资产。
+#    CI 里已打好 tag 时用 --release-only 跳过建仓/tag/push：
+#      GITHUB_TOKEN=... python scripts/github-publish.py --repo OWNER/REPO --tag vX.Y.Z --release-only
 #    classic token 需 repo 权限；token 只经环境变量传入，不落盘、不进 git config
 GITHUB_TOKEN=ghp_xxx python scripts/github-publish.py --repo-name dbx-plugin-es-studio
 
 # 3) 向 t8y2/dbx-store:main 提一个 PR，附 candidates/local.es.studio.json
-#    发布者 xihonglei 已在 publishers/xihonglei.json 注册，无需重复提交
+#    （targets 已含全部平台）；发布者 xihonglei 已在 publishers/xihonglei.json 注册
 ```
 
 注意：PR 在维护者 `/sign` 之前 CI 故意为红（`open candidate(s) awaiting DBX Store signing`）。
@@ -177,7 +195,7 @@ DBX 只提供「插件中心 → 设置 → 从 URL 安装」入口（本机无�
 | `go test -race` | 本机未启用 CGO / 无对应 C 工具链，暂未执行；普通 `go test` 与 `go vet` 全绿 |
 | dev host 连接列表 | 官方 mock host 的 `host.getConnections()` 恒返回 `Mock Connection / sqlite`；UI 以 `context.connectionId` 为准并补一项占位，真实 DBX 不受影响 |
 | 浏览器人工验收 | 已在本机真实 DBX 中代验：URL 安装 → 新建连接 → Test Connection → 连接树打开工作台显示真实指标；dev host `host.getConnections()` 仍恒返回 `Mock Connection / sqlite`，UI 以 `context.connectionId` 兜底，真实 DBX 不受影响 |
-| 包目标平台 | `dbx-plugin package` 只产当前平台（本机 windows-x64），且永远是未签名候选包 |
+| 包目标平台 | 带 Go 后端的插件由 CLI 强制「`--target` = 构建主机」，单机只能产当前平台；5 平台统一由 `.github/workflows/release.yml` 的原生 runner 矩阵构建，包永远是未签名候选包 |
 
 
 ## 目录
