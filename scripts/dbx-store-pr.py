@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Open the DBX Store candidate PR for ES Studio 0.5.1.
+"""Open the DBX Store candidate PR for the current ES Studio version.
 
 Uses the same gitignored token source as github-publish.py (GITHUB_TOKEN env or
 .dbx-dev/github-token.env). Creates a fork of t8y2/dbx-store, adds
@@ -22,7 +22,6 @@ ROOT = Path(__file__).resolve().parent.parent
 API = "https://api.github.com"
 UPSTREAM = "t8y2/dbx-store"
 PLUGIN_ID = "local.es.studio"
-BRANCH = "submit-local-es-studio-0.5.1"
 _TOKEN = ""
 
 
@@ -74,6 +73,11 @@ def main() -> None:
     global _TOKEN
     _TOKEN = get_token()
 
+    manifest = json.loads((ROOT / "manifest.json").read_text(encoding="utf-8"))
+    version = manifest["version"]
+    branch = f"submit-local-es-studio-{version}"
+    tag = f"v{version}"
+
     me = api("GET", "/user")
     owner = me["login"]
     fork_slug = f"{owner}/dbx-store"
@@ -93,41 +97,41 @@ def main() -> None:
 
     main_ref = api("GET", f"/repos/{fork_slug}/git/ref/heads/{fork['default_branch']}")
     base_sha = main_ref["object"]["sha"]
-    if not api("GET", f"/repos/{fork_slug}/git/ref/heads/{BRANCH}", allow_404=True):
+    if not api("GET", f"/repos/{fork_slug}/git/ref/heads/{branch}", allow_404=True):
         api(
             "POST",
             f"/repos/{fork_slug}/git/refs",
-            {"ref": f"refs/heads/{BRANCH}", "sha": base_sha},
+            {"ref": f"refs/heads/{branch}", "sha": base_sha},
         )
-    print("branch ready:", BRANCH)
+    print("branch ready:", branch)
 
-    candidate_path = ROOT / "dist" / "marketplace-0.5.1" / "store" / "candidates" / f"{PLUGIN_ID}.json"
+    candidate_path = ROOT / "dist" / f"marketplace-{version}" / "store" / "candidates" / f"{PLUGIN_ID}.json"
     content = base64.b64encode(candidate_path.read_bytes()).decode()
     existing = api(
-        "GET", f"/repos/{fork_slug}/contents/candidates/{PLUGIN_ID}.json?ref={BRANCH}", allow_404=True
+        "GET", f"/repos/{fork_slug}/contents/candidates/{PLUGIN_ID}.json?ref={branch}", allow_404=True
     )
     payload = {
-        "message": f"candidate: {PLUGIN_ID} 0.5.1",
+        "message": f"candidate: {PLUGIN_ID} {version}",
         "content": content,
-        "branch": BRANCH,
+        "branch": branch,
     }
     if existing.get("sha"):
         payload["sha"] = existing["sha"]
     api("PUT", f"/repos/{fork_slug}/contents/candidates/{PLUGIN_ID}.json", payload)
     print("candidate file committed")
 
-    source = f"https://github.com/Sanshi956/dbx-plugin-es-studio/tree/v0.5.1"
+    source = f"https://github.com/Sanshi956/dbx-plugin-es-studio/tree/{tag}"
     body = f"""## Plugin submission
 
 - Plugin ID: `{PLUGIN_ID}`
-- Version: `0.5.1`
+- Version: `{version}`
 - Publisher ID: `xihonglei` (already registered in `publishers/xihonglei.json`)
 
 ## Source repository and tag
 
 Public source: https://github.com/Sanshi956/dbx-plugin-es-studio
 Exact immutable tag: `{source}`
-Release (unsigned candidate + artifact + release-candidates.json): https://github.com/Sanshi956/dbx-plugin-es-studio/releases/tag/v0.5.1
+Release (unsigned candidate + artifact + release-candidates.json): https://github.com/Sanshi956/dbx-plugin-es-studio/releases/tag/{tag}
 Candidate target SHA-256 is pinned in `candidates/{PLUGIN_ID}.json`.
 
 ## Capabilities and user workflow
@@ -176,7 +180,7 @@ https://github.com/Sanshi956/dbx-plugin-es-studio
 
     existing_pr = api(
         "GET",
-        f"/repos/{UPSTREAM}/pulls?head={owner}:{BRANCH}&state=open",
+        f"/repos/{UPSTREAM}/pulls?head={owner}:{branch}&state=open",
         allow_404=True,
     )
     if isinstance(existing_pr, list) and existing_pr:
@@ -186,8 +190,8 @@ https://github.com/Sanshi956/dbx-plugin-es-studio
         "POST",
         f"/repos/{UPSTREAM}/pulls",
         {
-            "title": f"Add {PLUGIN_ID} 0.5.1 (ES Studio)",
-            "head": f"{owner}:{BRANCH}",
+            "title": f"Add {PLUGIN_ID} {version} (ES Studio)",
+            "head": f"{owner}:{branch}",
             "base": "main",
             "body": body,
         },

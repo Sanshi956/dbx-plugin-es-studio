@@ -138,20 +138,24 @@ dbx-plugin package .                     # 产出未签名审核候选包，直�
 ## 发布到 DBX 官方商店
 
 官方流程是「作者仓库发未签名候选 Release → dbx-store 审核并用商店密钥集中签名 → 上架 catalog」，
-CLI 没有 publish 子命令，商店也**不从 tag 源码打包**。完整物料在 `dist/marketplace-0.5.1/`（0.5.2 未提交商店，故沿用 0.5.1 存档），
+CLI 没有 publish 子命令，商店也**不从 tag 源码打包**。当前版本的完整物料在 `dist/marketplace-<version>/`
+（0.5.2 已生成：候选包、artifact、截图、`SUBMISSION.md`、`store/candidates/local.es.studio.json`），
 逐字依据见 `t8y2/dbx-store` 的 CONTRIBUTING.md。
 
 ```bash
-# 1) 用真实仓库 slug 生成提交元数据（会复校候选包 sha256/size）
-python scripts/prepare-store-submission.py --repo OWNER/REPO --tag v0.5.1 --license MIT
+# 1) 生成提交元数据（脚本从 manifest.json 取版本，会复校候选包 sha256/size）
+python scripts/prepare-store-submission.py --repo Sanshi956/dbx-plugin-es-studio --license MIT
 
-# 2) 有 GitHub PAT 时可一键建仓、推源码/tag、发 Release 并上传四项资产
-#    classic token 需 repo 权限；token 只经环境变量传入，不落盘、不进 git config
-GITHUB_TOKEN=ghp_xxx python scripts/github-publish.py --repo-name dbx-plugin-es-studio
+# 2) 建仓、推源码/tag、发 Release 并上传四项资产（已存在则复用）
+#    classic token 需 repo 权限；token 只经环境变量或 .dbx-dev/github-token.env 传入，不落盘、不进 git config
+python scripts/github-publish.py --repo-name dbx-plugin-es-studio
 
-# 3) 向 t8y2/dbx-store:main 提一个 PR，附 candidates/local.es.studio.json
+# 3) 向 t8y2/dbx-store:main 提 PR（fork → 分支 → candidates/local.es.studio.json）
 #    发布者 xihonglei 已在 publishers/xihonglei.json 注册，无需重复提交
+python scripts/dbx-store-pr.py
 ```
+
+市场截图由 `python scripts/marketplace-shots.py --base-url http://127.0.0.1:5202` 生成（1440×900 @2x）。
 
 注意：PR 在维护者 `/sign` 之前 CI 故意为红（`open candidate(s) awaiting DBX Store signing`）。
 本机自签的 `.signed.dbxp` 只能私有安装，不能作为市场提交物。

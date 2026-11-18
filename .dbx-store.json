@@ -15,10 +15,10 @@
     "host.connections:read",
     "host.events"
   ],
-  "source": "https://github.com/Sanshi956/dbx-plugin-es-studio/tree/v0.5.1",
+  "source": "https://github.com/Sanshi956/dbx-plugin-es-studio/tree/v0.5.2",
   "homepage": "https://github.com/Sanshi956/dbx-plugin-es-studio",
   "license": "MIT",
-  "releaseNotes": "0.5.1: standalone Shard Settings page; MCP contribution listed in DBX settings; localized allocation-explain results; fixed MCP table-header flex class collision and duplicate each-key crash on unassigned shards.",
+  "releaseNotes": "0.5.2: query profiler no longer reports all-zero rows on Elasticsearch 6.x/7.x (compound shard ids are now parsed); query results render one column per mapping field with per-row detail; large clusters (6k+ shards) load through paginated shards/index tables, a leaner overview batch and 60s request timeouts; all form controls share one chrome and focus ring.",
   "localizations": {
     "zh-CN": {
       "name": "ES Studio",

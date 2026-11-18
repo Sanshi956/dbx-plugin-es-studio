@@ -2,18 +2,22 @@
 """Generate DBX Store submission metadata from the built unsigned candidate.
 
 Usage:
-    python scripts/prepare-store-submission.py --repo OWNER/NAME --tag v0.5.1 --license MIT
+    python scripts/prepare-store-submission.py --repo OWNER/NAME --license MIT
 
 Inputs (read-only):
     manifest.json
     dist/<id>-<version>-<target>.artifact.json
     dist/<id>-<version>-<target>.dbxp        # sha256/size are re-verified
+    dist/marketplace-<version>/RELEASE-NOTES.md   # optional, folded into releaseNotes
 
 Outputs (written):
-    .dbx-store.json                                   # plugin repo root, store listing metadata
-    release-candidates.json                           # plugin repo root, attach to the GitHub Release
-    dist/marketplace-0.5.1/store/candidates/<id>.json # manual PR to t8y2/dbx-store:main
-    dist/marketplace-0.5.1/store/REPO-AND-PR.md       # concrete step-by-step with the given repo
+    .dbx-store.json                                        # plugin repo root, store listing metadata
+    release-candidates.json                                # plugin repo root, attach to the GitHub Release
+    dist/marketplace-<version>/store/candidates/<id>.json  # manual PR to t8y2/dbx-store:main
+    dist/marketplace-<version>/store/REPO-AND-PR.md        # concrete step-by-step with the given repo
+
+The marketplace directory is derived from manifest.json, so a version bump needs no
+code change here.
 
 The store synchronizer derives source/homepage from the registered repository
 and tag when they are omitted from .dbx-store.json; we fill them explicitly so
@@ -29,7 +33,6 @@ import re
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
-CANDIDATE_DIR = ROOT / "dist" / "marketplace-0.5.1" / "store"
 
 
 def load_json(path: Path):
@@ -58,6 +61,8 @@ def main() -> None:
     plugin_id = manifest["id"]
     target = "windows-x64"
     tag = args.tag or f"v{version}"
+    marketplace = ROOT / "dist" / f"marketplace-{version}"
+    candidate_dir = marketplace / "store"
 
     artifact_path = ROOT / "dist" / f"{plugin_id}-{version}-{target}.artifact.json"
     artifact = load_json(artifact_path)
@@ -72,6 +77,14 @@ def main() -> None:
     homepage = f"https://github.com/{repo}"
     download = f"https://github.com/{repo}/releases/download/{tag}/{artifact['url']}"
 
+    # Store listing release notes: a per-version RELEASE-NOTES.md keeps the wording in
+    # one place instead of hardcoding each bump here.
+    notes_file = marketplace / "RELEASE-NOTES.md"
+    if notes_file.exists():
+        release_notes = " ".join(notes_file.read_text(encoding="utf-8").split())
+    else:
+        release_notes = f"{version}: see {homepage}/releases/tag/{tag}."
+
     # 1. Store listing metadata at the plugin repository root (not packaged).
     store_meta = {
         "name": manifest["name"],
@@ -82,10 +95,7 @@ def main() -> None:
         "source": source,
         "homepage": homepage,
         "license": args.license,
-        "releaseNotes": args.release_notes
-        or "0.5.1: standalone Shard Settings page; MCP contribution listed in DBX settings; "
-        "localized allocation-explain results; fixed MCP table-header flex class collision "
-        "and duplicate each-key crash on unassigned shards.",
+        "releaseNotes": args.release_notes or release_notes,
         "localizations": {
             "zh-CN": {
                 "name": manifest["localizations"]["zh-CN"]["name"],
@@ -141,7 +151,7 @@ def main() -> None:
             }
         ],
     }
-    dump_json(CANDIDATE_DIR / "candidates" / f"{plugin_id}.json", candidate)
+    dump_json(candidate_dir / "candidates" / f"{plugin_id}.json", candidate)
 
     steps = f"""# GitHub 仓库与 dbx-store PR（{repo} @ {tag}）
 
@@ -154,7 +164,7 @@ Release 资产（4 个）：
 1. `dist/{artifact['url']}`（未签名候选包，**不要**提交到 Git 历史）
 2. `dist/{artifact['url'].replace('.dbxp', '.artifact.json')}`（url 为裸文件名）
 3. 仓库根目录 `release-candidates.json`（本脚本已生成）
-4. Release Notes（可用 `dist/marketplace-0.5.1/SUBMISSION.md` 的变更日志段）
+4. Release Notes（可用 `dist/marketplace-{version}/SUBMISSION.md` 的变更日志段）
 
 ```bash
 git remote add origin {homepage}.git
@@ -169,7 +179,7 @@ SHA-256（`{artifact['sha256']}`）与大小（`{artifact['size']}`）校验。`
 ## B. 向 dbx-store 提交 PR
 
 - PR 目标：`t8y2/dbx-store:main`
-- 首次上架：fork 后提交 `candidates/{plugin_id}.json`（本脚本已生成于 `dist/marketplace-0.5.1/store/candidates/`）
+- 首次上架：fork 后提交 `candidates/{plugin_id}.json`（本脚本已生成于 `dist/marketplace-{version}/store/candidates/`）
 - 发布者 `xihonglei` 已在 `publishers/xihonglei.json` 注册，**无需**再提交 publisher 文件
 - 不要提交 `.dbxp`、源码树、私钥或自签的 `verified: true`
 - PR 模板要填：capabilities / permissions / data access / network access / native sidecar 行为
@@ -199,7 +209,7 @@ python scripts/verify-package.py --package dist/{plugin_id}-{version}-{target}.s
 
 商店侧：`node scripts/validate.mjs`（在 dbx-store 仓库中运行）。
 """
-    out = CANDIDATE_DIR / "REPO-AND-PR.md"
+    out = candidate_dir / "REPO-AND-PR.md"
     out.parent.mkdir(parents=True, exist_ok=True)
     out.write_text(steps, encoding="utf-8", newline="\n")
     print("wrote", out.relative_to(ROOT))
