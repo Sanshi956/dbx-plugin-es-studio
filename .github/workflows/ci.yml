@@ -1,0 +1,50 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  check:
+    name: Typecheck, build and test
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: "22"
+          cache: npm
+
+      - uses: actions/setup-go@v7
+        with:
+          go-version-file: backend/go.mod
+          # The backend has no external modules (SDK is vendored + replaced),
+          # so there is no go.sum to key a module cache on.
+          cache: false
+
+      - name: Install UI dependencies
+        run: npm ci
+
+      - name: Typecheck and build single-file UI
+        run: npm test
+
+      - name: Go vet
+        working-directory: backend
+        run: go vet ./...
+
+      - name: Go test
+        working-directory: backend
+        run: go test ./...
+
+      - name: Validate manifest
+        run: python3 scripts/check-manifest.py
