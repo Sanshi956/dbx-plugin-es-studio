@@ -132,10 +132,9 @@ dbx-plugin package .                     # 产出未签名审核候选包，直�
 | `.github/workflows/ci.yml` | push `main`、PR、手动 | Node 22 + Go 1.22：`npm test`（svelte-check + 单文件 UI 构建）、`go vet ./...`、`go test ./...`、`check-manifest.py` |
 | `.github/workflows/plugin-release.yml` | GitHub Release `published` | 复用官方 `t8y2/dbx/.github/workflows/plugin-release-reusable.yml@plugin-cli-v0.1.10`，按平台矩阵执行 `npm ci && npm run build && dbx-plugin package .`，校验并合并 `.artifact.json`，上传未签名 `.dbxp` 与 `release-candidates.json` 到 Release |
 
-> **待推送**：GitHub 不允许仅有 `repo` 权限的 PAT 创建/更新 `.github/workflows/*`。当前令牌缺
-> `workflow` scope，工作流只能停在本地 `ci/workflows` 分支。换带 `workflow` scope 的令牌后执行：
-> `git checkout ci/workflows && git push origin HEAD:main`（或在网页端直接添加两个 yml）。
-> 在此之前 Release 资产由 `scripts/release-upload.py` 手动上传，步骤见下节。
+> 维护提示：GitHub 要求令牌带 `workflow` scope 才能创建/更新 `.github/workflows/*`，
+> 只有 `repo` scope 的 PAT 会被拒绝。`plugin-release.yml` 只在 Release `published` 时触发，
+> 因此 0.5.2 的资产是由 `scripts/release-upload.py` 手动补传的（幂等，可重复执行）。
 
 发布工作流只产出**未签名候选包**；商店上架仍由 DBX Store 用官方密钥签名（见下节）。
 本机私有安装继续走上一节的 `sign-package.py` 自签流程，两者互不影响。
