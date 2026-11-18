@@ -1,6 +1,7 @@
 <script lang="ts">
   import StateBlock from "../components/StateBlock.svelte";
   import JsonView from "../components/JsonView.svelte";
+  import Combobox from "../components/Combobox.svelte";
   import { handleEditorKey } from "../lib/editorKeys";
   import { searchIndex, single, fetchIndices, type DocHit, type IndexRow } from "../lib/services";
   import type { DbxBridge } from "../lib/bridge";
@@ -19,6 +20,7 @@
   let loading = $state(false);
   let error = $state("");
   let hits = $state<DocHit[]>([]);
+  let selected = $state<DocHit | null>(null);
   let raw = $state<unknown>(null);
   let showRaw = $state(false);
   let formatError = $state("");
@@ -72,6 +74,7 @@
   async function run(): Promise<void> {
     error = "";
     formatError = "";
+    selected = null;
     let parsed: unknown;
     try {
       parsed = JSON.parse(body);
@@ -145,10 +148,13 @@
 
   <section class="bar">
     <label>{t("index.col.index")}
-      <select bind:value={index} disabled={loadingIndices}>
-        <option value="">{t("dsl.allIndices")}</option>
-        {#each indices as ix (ix.index)}<option value={ix.index}>{ix.index}</option>{/each}
-      </select>
+      <Combobox
+        listId="dsl-indices"
+        placeholder={t("dsl.allIndices")}
+        options={[{ value: "", label: t("dsl.allIndices") }, ...indices.map((ix) => ({ value: ix.index, label: ix.index }))]}
+        disabled={loadingIndices}
+        bind:value={index}
+      />
     </label>
     <button type="button" onclick={format}>{t("dsl.format")}</button>
     <button type="button" class="primary" onclick={run} disabled={loading || !connectionId}>
@@ -175,26 +181,54 @@
         <StateBlock kind="loading" message={t("qb.runningQuery")} detail="POST /_search" />
       {:else if hits.length > 0}
         <p class="meta">total {raw && typeof raw === "object" && "hits" in (raw as object) ? ((raw as any).hits.total?.value ?? (raw as any).hits.total ?? 0) : 0} hits</p>
-        <table class="docs">
-          <thead><tr><th>_id</th><th>{t("dsl.col.score")}</th><th>_source</th></tr></thead>
-          <tbody>
-            {#each hits as hit (hit.id)}<tr><td class="mono">{hit.id}</td><td class="mono">{hit.score}</td><td class="mono src" title={JSON.stringify(hit.source)}>{preview(hit.source)}</td></tr>{/each}
-          </tbody>
-        </table>
+        <div class="table-scroll">
+          <table class="docs">
+            <thead><tr><th>_index</th><th>_id</th><th>{t("dsl.col.score")}</th><th>_source</th><th></th></tr></thead>
+            <tbody>
+              {#each hits as hit (`${hit.index}:${hit.id}`)}
+                <tr
+                  class:active={selected?.index === hit.index && selected?.id === hit.id}
+                  onclick={() => (selected = hit)}
+                >
+                  <td class="mono">{hit.index || "-"}</td>
+                  <td class="mono">{hit.id}</td>
+                  <td class="mono">{hit.score}</td>
+                  <td class="mono src" title={JSON.stringify(hit.source)}><span class="preview">{preview(hit.source)}</span></td>
+                  <td class="actions"><button type="button" class="mini" onclick={() => (selected = hit)}>{t("common.view")}</button></td>
+                </tr>
+              {/each}
+            </tbody>
+          </table>
+        </div>
         <button type="button" class="link" onclick={() => (showRaw = !showRaw)}>{showRaw ? t("qb.hideRaw") : t("qb.showRaw")}</button>
         {#if showRaw}<JsonView value={raw} />{/if}
       {:else if raw}
         <StateBlock kind="empty" message={t("qb.noMatch")} />
       {/if}
     </div>
-    <aside class="history">
-      <h2>{t("common.history")}</h2>
-      {#if history.length === 0}<p class="muted">{t("dsl.noHistory")}</p>{/if}
-      {#each history as item (item)}
-        <button type="button" class="hist" onclick={() => useHistory(item)}>{preview(JSON.parse(item))}</button>
-      {/each}
+    <aside class="detail">
+      {#if selected}
+        <header class="detail-head">
+          <strong class="mono">{selected.index || "-"} / {selected.id}</strong>
+          <button type="button" class="mini" onclick={() => (selected = null)}>{t("common.close")}</button>
+        </header>
+        <JsonView value={selected.source} />
+      {:else}
+        <StateBlock kind="empty" message={t("browser.selectDoc")} />
+      {/if}
     </aside>
   </div>
+
+  {#if history.length > 0}
+    <aside class="history">
+      <h2>{t("common.history")}</h2>
+      <div class="hist-list">
+        {#each history as item (item)}
+          <button type="button" class="hist" title={item} onclick={() => useHistory(item)}>{preview(JSON.parse(item))}</button>
+        {/each}
+      </div>
+    </aside>
+  {/if}
 </div>
 
 <style>
@@ -208,7 +242,8 @@
   button:disabled { opacity: 0.55; cursor: default; }
   .bar { display: flex; gap: 12px; align-items: end; margin-bottom: 10px; flex-wrap: wrap; }
   .bar label { display: flex; flex-direction: column; gap: 4px; font-size: var(--es-fs-xs); color: var(--es-muted); }
-  .bar select { min-width: 190px; }
+  .bar :global(.combo) { min-width: 190px; }
+  .bar :global(.combo > input) { width: 100%; }
   .keys { font-size: var(--es-fs-2xs); color: var(--es-muted); font-family: var(--es-mono); padding-bottom: 9px; }
   .primary { background: var(--es-accent); color: #fff; border-color: var(--es-accent); }
   .err { padding: 8px 12px; margin-bottom: 10px; border: 1px solid var(--es-red); border-radius: 6px; background: var(--es-surface-2); color: var(--es-red); font-size: var(--es-fs-sm); font-family: var(--es-mono); }
@@ -218,15 +253,41 @@
     background: var(--es-surface-2); color: var(--es-text);
     font-family: var(--es-mono); font-size: var(--es-fs-sm); line-height: 1.6; box-sizing: border-box;
   }
-  .cols { display: grid; grid-template-columns: 1fr 240px; gap: 16px; margin-top: 14px; align-items: start; }
+  .cols { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 380px); gap: 16px; margin-top: 14px; align-items: start; }
+  @media (max-width: 980px) {
+    .cols { grid-template-columns: minmax(0, 1fr); }
+  }
+  .results, .detail { min-width: 0; }
   .meta { font-size: var(--es-fs-xs); color: var(--es-muted); font-family: var(--es-mono); }
-  table.docs { width: 100%; border-collapse: collapse; font-size: var(--es-fs-sm); border: 1px solid var(--es-border); border-radius: var(--es-radius); overflow: hidden; }
-  .docs th, .docs td { padding: 6px 8px; border-bottom: 1px solid var(--es-border); }
+  /* Scroll on the wrapper so the pinned actions column keeps working; overflow
+     on the <table> would make the table itself the sticky container. */
+  .table-scroll { overflow-x: auto; border: 1px solid var(--es-border); border-radius: var(--es-radius); }
+  table.docs { width: 100%; border-collapse: collapse; font-size: var(--es-fs-sm); }
+  .docs th, .docs td { padding: 6px 8px; border-bottom: 1px solid var(--es-border); white-space: nowrap; }
   .docs th { background: var(--es-surface-2); color: var(--es-muted); text-align: left; font-weight: 600; }
   .docs td.mono { font-family: var(--es-mono); }
-  .docs td.src { max-width: 420px; overflow: hidden; text-overflow: ellipsis; }
+  .docs td.src { max-width: 420px; }
+  .docs td.src .preview { display: block; max-width: 420px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .docs tbody tr { cursor: pointer; }
+  .docs tbody tr:hover { background: var(--es-surface-2); }
+  .docs tr.active { background: var(--es-accent-soft); }
+  /* 查看 stays readable and pinned: the narrow right-hand detail pane must not
+     squeeze the actions column or scroll the button out of view. */
+  .docs th:last-child, .docs td.actions {
+    position: sticky;
+    right: 0;
+    border-left: 1px solid var(--es-border);
+    background: var(--es-surface);
+  }
+  .docs th:last-child { background: var(--es-surface-2); }
+  .docs tbody tr:hover td.actions { background: var(--es-surface-2); }
+  .docs tr.active td.actions { background: var(--es-accent-soft); }
+  .actions { text-align: right; }
+  .mini { padding: 3px 8px; font-size: var(--es-fs-xs); white-space: nowrap; }
+  .detail-head { display: flex; justify-content: space-between; align-items: center; gap: 8px; margin-bottom: 8px; }
   .link { background: none; border: none; color: var(--es-accent); cursor: pointer; padding: 8px 0; }
+  .history { margin-top: 18px; }
   .history h2 { font-size: var(--es-fs-sm); text-transform: uppercase; letter-spacing: 0.08em; color: var(--es-muted); margin: 0 0 8px; }
-  .history .muted { color: var(--es-muted); font-size: var(--es-fs-sm); }
-  .hist { display: block; width: 100%; text-align: left; font-family: var(--es-mono); font-size: var(--es-fs-xs); margin-bottom: 6px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .hist-list { display: flex; flex-wrap: wrap; gap: 6px; }
+  .hist { max-width: 320px; text-align: left; font-family: var(--es-mono); font-size: var(--es-fs-xs); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 </style>

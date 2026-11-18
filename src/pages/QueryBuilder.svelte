@@ -364,9 +364,12 @@
   {:else}
     <section class="bar">
       <label>{t("index.col.index")}
-        <select value={active.index} onchange={(e) => changeIndex(active, (e.currentTarget as HTMLSelectElement).value)}>
-          {#each indices as ix (ix.index)}<option value={ix.index}>{ix.index}</option>{/each}
-        </select>
+        <Combobox
+          listId="qb-indices-{active.id}"
+          options={indices.map((ix) => ({ value: ix.index }))}
+          value={active.index}
+          onValueChange={(v) => changeIndex(active, v)}
+        />
       </label>
       <label>{t("qb.form.size")}<input type="number" min="1" max="1000" bind:value={active.size} /></label>
       <label>{t("qb.form.sortField")}
@@ -378,7 +381,13 @@
         />
       </label>
       <label>{t("qb.form.order")}
-        <select bind:value={active.sortOrder}><option value="asc">asc</option><option value="desc">desc</option></select>
+        <Combobox
+          listId="qb-order-{active.id}"
+          options={[{ value: "asc", label: "asc" }, { value: "desc", label: "desc" }]}
+          value={active.sortOrder}
+          onValueChange={(v) => (active.sortOrder = v as "asc" | "desc")}
+          searchable={false}
+        />
       </label>
       {#if hasShould(active)}
         <label>minimum_should_match
@@ -397,20 +406,40 @@
 
       {#each active.clauses as c (c.id)}
         <div class="clause">
-          <select class="occur {c.occur}" bind:value={c.occur} title={t(OCCUR_OPTIONS.find((o) => o.value === c.occur)?.hint ?? "")}>
-            {#each OCCUR_OPTIONS as o (o.value)}<option value={o.value}>{o.label}</option>{/each}
-          </select>
+          <Combobox
+            listId="qb-occur-{c.id}"
+            class="occur {c.occur}"
+            options={OCCUR_OPTIONS.map((o) => ({ value: o.value, label: o.label }))}
+            value={c.occur}
+            onValueChange={(v) => (c.occur = v as ClauseOccur)}
+            title={t(OCCUR_OPTIONS.find((o) => o.value === c.occur)?.hint ?? "")}
+            searchable={false}
+          />
 
-          <select class="op" value={c.type} onchange={(e) => changeType(c, (e.currentTarget as HTMLSelectElement).value as LeafClauseType)}>
-            {#each operatorsOf(active, c) as op (op.value)}<option value={op.value}>{op.label}</option>{/each}
-          </select>
+          <Combobox
+            listId="qb-op-{c.id}"
+            class="op"
+            options={operatorsOf(active, c).map((op) => ({ value: op.value, label: op.label }))}
+            value={c.type}
+            onValueChange={(v) => changeType(c, v as LeafClauseType)}
+            searchable={false}
+          />
 
-          <select class="field" value={c.field} onchange={(e) => changeField(active, c, (e.currentTarget as HTMLSelectElement).value)}>
-            <option value="">{t("qb.form.selectField")}</option>
-            <option value="_id">_id · keyword</option>
-            <option value="_index">_index · keyword</option>
-            {#each fieldsOf(active) as f (f.name)}<option value={f.name}>{f.name} · {f.type}</option>{/each}
-          </select>
+          <span class="field-wrap">
+            <Combobox
+              listId="qb-field-{c.id}"
+              class="field"
+              placeholder={t("qb.form.selectField")}
+              options={[
+                { value: "", label: t("qb.form.selectField") },
+                { value: "_id", label: "_id · keyword" },
+                { value: "_index", label: "_index · keyword" },
+                ...fieldsOf(active).map((f) => ({ value: f.name, label: `${f.name} · ${f.type}` })),
+              ]}
+              value={c.field}
+              onValueChange={(v) => changeField(active, c, v)}
+            />
+          </span>
 
           {#if clauseHasNoValue(c.type)}
             <span class="novalue">{t("qb.form.noValue")}</span>
@@ -418,10 +447,13 @@
             <input class="value" placeholder="gte (≥)" bind:value={c.gte} />
             <input class="value" placeholder="lte (≤)" bind:value={c.lte} />
           {:else if isBooleanField(active, c.field)}
-            <select class="value" bind:value={c.value}>
-              <option value="true">true</option>
-              <option value="false">false</option>
-            </select>
+            <Combobox
+              listId="qb-value-{c.id}"
+              class="value"
+              options={[{ value: "true", label: "true" }, { value: "false", label: "false" }]}
+              searchable={false}
+              bind:value={c.value}
+            />
           {:else}
             <input class="value" placeholder="value" bind:value={c.value} />
           {/if}
@@ -530,14 +562,17 @@
   .clauses h2 .count { margin-left: 8px; font-family: var(--es-mono); font-size: var(--es-fs-2xs); letter-spacing: 0; text-transform: none; }
   .none { margin: 0 0 10px; font-size: var(--es-fs-sm); color: var(--es-muted); }
   .clause { display: flex; gap: 8px; margin-bottom: 8px; align-items: center; flex-wrap: wrap; }
-  .clause .occur { font-size: var(--es-fs-xs); width: 92px; }
-  .clause .occur.must { color: var(--es-green); border-color: var(--es-green); }
-  .clause .occur.filter { color: var(--es-accent); border-color: var(--es-accent); }
-  .clause .occur.should { color: var(--es-yellow); border-color: var(--es-yellow); }
-  .clause .occur.must_not { color: var(--es-red); border-color: var(--es-red); }
-  .clause .op { font-size: var(--es-fs-xs); width: 168px; }
-  .clause .field { flex: 1 1 200px; min-width: 160px; font-size: var(--es-fs-xs); }
+  .clause :global(.occur) { font-size: var(--es-fs-xs); width: 92px; }
+  .clause :global(.occur.must) { color: var(--es-green); border-color: var(--es-green); }
+  .clause :global(.occur.filter) { color: var(--es-accent); border-color: var(--es-accent); }
+  .clause :global(.occur.should) { color: var(--es-yellow); border-color: var(--es-yellow); }
+  .clause :global(.occur.must_not) { color: var(--es-red); border-color: var(--es-red); }
+  .clause :global(.op) { font-size: var(--es-fs-xs); width: 168px; }
+  .field-wrap { flex: 1 1 200px; min-width: 160px; display: inline-block; }
+  .field-wrap :global(.combo) { width: 100%; }
+  .field-wrap :global(.field) { width: 100%; font-size: var(--es-fs-xs); }
   .clause .value { width: 150px; }
+  .clause :global(.value) { width: 150px; }
   .novalue { font-size: var(--es-fs-xs); color: var(--es-muted); }
   .ftype { font-family: var(--es-mono); font-size: var(--es-fs-2xs); color: var(--es-muted); border: 1px solid var(--es-border); border-radius: 4px; padding: 2px 6px; white-space: nowrap; }
   .actions { display: flex; gap: 8px; margin-top: 4px; }

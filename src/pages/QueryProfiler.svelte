@@ -1,8 +1,9 @@
 <script lang="ts">
   import StateBlock from "../components/StateBlock.svelte";
   import JsonView from "../components/JsonView.svelte";
+  import Combobox from "../components/Combobox.svelte";
   import { handleEditorKey } from "../lib/editorKeys";
-  import { fetchIndices, runProfile, type IndexRow, type ProfileShard, type ProfileNode } from "../lib/services";
+  import { fetchIndices, runProfile, single, isError, record, str, type IndexRow, type ProfileShard, type ProfileNode } from "../lib/services";
   import type { DbxBridge } from "../lib/bridge";
   import { t } from "../lib/i18n.svelte.js";
 
@@ -28,6 +29,10 @@
   let shards = $state<ProfileShard[]>([]);
   let raw = $state<unknown>(null);
   let showRaw = $state(false);
+  // Profile reports nodes by id; the id is unreadable, so map it to the name
+  // once per connection and keep the id in the tooltip / clipboard.
+  let nodeNames = $state<Record<string, string>>({});
+  let copiedNode = $state("");
 
   async function loadIndices(id: string): Promise<void> {
     if (!id) return;
@@ -44,6 +49,58 @@
   $effect(() => {
     void loadIndices(connectionId);
   });
+
+  $effect(() => {
+    const id = connectionId;
+    if (!id) return;
+    // full_id is required: _cat/nodes truncates the id to 4 chars otherwise,
+    // and the profile response always carries the full id.
+    void single(bridge, id, "GET", "/_cat/nodes?format=json&full_id=true&h=id,name")
+      .then((res) => {
+        if (isError(res)) return;
+        const rows = Array.isArray(res.body) ? (res.body as unknown[]) : [];
+        const map: Record<string, string> = {};
+        for (const row of rows) {
+          const entry = record(row);
+          const nodeId = str(entry.id);
+          if (nodeId) map[nodeId] = str(entry.name);
+        }
+        nodeNames = map;
+      })
+      .catch(() => {
+        /* names are cosmetic; the id still renders */
+      });
+  });
+
+  async function copyNode(id: string): Promise<void> {
+    let done = false;
+    try {
+      await navigator.clipboard.writeText(id);
+      done = true;
+    } catch {
+      // DBX runs the UI in an opaque-origin iframe where the async clipboard
+      // API is denied; execCommand still works on a transient selection.
+      const ta = document.createElement("textarea");
+      ta.value = id;
+      ta.setAttribute("readonly", "");
+      ta.style.position = "fixed";
+      ta.style.opacity = "0";
+      document.body.appendChild(ta);
+      ta.focus();
+      ta.select();
+      try {
+        done = document.execCommand("copy");
+      } catch {
+        done = false;
+      }
+      ta.remove();
+    }
+    if (!done) return; // the id is still in the tooltip
+    copiedNode = id;
+    window.setTimeout(() => {
+      if (copiedNode === id) copiedNode = "";
+    }, 1500);
+  }
 
   async function run(): Promise<void> {
     formError = "";
@@ -105,10 +162,13 @@
 
   <section class="bar">
     <label>{t("index.col.index")}
-      <select bind:value={selectedIndex} disabled={loadingIndices}>
-        {#if loadingIndices}<option>{t("common.loading")}</option>{/if}
-        {#each indices as ix (ix.index)}<option value={ix.index}>{ix.index}</option>{/each}
-      </select>
+      <Combobox
+        listId="prof-indices"
+        placeholder={loadingIndices ? t("common.loading") : t("index.col.index")}
+        options={indices.map((ix) => ({ value: ix.index }))}
+        disabled={loadingIndices}
+        bind:value={selectedIndex}
+      />
     </label>
     <button type="button" class="primary" onclick={run} disabled={!selectedIndex || running}>
       {running ? t("prof.running") : t("prof.run")}
@@ -137,7 +197,10 @@
           <tr>
             <td class="mono">{shard.shard}</td>
             <td class="mono">{shard.index || "-"}</td>
-            <td class="mono small node" title={shard.node}>{shard.node}</td>
+            <td class="mono small node" title={shard.node}>
+              <button type="button" class="node-name" title={t("prof.copyNode")} onclick={() => void copyNode(shard.node)}>{nodeNames[shard.node] ?? shard.node}</button>
+              {#if copiedNode === shard.node}<span class="copied">{t("common.copied")}</span>{/if}
+            </td>
             <td class="mono">{ms(shard.queryNanos)}</td>
             <td class="mono">{ms(shard.rewriteNanos)}</td>
             <td class="mono">{ms(shard.collectorNanos)}</td>
@@ -185,7 +248,9 @@
   .primary { background: var(--es-accent); color: #fff; border-color: var(--es-accent); }
   .primary:hover:not(:disabled) { filter: brightness(0.92); }
   button:disabled { opacity: 0.55; cursor: default; }
-  .bar { display: flex; gap: 12px; align-items: end; margin-bottom: 10px; flex-wrap: wrap; }
+  /* The run controls stay reachable: the page scrolls under them, so the
+     bar is pinned to the top of the scroll container with an opaque backing. */
+  .bar { display: flex; gap: 12px; align-items: end; flex-wrap: wrap; position: sticky; top: 0; z-index: 5; background: var(--es-bg); padding: 8px 0; margin: -8px 0 2px; }
   .bar label { display: flex; flex-direction: column; gap: 4px; font-size: var(--es-fs-xs); color: var(--es-muted); }
   textarea { width: 100%; box-sizing: border-box; font-family: var(--es-mono); font-size: var(--es-fs-sm); padding: 10px; border: 1px solid var(--es-border); border-radius: 6px; background: var(--es-surface-2); color: var(--es-text); margin-bottom: 10px; }
   .form-error { margin: 0 0 10px; font-size: var(--es-fs-xs); color: var(--es-red); }
@@ -195,7 +260,11 @@
   th { background: var(--es-surface-2); color: var(--es-muted); font-size: var(--es-fs-xs); font-weight: 600; }
   .mono { font-family: var(--es-mono); }
   .small { font-size: var(--es-fs-xs); }
-  .node { min-width: 180px; max-width: 320px; word-break: break-all; white-space: normal; }
+  .node { white-space: nowrap; }
+  .node-name { padding: 0; border: 0; background: none; color: var(--es-text); font: inherit; cursor: pointer; }
+  .node-name:hover { color: var(--es-accent); }
+  .copied { margin-left: 6px; color: var(--es-muted); font-size: var(--es-fs-2xs); }
+  .bar :global(.combo) { min-width: 190px; }
   .sub { font-size: var(--es-fs-sm); text-transform: uppercase; letter-spacing: 0.08em; color: var(--es-muted); margin: 4px 0 8px; }
   .indent { display: inline-block; }
   .type { font-family: var(--es-mono); font-size: var(--es-fs-xs); }

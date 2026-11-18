@@ -889,8 +889,10 @@ export interface AnalyzeToken {
 }
 
 export interface AnalyzeResult {
+  ok: boolean;
   tokens: AnalyzeToken[];
-  detail: unknown;
+  /** Human-readable failure text (Elasticsearch reason when available). */
+  detail: string;
 }
 
 export async function analyzeText(
@@ -917,7 +919,9 @@ export async function analyzeText(
   // field-scoped analysis used to fail no matter what the page selected.
   const path = index.trim() ? `/${encodeURIComponent(index.trim())}/_analyze` : "/_analyze";
   const res = await single(bridge, connectionId, "POST", path, body);
-  if (isError(res)) return { tokens: [], detail: res.error };
+  // ES puts the actionable message in body.error.reason; `res.error` alone
+  // loses it and leaves the page showing a bare "HTTP 400".
+  if (isError(res)) return { ok: false, tokens: [], detail: failureText(res) };
   const r = record(res.body);
   const tokens = Array.isArray(r.tokens) ? (r.tokens as unknown[]).map((t) => {
     const tk = record(t);
@@ -929,7 +933,7 @@ export async function analyzeText(
       position: num(tk.position),
     };
   }) : [];
-  return { tokens, detail: res.body };
+  return { ok: true, tokens, detail: "" };
 }
 
 // ---------------------------------------------------------------------------

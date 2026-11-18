@@ -2,6 +2,7 @@
   import StateBlock from "../components/StateBlock.svelte";
   import JsonView from "../components/JsonView.svelte";
   import ConfirmDanger from "../components/ConfirmDanger.svelte";
+  import Combobox from "../components/Combobox.svelte";
   import {
     fetchIndices, fetchFields, searchIndex, simpleSearchBody, getDocument, deleteDocument, isError,
     type IndexRow, type DocHit, type SearchResult, type FieldInfo,
@@ -164,10 +165,13 @@
 
   <section class="bar">
     <label>{t("index.col.index")}
-      <select bind:value={selectedIndex} disabled={loadingIndices}>
-        {#if loadingIndices}<option>{t("common.loading")}</option>{/if}
-        {#each indices as ix (ix.index)}<option value={ix.index}>{ix.index}</option>{/each}
-      </select>
+      <Combobox
+        listId="browser-indices"
+        placeholder={loadingIndices ? t("common.loading") : t("index.col.index")}
+        options={indices.map((ix) => ({ value: ix.index }))}
+        disabled={loadingIndices}
+        bind:value={selectedIndex}
+      />
     </label>
     <label class="grow">{t("browser.keywordLabel")}
       <input
@@ -178,10 +182,16 @@
       />
     </label>
     <label>{t("browser.searchIn")}
-      <select bind:value={field} disabled={!selectedIndex || loadingFields || fields.length === 0}>
-        <option value="">{loadingFields ? t("browser.fieldsLoading") : t("browser.fieldsAll", { count: fields.length })}</option>
-        {#each fields as f (f.name)}<option value={f.name}>{f.name} · {f.type}</option>{/each}
-      </select>
+      <Combobox
+        listId="browser-fields"
+        placeholder={loadingFields ? t("browser.fieldsLoading") : t("browser.fieldsAll", { count: fields.length })}
+        options={[
+          { value: "", label: loadingFields ? t("browser.fieldsLoading") : t("browser.fieldsAll", { count: fields.length }) },
+          ...fields.map((f) => ({ value: f.name, label: `${f.name} · ${f.type}` })),
+        ]}
+        disabled={!selectedIndex || loadingFields}
+        bind:value={field}
+      />
     </label>
     <label>{t("browser.size")}
       <input type="number" min="1" max="1000" bind:value={size} />
@@ -213,22 +223,24 @@
           {keyword.trim()
             ? `· ${field ? field : t("browser.meta.allFields")} ~ "${keyword.trim()}"`
             : "· match_all"}</p>
-        <table class="docs">
-          <thead><tr><th>_id</th><th>{t("browser.colScore")}</th><th>_source</th><th></th></tr></thead>
-          <tbody>
-            {#each hits as hit (hit.id)}
-              <tr class:active={selected?.id === hit.id}>
-                <td class="mono">{hit.id}</td>
-                <td class="mono">{hit.score}</td>
-                <td class="src mono">{preview(hit.source)}</td>
-                <td class="actions">
-                  <button type="button" class="mini" onclick={() => openDoc(hit.id)}>{t("browser.view")}</button>
-                  <button type="button" class="mini danger" onclick={() => askDelete(hit.id)}>{t("browser.delete")}</button>
-                </td>
-              </tr>
-            {/each}
-          </tbody>
-        </table>
+        <div class="table-scroll">
+          <table class="docs">
+            <thead><tr><th>_id</th><th>{t("browser.colScore")}</th><th>_source</th><th></th></tr></thead>
+            <tbody>
+              {#each hits as hit (hit.id)}
+                <tr class:active={selected?.id === hit.id}>
+                  <td class="mono">{hit.id}</td>
+                  <td class="mono">{hit.score}</td>
+                  <td class="src mono clickable" title={t("browser.openDetail")} onclick={() => openDoc(hit.id)}><span class="preview">{preview(hit.source)}</span></td>
+                  <td class="actions">
+                    <button type="button" class="mini" onclick={() => openDoc(hit.id)}>{t("browser.view")}</button>
+                    <button type="button" class="mini danger" onclick={() => askDelete(hit.id)}>{t("browser.delete")}</button>
+                  </td>
+                </tr>
+              {/each}
+            </tbody>
+          </table>
+        </div>
       </div>
       <div class="detail">
         {#if loadingDoc}
@@ -279,17 +291,44 @@
   .plan code { font-family: var(--es-mono); font-size: var(--es-fs-xs); color: var(--es-text); background: var(--es-surface-2); border: 1px solid var(--es-border); border-radius: 4px; padding: 1px 6px; }
   .plan-hint { margin-left: 6px; }
 
-  .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; align-items: start; }
+  /* minmax(0,1fr): a nowrap table must not overflow its column and paint
+     over the detail panel when the DBX pane is narrow. */
+  .grid { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 16px; align-items: start; }
+  .grid > div { min-width: 0; overflow-x: auto; }
+  @media (max-width: 980px) {
+    .grid { grid-template-columns: minmax(0, 1fr); }
+  }
   .meta { font-size: var(--es-fs-xs); color: var(--es-muted); font-family: var(--es-mono); margin: 0 0 8px; }
-  table.docs { width: 100%; border-collapse: collapse; font-size: var(--es-fs-sm); border: 1px solid var(--es-border); border-radius: var(--es-radius); overflow: hidden; }
+  /* The scroller lives on the wrapper, not the <table>: overflow on the table
+     itself would become the sticky containing block and break the pinned
+     actions column. */
+  .table-scroll { overflow-x: auto; border: 1px solid var(--es-border); border-radius: var(--es-radius); }
+  table.docs { width: 100%; border-collapse: collapse; font-size: var(--es-fs-sm); }
   .docs th, .docs td { padding: 6px 8px; border-bottom: 1px solid var(--es-border); white-space: nowrap; }
   .docs th { background: var(--es-surface-2); color: var(--es-muted); text-align: left; font-weight: 600; }
   .docs td.mono { font-family: var(--es-mono); }
-  .docs td.src { max-width: 320px; overflow: hidden; text-overflow: ellipsis; }
+  /* max-width on a td is ignored in auto table layout, so the clip lives on an
+     inner block; otherwise the preview text pushes the actions column out. */
+  .docs td.src { max-width: 320px; }
+  .docs td.src .preview { display: block; max-width: 320px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .docs td.clickable { cursor: pointer; }
+  .bar :global(.combo) { min-width: 160px; }
   .docs tbody tr:hover { background: var(--es-surface-2); }
   .docs tr.active { background: var(--es-accent-soft); }
-  .actions { text-align: right; }
-  .mini { padding: 3px 8px; font-size: var(--es-fs-xs); }
+  /* Pin 查看/删除 to the right edge so a wide _source column can no longer
+     scroll the buttons out of reach. The opaque background matters: rows
+     slide underneath this cell while scrolling. */
+  .docs th:last-child, .docs td.actions {
+    position: sticky;
+    right: 0;
+    border-left: 1px solid var(--es-border);
+    background: var(--es-surface);
+  }
+  .docs th:last-child { background: var(--es-surface-2); }
+  .docs tbody tr:hover td.actions { background: var(--es-surface-2); }
+  .docs tr.active td.actions { background: var(--es-accent-soft); }
+  .actions { text-align: right; white-space: nowrap; }
+  .mini { padding: 3px 8px; font-size: var(--es-fs-xs); white-space: nowrap; }
   .mini.danger { color: var(--es-red); border-color: var(--es-red); }
   .mini.danger:hover { background: var(--es-red); color: #fff; }
   .detail-head { display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; }

@@ -1,6 +1,7 @@
 <script lang="ts">
   import StateBlock from "../components/StateBlock.svelte";
   import JsonView from "../components/JsonView.svelte";
+  import Combobox from "../components/Combobox.svelte";
   import { restCall, classifyOperation, isError, type EsResult } from "../lib/services";
   import { handleEditorKey } from "../lib/editorKeys";
   import type { DbxBridge } from "../lib/bridge";
@@ -81,9 +82,12 @@
   </header>
 
   <section class="bar">
-    <select bind:value={method}>
-      {#each METHODS as m (m)}<option value={m}>{m}</option>{/each}
-    </select>
+    <Combobox
+      listId="rest-methods"
+      options={METHODS.map((m) => ({ value: m }))}
+      searchable={false}
+      bind:value={method}
+    />
     <input class="path" placeholder="/_cat/indices?format=json" bind:value={path} />
     <button type="button" class="primary" onclick={run} disabled={loading || !connectionId}>{loading ? t("rest.sending") : t("rest.send")}</button>
     <span class="keys">{t("rest.keys")}</span>

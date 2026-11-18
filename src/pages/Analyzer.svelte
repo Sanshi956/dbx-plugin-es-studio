@@ -13,6 +13,11 @@
 
   let index = $state("");
   let text = $state("The quick brown fox jumps over the lazy dog");
+  // Exactly one analysis mode is active; only its group is sent, because ES
+  // rejects requests that mix `field` with `analyzer`, or `analyzer` with
+  // `tokenizer`/`filter` ("cannot specify both").
+  type Mode = "field" | "analyzer" | "custom";
+  let mode = $state<Mode>("field");
   let analyzer = $state("");
   let field = $state("");
   let tokenizer = $state("");
@@ -26,10 +31,9 @@
   let fields = $state<FieldInfo[]>([]);
   let loadingFields = $state(false);
 
-  // ES 内置分析器/分词器/过滤器候选，省得靠记忆拼名字（仍可自由输入）。
+  // ES 内置分析器/分词器候选，省得靠记忆拼名字。
   const ANALYZERS = ["standard", "simple", "whitespace", "stop", "keyword", "pattern", "english", "fingerprint"];
   const TOKENIZERS = ["standard", "letter", "lowercase", "whitespace", "uax_url_email", "pattern", "keyword", "path_hierarchy"];
-  const FILTERS = ["lowercase", "uppercase", "asciifolding", "stop", "stemmer", "snowball", "trim", "unique", "word_delimiter", "ngram", "edge_ngram"];
 
   $effect(() => {
     const id = connectionId;
@@ -70,19 +74,33 @@
       error = t("analyzer.err.emptyText");
       return;
     }
+    if (mode === "field" && !index.trim()) {
+      error = t("analyzer.err.needIndex");
+      return;
+    }
+    if (mode === "analyzer" && !analyzer.trim()) {
+      error = t("analyzer.err.needAnalyzer");
+      return;
+    }
+    if (mode === "custom" && !tokenizer.trim()) {
+      error = t("analyzer.err.needTokenizer");
+      return;
+    }
     loading = true;
     error = "";
-    const path = index.trim() ? `/${encodeURIComponent(index.trim())}/_analyze` : "/_analyze";
     try {
-      const res = await analyzeText(bridge, connectionId, index, {
-        text: text.trim(),
-        ...(analyzer.trim() ? { analyzer: analyzer.trim() } : {}),
-        ...(field.trim() ? { field: field.trim() } : {}),
-        ...(tokenizer.trim() ? { tokenizer: tokenizer.trim() } : {}),
-        ...(filters.trim() ? { filter: filters.split(",").map((f) => f.trim()).filter(Boolean) } : {}),
-      });
-      if (res.detail && typeof res.detail === "object" && "error" in (res.detail as object)) {
-        error = String((res.detail as any).error?.message ?? "analyze failed");
+      const params = mode === "field"
+        ? { text: text.trim(), field: field.trim() }
+        : mode === "analyzer"
+          ? { text: text.trim(), analyzer: analyzer.trim() }
+          : {
+              text: text.trim(),
+              tokenizer: tokenizer.trim(),
+              filter: filters.split(",").map((f) => f.trim()).filter(Boolean),
+            };
+      const res = await analyzeText(bridge, connectionId, index, params);
+      if (!res.ok) {
+        error = res.detail;
         tokens = [];
       } else {
         tokens = res.tokens;
@@ -107,21 +125,55 @@
     <label class="full">{t("analyzer.text")}
       <textarea bind:value={text} spellcheck="false"></textarea>
     </label>
+    <div class="modes full" role="group" aria-label={t("analyzer.modeHint")}>
+      <button type="button" class:active={mode === "field"} onclick={() => (mode = "field")}>{t("analyzer.modeField")}</button>
+      <button type="button" class:active={mode === "analyzer"} onclick={() => (mode = "analyzer")}>{t("analyzer.modeAnalyzer")}</button>
+      <button type="button" class:active={mode === "custom"} onclick={() => (mode = "custom")}>{t("analyzer.modeCustom")}</button>
+      <span class="mode-hint">{t("analyzer.modeHint")}</span>
+    </div>
     <label>{t("analyzer.contextIndex")}
-      <select bind:value={index}>
-        <option value="">{t("analyzer.noIndex")}</option>
-        {#each indices as ix (ix.index)}<option value={ix.index}>{ix.index}</option>{/each}
-      </select>
+      <Combobox
+        listId="analyzer-indices"
+        placeholder={t("analyzer.noIndex")}
+        options={[{ value: "", label: t("analyzer.noIndex") }, ...indices.map((ix) => ({ value: ix.index, label: ix.index }))]}
+        bind:value={index}
+      />
     </label>
-    <label>{t("analyzer.field")}
-      <select bind:value={field} disabled={!index || loadingFields}>
-        <option value="">{loadingFields ? t("analyzer.loadingFields") : t("analyzer.noField", { count: fields.length })}</option>
-        {#each fields as f (f.name)}<option value={f.name}>{f.name} · {f.type}</option>{/each}
-      </select>
-    </label>
-    <label>{t("analyzer.analyzerLabel")}<Combobox placeholder="e.g. standard" listId="an-analyzers" options={ANALYZERS.map((v) => ({ value: v }))} bind:value={analyzer} /></label>
-    <label>{t("analyzer.tokenizerLabel")}<Combobox placeholder="e.g. whitespace" listId="an-tokenizers" options={TOKENIZERS.map((v) => ({ value: v }))} bind:value={tokenizer} /></label>
-    <label>{t("analyzer.filtersLabel")}<Combobox placeholder="e.g. lowercase" listId="an-filters" options={FILTERS.map((v) => ({ value: v }))} bind:value={filters} /></label>
+    {#if mode === "field"}
+      <label>{t("analyzer.field")}
+        <Combobox
+          listId="analyzer-fields"
+          placeholder={loadingFields ? t("analyzer.loadingFields") : t("analyzer.noField", { count: fields.length })}
+          options={[
+            { value: "", label: loadingFields ? t("analyzer.loadingFields") : t("analyzer.noField", { count: fields.length }) },
+            ...fields.map((f) => ({ value: f.name, label: `${f.name} · ${f.type}` })),
+          ]}
+          disabled={!index || loadingFields}
+          bind:value={field}
+        />
+      </label>
+    {:else if mode === "analyzer"}
+      <label>{t("analyzer.analyzerLabel")}
+        <Combobox
+          listId="analyzer-analyzers"
+          placeholder="standard"
+          options={ANALYZERS.map((v) => ({ value: v }))}
+          searchable={false}
+          bind:value={analyzer}
+        />
+      </label>
+    {:else}
+      <label>{t("analyzer.tokenizerLabel")}
+        <Combobox
+          listId="analyzer-tokenizers"
+          placeholder="whitespace"
+          options={TOKENIZERS.map((v) => ({ value: v }))}
+          searchable={false}
+          bind:value={tokenizer}
+        />
+      </label>
+      <label>{t("analyzer.filtersLabel")}<input placeholder="lowercase, stop" bind:value={filters} /></label>
+    {/if}
     <div class="run"><button type="button" class="primary" onclick={run} disabled={loading || !connectionId}>{loading ? t("analyzer.analyzing") : t("analyzer.run")}</button></div>
   </section>
 
@@ -134,8 +186,8 @@
     <table class="tok">
       <thead><tr><th>#</th><th>{t("analyzer.col.token")}</th><th>{t("analyzer.col.position")}</th><th>{t("analyzer.col.type")}</th><th>{t("analyzer.col.offsets")}</th></tr></thead>
       <tbody>
-        {#each tokens as t, i (i)}
-          <tr><td class="mono">{t.position}</td><td class="mono">{t.token}</td><td class="mono">{t.position}</td><td class="mono">{t.type}</td><td class="mono">{t.start}-{t.end}</td></tr>
+        {#each tokens as tok, i (i)}
+          <tr><td class="mono">{i + 1}</td><td class="mono">{tok.token}</td><td class="mono">{tok.position}</td><td class="mono">{tok.type}</td><td class="mono">{tok.start}-{tok.end}</td></tr>
         {/each}
       </tbody>
     </table>
@@ -156,6 +208,12 @@
   .form { display: grid; grid-template-columns: repeat(2, 1fr); gap: 12px; margin-bottom: 16px; }
   .form .full { grid-column: 1 / -1; }
   .form label { display: flex; flex-direction: column; gap: 4px; font-size: var(--es-fs-xs); color: var(--es-muted); }
+  .form label :global(.combo) { width: 100%; }
+  .form label :global(.combo > input) { width: 100%; }
+  .modes { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+  .modes button { padding: 4px 10px; font-size: var(--es-fs-xs); }
+  .modes button.active { background: var(--es-accent-soft); border-color: var(--es-accent); color: var(--es-text); }
+  .mode-hint { color: var(--es-muted); font-size: var(--es-fs-2xs); }
   .form textarea { min-height: 70px; resize: vertical; font-family: var(--es-mono); font-size: var(--es-fs-sm); }
   .run { grid-column: 1 / -1; display: flex; justify-content: flex-end; }
   .meta { font-size: var(--es-fs-xs); color: var(--es-muted); font-family: var(--es-mono); }

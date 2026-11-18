@@ -1,5 +1,6 @@
 <script lang="ts">
   import StateBlock from "../components/StateBlock.svelte";
+  import Combobox from "../components/Combobox.svelte";
   import { fetchMonitorHistory, type MonitorSample } from "../lib/services";
   import { formatBytes, formatCount } from "../lib/api";
   import type { DbxBridge } from "../lib/bridge";
@@ -113,11 +114,13 @@
       <p>{t("hist.hintPrefix")}<code>mon/history</code>{t("hist.hintSuffix")}</p>
     </div>
     <div class="tools">
-      <select bind:value={rangeHours}>
-        {#each RANGES as range (range.hours)}
-          <option value={range.hours}>{t(range.label)}</option>
-        {/each}
-      </select>
+      <Combobox
+        listId="hist-ranges"
+        options={RANGES.map((range) => ({ value: String(range.hours), label: t(range.label) }))}
+        value={String(rangeHours)}
+        onValueChange={(v) => (rangeHours = Number(v))}
+        searchable={false}
+      />
       <button type="button" onclick={() => load()} disabled={loading}>{loading ? t("common.loading") : t("common.refresh")}</button>
       <button type="button" onclick={copyCsv} disabled={rows.length === 0}>{t("hist.copyCsv")}</button>
     </div>

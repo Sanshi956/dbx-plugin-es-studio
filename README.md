@@ -1,6 +1,6 @@
 # ES Studio
 
-DBX 内的专业 Elasticsearch 管理工作台插件。插件 ID `local.es.studio`，版本 `0.5.2`。
+DBX 内的专业 Elasticsearch 管理工作台插件。插件 ID `local.es.studio`，版本 `0.5.3`。
 
 已完成 **P1 · 插件基础设施**、**P2 · 日常运维**、**P3 · 治理与运维**、**P4 · 观测与诊断**、
 **P5 · MCP 工具服务** 与 **P6 · 国际化 + 多版本兼容**，共 **25 个导航项**全部可用（无占位按钮）。
@@ -106,14 +106,14 @@ export PATH="/d/software/dev/Go/go/bin:$PATH"
 "D:/software/dev/Python/Python313/python.exe" scripts/check-manifest.py
 dbx-plugin package .                     # 产出未签名审核候选包，直接装会被 DBX 拒绝
 "D:/software/dev/Python/Python313/python.exe" scripts/sign-package.py \
-    --package dist/local.es.studio-0.5.2-windows-x64.dbxp \
+    --package dist/local.es.studio-0.5.3-windows-x64.dbxp \
     --key-id local.es.studio.release      # 产出 .signed.dbxp 并注册本机公钥
 
 "D:/software/dev/Python/Python313/python.exe" scripts/sign-package.py --verify \
-    --package dist/local.es.studio-0.5.2-windows-x64.signed.dbxp
-"D:/software/dev/Python/Python313/python.exe" scripts/verify-package.py --package dist/local.es.studio-0.5.2-windows-x64.signed.dbxp
+    --package dist/local.es.studio-0.5.3-windows-x64.signed.dbxp
+"D:/software/dev/Python/Python313/python.exe" scripts/verify-package.py --package dist/local.es.studio-0.5.3-windows-x64.signed.dbxp
 "D:/software/dev/Python/Python313/python.exe" scripts/check-manifest.py \
-    --package dist/local.es.studio-0.5.2-windows-x64.signed.dbxp
+    --package dist/local.es.studio-0.5.3-windows-x64.signed.dbxp
 ```
 
 安装 `dist/*.signed.dbxp` 到 DBX 插件中心。签名私钥文件

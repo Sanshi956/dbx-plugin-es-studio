@@ -3,6 +3,7 @@
   import JsonView from "../components/JsonView.svelte";
   import Inspector from "../components/Inspector.svelte";
   import ConfirmDanger from "../components/ConfirmDanger.svelte";
+  import Combobox from "../components/Combobox.svelte";
   import { handleEditorKey } from "../lib/editorKeys";
   import {
     fetchTemplates, getTemplate, putTemplate, deleteTemplate, isError, failureText,
@@ -209,12 +210,16 @@
       <div class="fields">
         <label>{t("tpl.name")}<input placeholder="demo-template" bind:value={newName} /></label>
         <label>{t("tpl.kind")}
-          <select value={newKind} onchange={(event) => switchKind(event.currentTarget.value as TemplateKind)}>
-            {#if composableSupported}
-              <option value="composable">composable (_index_template)</option>
-            {/if}
-            <option value="legacy">legacy (_template)</option>
-          </select>
+          <Combobox
+            listId="tpl-kinds"
+            options={[
+              ...(composableSupported ? [{ value: "composable", label: "composable (_index_template)" }] : []),
+              { value: "legacy", label: "legacy (_template)" },
+            ]}
+            value={newKind}
+            onValueChange={(v) => switchKind(v as TemplateKind)}
+            searchable={false}
+          />
         </label>
         <button type="button" class="primary" onclick={askCreate}>{t("common.write")}</button>
       </div>
@@ -231,11 +236,17 @@
   <div class="filter-row">
     <label>{t("index.filterLabel")}<input placeholder={t("tpl.filterPlaceholder")} bind:value={filter} /></label>
     <label>{t("tpl.kind")}
-      <select bind:value={kindFilter}>
-        <option value="all">{t("tpl.kindAll")}</option>
-        <option value="composable">composable</option>
-        <option value="legacy">legacy</option>
-      </select>
+      <Combobox
+        listId="tpl-kind-filter"
+        options={[
+          { value: "all", label: t("tpl.kindAll") },
+          { value: "composable", label: "composable" },
+          { value: "legacy", label: "legacy" },
+        ]}
+        value={kindFilter}
+        onValueChange={(v) => (kindFilter = v as "all" | TemplateKind)}
+        searchable={false}
+      />
     </label>
   </div>
 

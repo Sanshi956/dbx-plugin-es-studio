@@ -1,6 +1,7 @@
 <script lang="ts">
   import StateBlock from "../components/StateBlock.svelte";
   import MetricChart from "../components/MetricChart.svelte";
+  import Combobox from "../components/Combobox.svelte";
   import {
     startMonitor, stopMonitor, monitorStatus, sampleNow, fetchMonitorHistory,
     type MonitorSample, type MonitorStatus,
@@ -174,11 +175,17 @@
       <span class="dot" class:on={status?.running}></span>
       <span class="state">{status?.running ? t("mc.running") : t("mc.stopped")}</span>
       <label>{t("mc.interval")}
-        <select bind:value={intervalSec} onchange={applyInterval} disabled={busy}>
-          {#each INTERVALS as seconds (seconds)}
-            <option value={seconds}>{seconds}s</option>
-          {/each}
-        </select>
+        <Combobox
+          listId="mc-intervals"
+          options={INTERVALS.map((seconds) => ({ value: String(seconds), label: `${seconds}s` }))}
+          value={String(intervalSec)}
+          onValueChange={(v) => {
+            intervalSec = Number(v);
+            void applyInterval();
+          }}
+          disabled={busy}
+          searchable={false}
+        />
       </label>
       <button type="button" class:primary={!status?.running} onclick={toggleRun} disabled={busy}>
         {status?.running ? t("mc.stop") : t("mc.start")}

@@ -1,5 +1,6 @@
 <script lang="ts">
   import StateBlock from "../components/StateBlock.svelte";
+  import Combobox from "../components/Combobox.svelte";
   import {
     CATEGORY_LABEL, callMcpTool, fetchMcpLog, grantConnection, listGrants, listMcpTools,
     mcpErrorText, revokeGrant,
@@ -193,11 +194,14 @@
       <div class="panel-head">
         <h2>{t("mcp.grants.title")}</h2>
         <div class="inline">
-          <select bind:value={ttlDays} title={t("mcp.ttl")}>
-            <option value={7}>{t("mcp.days", { n: 7 })}</option>
-            <option value={30}>{t("mcp.days", { n: 30 })}</option>
-            <option value={90}>{t("mcp.days", { n: 90 })}</option>
-          </select>
+          <Combobox
+            listId="mcp-ttl"
+            options={[7, 30, 90].map((n) => ({ value: String(n), label: t("mcp.days", { n }) }))}
+            value={String(ttlDays)}
+            onValueChange={(v) => (ttlDays = Number(v))}
+            title={t("mcp.ttl")}
+            searchable={false}
+          />
           <button class="primary" onclick={() => void authorize()} disabled={!connectionId}>
             {grantForThis ? t("mcp.reauthorize") : t("mcp.authorize")}
           </button>

@@ -1,6 +1,7 @@
 <script lang="ts">
   import StateBlock from "../components/StateBlock.svelte";
   import ConfirmDanger from "../components/ConfirmDanger.svelte";
+  import Combobox from "../components/Combobox.svelte";
   import {
     fetchAliases, fetchIndices, single, isError, aliasActionsBody, parseAliasFilter,
     type AliasAdd, type AliasRow, type IndexRow,
@@ -198,12 +199,16 @@
     <h2>{t("aliases.section.add")}</h2>
     <div class="grid">
       <label>{t("aliases.form.index")}
-        <select bind:value={newIndex} disabled={indices.length === 0}>
-          {#if indices.length === 0}<option value="">{t("aliases.form.noIndex")}</option>{/if}
-          {#each indices as ix (ix.index)}
-            <option value={ix.index}>{t("aliases.form.indexOption", { index: ix.index, count: aliasCount(ix.index) })}</option>
-          {/each}
-        </select>
+        <Combobox
+          listId="alias-indices"
+          placeholder={t("aliases.form.noIndex")}
+          options={indices.map((ix) => ({
+            value: ix.index,
+            label: t("aliases.form.indexOption", { index: ix.index, count: aliasCount(ix.index) }),
+          }))}
+          disabled={indices.length === 0}
+          bind:value={newIndex}
+        />
       </label>
       <label class="span2">{t("aliases.form.alias")}
         <input placeholder={t("aliases.form.aliasPlaceholder")} bind:value={newAlias} />
@@ -225,18 +230,20 @@
         <input placeholder={t("aliases.form.followRouting")} bind:value={newSearchRouting} />
       </label>
       <label>is_write_index
-        <select bind:value={newWriteIndex}>
-          <option value="">{t("aliases.form.notSet")}</option>
-          <option value="true">true</option>
-          <option value="false">false</option>
-        </select>
+        <Combobox
+          listId="alias-write-index"
+          options={[{ value: "", label: t("aliases.form.notSet") }, { value: "true", label: "true" }, { value: "false", label: "false" }]}
+          searchable={false}
+          bind:value={newWriteIndex}
+        />
       </label>
       <label>is_hidden
-        <select bind:value={newHidden}>
-          <option value="">{t("aliases.form.notSet")}</option>
-          <option value="true">true</option>
-          <option value="false">false</option>
-        </select>
+        <Combobox
+          listId="alias-hidden"
+          options={[{ value: "", label: t("aliases.form.notSet") }, { value: "true", label: "true" }, { value: "false", label: "false" }]}
+          searchable={false}
+          bind:value={newHidden}
+        />
       </label>
       <div class="submit">
         <button type="button" class="primary" onclick={askAdd} disabled={!newIndex || !newAlias.trim()}>{t("aliases.form.addButton")}</button>
@@ -330,7 +337,9 @@
   .grid label { display: flex; flex-direction: column; gap: 4px; font-size: var(--es-fs-xs); color: var(--es-muted); }
   .grid .span2 { grid-column: span 2; }
   .grid .span3 { grid-column: 1 / -1; }
-  .grid input, .grid select, .grid textarea { width: 100%; }
+  .grid input, .grid textarea { width: 100%; }
+  .grid :global(.combo) { width: 100%; }
+  .grid :global(.combo > input) { width: 100%; }
   .grid textarea { font-family: var(--es-mono); font-size: var(--es-fs-xs); resize: vertical; min-height: 46px; }
   .submit { display: flex; justify-content: flex-end; }
   .form-error { margin: 10px 0 0; font-size: var(--es-fs-xs); color: var(--es-red); }
