@@ -190,7 +190,6 @@
   header p { margin: 0; color: var(--es-muted); }
   header code { font-family: var(--es-mono); font-size: var(--es-fs-xs); }
   .tools { display: flex; gap: 8px; align-items: center; }
-  .tools select { padding: 6px 10px; }
   button { padding: 5px 12px; border: 1px solid var(--es-border); border-radius: 6px; background: var(--es-surface); color: var(--es-text); cursor: pointer; white-space: nowrap; }
   button:hover:not(:disabled) { background: var(--es-surface-2); }
   button:disabled { opacity: 0.55; cursor: default; }

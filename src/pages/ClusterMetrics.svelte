@@ -274,7 +274,6 @@
   .dot.on { background: var(--es-green); box-shadow: 0 0 0 3px var(--es-accent-soft); }
   .state { font-size: var(--es-fs-sm); font-weight: 600; }
   .bar label { display: flex; align-items: center; gap: 6px; font-size: var(--es-fs-xs); color: var(--es-muted); }
-  .bar select { padding: 6px 10px; }
   .foot { margin-left: auto; font-size: var(--es-fs-xs); color: var(--es-muted); font-family: var(--es-mono); }
   .foot code { font-size: var(--es-fs-2xs); }
   .err { font-size: var(--es-fs-xs); color: var(--es-red); }

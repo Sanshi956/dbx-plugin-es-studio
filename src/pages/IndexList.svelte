@@ -212,7 +212,7 @@
   .toast { padding: 8px 12px; margin-bottom: 12px; border: 1px solid var(--es-border); border-radius: 6px; background: var(--es-surface-2); font-size: var(--es-fs-sm); }
   .filter-row { display: flex; gap: 12px; align-items: end; margin-bottom: 14px; }
   .filter-row label { display: flex; flex-direction: column; gap: 4px; font-size: var(--es-fs-xs); color: var(--es-muted); }
-  .filter-row input { padding: 6px 10px; border: 1px solid var(--es-border); border-radius: 6px; background: var(--es-surface); color: var(--es-text); min-width: 240px; }
+  .filter-row input { min-width: 240px; }
   .filter-row .count { font-family: var(--es-mono); font-size: var(--es-fs-xs); color: var(--es-muted); padding-bottom: 8px; }
 
   table.ix { width: 100%; border-collapse: collapse; font-size: var(--es-fs-sm); border: 1px solid var(--es-border); border-radius: var(--es-radius); overflow: hidden; }

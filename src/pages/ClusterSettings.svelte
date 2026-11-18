@@ -263,7 +263,7 @@
   .fields { display: flex; gap: 12px; align-items: end; flex-wrap: wrap; }
   .fields label { display: flex; flex-direction: column; gap: 4px; font-size: var(--es-fs-xs); color: var(--es-muted); }
   .fields .wide { flex: 1 1 260px; }
-  .fields input, .fields select, .filter-row input { padding: 6px 10px; border: 1px solid var(--es-border); border-radius: 6px; background: var(--es-surface); color: var(--es-text); width: 100%; }
+  .fields input, .fields select, .filter-row input { width: 100%; }
   .value-row { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-top: 10px; }
   .kind { font-size: var(--es-fs-2xs); font-family: var(--es-mono); color: var(--es-muted); border: 1px solid var(--es-border); border-radius: 4px; padding: 2px 6px; }
   .chips { display: flex; gap: 6px; flex-wrap: wrap; }

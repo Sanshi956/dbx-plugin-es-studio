@@ -303,7 +303,7 @@
   button:disabled { opacity: 0.55; cursor: default; }
 
   .filter-bar { margin: 14px 0 0; }
-  .filter { width: 320px; max-width: 100%; padding: 7px 12px; border: 1px solid var(--es-border); border-radius: 6px; background: var(--es-surface); color: var(--es-text); font-size: var(--es-fs-sm); }
+  .filter { width: 320px; max-width: 100%; }
   .no-match { margin: 0; padding: 10px 12px; border: 1px dashed var(--es-border); border-radius: var(--es-radius); color: var(--es-muted); font-size: var(--es-fs-sm); }
 
   .summary { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px; }

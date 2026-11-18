@@ -362,7 +362,7 @@
   .fields label { display: flex; flex-direction: column; gap: 4px; font-size: var(--es-fs-xs); color: var(--es-muted); }
   .fields .wide { flex: 1 1 220px; }
   .fields .check { flex-direction: row; align-items: center; gap: 6px; padding-bottom: 6px; }
-  .fields input { padding: 6px 10px; border: 1px solid var(--es-border); border-radius: 6px; background: var(--es-surface); color: var(--es-text); width: 100%; }
+  .fields input { width: 100%; }
   .fields .check input { width: auto; }
 
   .ix-picker { border: 1px solid var(--es-border); border-radius: var(--es-radius); padding: 8px 10px 10px; margin-bottom: 10px; background: var(--es-surface-2); }

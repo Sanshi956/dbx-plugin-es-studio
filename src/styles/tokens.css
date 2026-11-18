@@ -75,3 +75,19 @@ select, input:not([type="checkbox"]):not([type="radio"]), textarea {
      making same-row controls differ by 2px. Pin it so all controls align. */
   line-height: 1.5;
 }
+/* Native <select> rounds its content box up while <input> does not, leaving a
+   0.4px height drift in the same row. Pin single-line controls to one
+   em-based height; textareas stay free to grow. */
+select, input:not([type="checkbox"]):not([type="radio"]) {
+  height: calc(1.5em + 14px);
+}
+/* One focus treatment for every text control. Without this, Chrome paints its
+   own black `auto` ring on <input> (Combobox) but a different ring on <select>,
+   which reads as "the sort-field border is a different color". */
+select:focus,
+input:not([type="checkbox"]):not([type="radio"]):focus,
+textarea:focus {
+  outline: 2px solid var(--es-accent-soft);
+  outline-offset: 0;
+  border-color: var(--es-accent);
+}

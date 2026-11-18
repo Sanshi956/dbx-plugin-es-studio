@@ -143,11 +143,10 @@
   button:disabled { opacity: 0.55; cursor: default; }
   .primary { background: var(--es-accent); color: #fff; border-color: var(--es-accent); }
   .bar { display: flex; gap: 8px; margin-bottom: 10px; }
-  .bar select, .bar input { padding: 6px 10px; border: 1px solid var(--es-border); border-radius: 6px; background: var(--es-surface); color: var(--es-text); }
   .bar .path { flex: 1; font-family: var(--es-mono); }
   .keys { align-self: center; font-size: var(--es-fs-2xs); color: var(--es-muted); font-family: var(--es-mono); white-space: nowrap; }
   .warn-banner { padding: 10px 12px; margin-bottom: 10px; border: 1px solid var(--es-yellow); border-radius: 6px; background: var(--es-surface-2); color: var(--es-yellow); font-size: var(--es-fs-sm); line-height: 1.6; }
-  .body { width: 100%; min-height: 140px; resize: vertical; padding: 12px 14px; border: 1px solid var(--es-border); border-radius: var(--es-radius); background: var(--es-surface-2); color: var(--es-text); font-family: var(--es-mono); font-size: var(--es-fs-sm); box-sizing: border-box; margin-bottom: 14px; }
+  .body { width: 100%; min-height: 140px; resize: vertical; padding: 12px 14px; border: 1px solid var(--es-border); background: var(--es-surface-2); color: var(--es-text); font-family: var(--es-mono); font-size: var(--es-fs-sm); box-sizing: border-box; margin-bottom: 14px; }
   .resp-head { display: flex; gap: 12px; align-items: center; margin-bottom: 10px; font-family: var(--es-mono); font-size: var(--es-fs-sm); }
   .status { padding: 2px 10px; border-radius: 999px; font-weight: 700; }
   .status.ok { color: var(--es-green); border: 1px solid var(--es-green); }

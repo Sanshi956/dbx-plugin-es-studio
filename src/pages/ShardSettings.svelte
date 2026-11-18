@@ -194,7 +194,7 @@
   h1 { margin: 0 0 6px; font-size: var(--es-fs-3xl); }
   header p { margin: 0; color: var(--es-muted); }
   .head-actions { display: flex; align-items: center; gap: 12px; flex: 0 0 auto; }
-  .filter { width: 320px; max-width: 100%; padding: 7px 12px; border: 1px solid var(--es-border); border-radius: 6px; background: var(--es-surface); color: var(--es-text); font-size: var(--es-fs-sm); }
+  .filter { width: 320px; max-width: 100%; }
   button { padding: 6px 14px; border: 1px solid var(--es-border); border-radius: 6px; background: var(--es-surface); color: var(--es-text); cursor: pointer; white-space: nowrap; }
   button:hover:not(:disabled):not(.primary) { background: var(--es-surface-2); }
   .primary { background: var(--es-accent); color: #fff; border-color: var(--es-accent); }
@@ -215,7 +215,7 @@
   .editor h3 { margin: 0 0 8px; font-size: var(--es-fs-md); }
   .fields { display: flex; gap: 12px; flex-wrap: wrap; margin-bottom: 10px; }
   .fields label { display: flex; flex-direction: column; gap: 4px; font-size: var(--es-fs-xs); color: var(--es-muted); }
-  .fields input { padding: 6px 10px; border: 1px solid var(--es-border); border-radius: 6px; background: var(--es-surface); color: var(--es-text); min-width: 180px; }
+  .fields input { min-width: 180px; }
   .actions { display: flex; align-items: center; gap: 10px; justify-content: flex-end; }
   .diff { margin-right: auto; font-size: var(--es-fs-xs); color: var(--es-muted); font-family: var(--es-mono); }
 </style>

@@ -1,6 +1,6 @@
 # ES Studio
 
-DBX 内的专业 Elasticsearch 管理工作台插件。插件 ID `local.es.studio`，版本 `0.5.1`。
+DBX 内的专业 Elasticsearch 管理工作台插件。插件 ID `local.es.studio`，版本 `0.5.2`。
 
 已完成 **P1 · 插件基础设施**、**P2 · 日常运维**、**P3 · 治理与运维**、**P4 · 观测与诊断**、
 **P5 · MCP 工具服务** 与 **P6 · 国际化 + 多版本兼容**，共 **25 个导航项**全部可用（无占位按钮）。
@@ -64,6 +64,8 @@ npm install
 # 一次性校验：go vet + go test + UI 构建 + 沙箱相对路径检查
 GO="D:/software/dev/Go/go/bin/go.exe" node scripts/check-baseline.mjs
 npm run check                    # svelte-check，0 error / 0 warning
+# 全站控件样式审计（需先启动 browser bridge，见 scripts/browser-bridge.mjs）
+python scripts/control-style-audit.py --base-url http://127.0.0.1:5202
 
 # 低资源本地 ES 8.19.23（可用内存需 ≥ 3GB；内置 <1GB 自动停止守卫）
 "D:/software/dev/Python/Python313/python.exe" scripts/es-cluster.py start   # 后台常驻
@@ -104,14 +106,14 @@ export PATH="/d/software/dev/Go/go/bin:$PATH"
 "D:/software/dev/Python/Python313/python.exe" scripts/check-manifest.py
 dbx-plugin package .                     # 产出未签名审核候选包，直接装会被 DBX 拒绝
 "D:/software/dev/Python/Python313/python.exe" scripts/sign-package.py \
-    --package dist/local.es.studio-0.5.1-windows-x64.dbxp \
+    --package dist/local.es.studio-0.5.2-windows-x64.dbxp \
     --key-id local.es.studio.release      # 产出 .signed.dbxp 并注册本机公钥
 
 "D:/software/dev/Python/Python313/python.exe" scripts/sign-package.py --verify \
-    --package dist/local.es.studio-0.5.1-windows-x64.signed.dbxp
-"D:/software/dev/Python/Python313/python.exe" scripts/verify-package.py --package dist/local.es.studio-0.5.1-windows-x64.signed.dbxp
+    --package dist/local.es.studio-0.5.2-windows-x64.signed.dbxp
+"D:/software/dev/Python/Python313/python.exe" scripts/verify-package.py --package dist/local.es.studio-0.5.2-windows-x64.signed.dbxp
 "D:/software/dev/Python/Python313/python.exe" scripts/check-manifest.py \
-    --package dist/local.es.studio-0.5.1-windows-x64.signed.dbxp
+    --package dist/local.es.studio-0.5.2-windows-x64.signed.dbxp
 ```
 
 安装 `dist/*.signed.dbxp` 到 DBX 插件中心。签名私钥文件
@@ -121,10 +123,22 @@ dbx-plugin package .                     # 产出未签名审核候选包，直�
 或把公钥 `y/qvmEhlUn128fZCUZQdAH3TwArjkKKIAEGz6Ht/naY=` 加入该机
 「插件中心 → 自定义仓库信任」。**任何包内文件改动都必须重新 package + sign**。
 
+## CI / 发布工作流
+
+仓库已接入 GitHub Actions，本地命令与 CI 使用同一套工具链版本：
+
+| 工作流 | 触发 | 内容 |
+|---|---|---|
+| `.github/workflows/ci.yml` | push `main`、PR、手动 | Node 22 + Go 1.22：`npm test`（svelte-check + 单文件 UI 构建）、`go vet ./...`、`go test ./...`、`check-manifest.py` |
+| `.github/workflows/plugin-release.yml` | GitHub Release `published` | 复用官方 `t8y2/dbx/.github/workflows/plugin-release-reusable.yml@plugin-cli-v0.1.10`，按平台矩阵执行 `npm ci && npm run build && dbx-plugin package .`，校验并合并 `.artifact.json`，上传未签名 `.dbxp` 与 `release-candidates.json` 到 Release |
+
+发布工作流只产出**未签名候选包**；商店上架仍由 DBX Store 用官方密钥签名（见下节）。
+本机私有安装继续走上一节的 `sign-package.py` 自签流程，两者互不影响。
+
 ## 发布到 DBX 官方商店
 
 官方流程是「作者仓库发未签名候选 Release → dbx-store 审核并用商店密钥集中签名 → 上架 catalog」，
-CLI 没有 publish 子命令，商店也**不从 tag 源码打包**。完整物料在 `dist/marketplace-0.5.1/`，
+CLI 没有 publish 子命令，商店也**不从 tag 源码打包**。完整物料在 `dist/marketplace-0.5.1/`（0.5.2 未提交商店，故沿用 0.5.1 存档），
 逐字依据见 `t8y2/dbx-store` 的 CONTRIBUTING.md。
 
 ```bash
@@ -146,7 +160,7 @@ GITHUB_TOKEN=ghp_xxx python scripts/github-publish.py --repo-name dbx-plugin-es-
 
 DBX 只提供「插件中心 → 设置 → 从 URL 安装」入口（本机无「从文件安装」按钮）；
 本机验证时在 `dist/` 起一个临时 HTTP 服务（`python -m http.server`），把
-`http://127.0.0.1:19321/local.es.studio-0.5.1-windows-x64.signed.dbxp` 填进 URL 框。
+`http://127.0.0.1:19321/local.es.studio-0.5.2-windows-x64.signed.dbxp` 填进 URL 框。
 下载后必须先在「已安装」里卸载旧版（同版本号不允许覆盖），再重装。
 
 **打开工作台有两种路径，结果不同：**
@@ -169,6 +183,28 @@ DBX 只提供「插件中心 → 设置 → 从 URL 安装」入口（本机无�
 > （含 watch）后自动内联并定位脚本；`check-baseline.mjs` / `verify-package.py` 强制断言。
 > 若 HTML 已加载但 JS 未跑，页面显示静态占位「ES Studio / Starting workbench…」而非纯白。
 
+## 写操作与只读保护
+
+工作台不是只读浏览器。以下操作会真实修改集群，全部由用户主动点击触发，并在执行前弹出 `ConfirmDanger` 二次确认（展示操作名、目标、影响范围和风险原因）：
+
+- 索引：创建/删除、打开/关闭、修改副本与分配设置、force merge
+- 文档：按 `_id` 删除
+- 别名：新增/删除、切换写索引
+- 模板：索引模板 / 组件模板创建与删除
+- 数据流：创建/删除/rollover
+- ILM：策略创建/删除、启动/停止
+- 快照：仓库与快照创建/删除、恢复
+- 集群：persistent/transient 设置增删、reroute、取消任务
+- REST 控制台：任意方法（受路径白名单与只读校验）
+
+连接级只读由 DBX 连接配置 `read_only` 决定，并在 **Go Sidecar 服务层**（`permission.Check`）强制执行，而不是靠前端隐藏按钮：
+
+- `GET/HEAD/OPTIONS` 与语义只读的 `POST`（`_search`、`_msearch`、`_count`、`_analyze`、`_validate/query`、`_explain`、`_field_caps`、`_rank_eval`、`_scripts/painless/_execute`、`_search/template`、`_msearch/template`、`_pit`）放行；
+- 其它方法返回 `-32003`（`connection is read-only: write operation denied`）；
+- 连接标题显示「· 只读」，REST 控制台的确认弹层也会提示「在只读连接上会被 Sidecar 拒绝」。
+
+建议对生产连接启用只读，需要变更时再显式换用可写连接。MCP 工具服务只暴露 45 个只读工具，写操作不会经 MCP 下发。
+
 ## 已知限制
 
 | 项 | 说明 |
@@ -177,7 +213,8 @@ DBX 只提供「插件中心 → 设置 → 从 URL 安装」入口（本机无�
 | `go test -race` | 本机未启用 CGO / 无对应 C 工具链，暂未执行；普通 `go test` 与 `go vet` 全绿 |
 | dev host 连接列表 | 官方 mock host 的 `host.getConnections()` 恒返回 `Mock Connection / sqlite`；UI 以 `context.connectionId` 为准并补一项占位，真实 DBX 不受影响 |
 | 浏览器人工验收 | 已在本机真实 DBX 中代验：URL 安装 → 新建连接 → Test Connection → 连接树打开工作台显示真实指标；dev host `host.getConnections()` 仍恒返回 `Mock Connection / sqlite`，UI 以 `context.connectionId` 兜底，真实 DBX 不受影响 |
-| 包目标平台 | `dbx-plugin package` 只产当前平台（本机 windows-x64），且永远是未签名候选包 |
+| 包目标平台 | 本地 `dbx-plugin package` 只产当前平台（本机 windows-x64），且永远是未签名候选包；CI 发布工作流按官方矩阵产出各平台候选包 |
+| CI 覆盖范围 | CI 跑类型检查、单文件 UI 构建、`go vet`/`go test` 与清单校验；23/106 项浏览器回归和真实 ES 集成仍在本机执行（需要本地集群） |
 
 
 ## 目录

@@ -271,7 +271,6 @@
   .bar { display: flex; gap: 12px; align-items: end; margin-bottom: 16px; flex-wrap: wrap; }
   .bar label { display: flex; flex-direction: column; gap: 4px; font-size: var(--es-fs-xs); color: var(--es-muted); }
   .bar > label { flex: 0 0 auto; }
-  .bar select, .bar input { padding: 6px 10px; border: 1px solid var(--es-border); border-radius: 6px; background: var(--es-surface); color: var(--es-text); }
   .bar .primary { background: var(--es-accent); color: #fff; border-color: var(--es-accent); align-self: flex-end; flex: 0 0 auto; white-space: nowrap; }
   .bar .grow { flex: 1 1 220px; min-width: 180px; }
   .bar .grow input { width: 100%; }

@@ -203,7 +203,7 @@
   .creator { border: 1px solid var(--es-border); border-radius: var(--es-radius); padding: 14px; margin-bottom: 16px; background: var(--es-surface); }
   .fields { display: flex; gap: 12px; align-items: end; flex-wrap: wrap; }
   .fields label { display: flex; flex-direction: column; gap: 4px; font-size: var(--es-fs-xs); color: var(--es-muted); }
-  .fields input { padding: 6px 10px; border: 1px solid var(--es-border); border-radius: 6px; background: var(--es-surface); color: var(--es-text); min-width: 240px; }
+  .fields input { min-width: 240px; }
   .hint { margin: 8px 0 0; font-size: var(--es-fs-xs); color: var(--es-muted); }
   .form-error { margin: 8px 0 0; font-size: var(--es-fs-xs); color: var(--es-red); }
   table { width: 100%; border-collapse: collapse; font-size: var(--es-fs-sm); border: 1px solid var(--es-border); border-radius: var(--es-radius); overflow: hidden; }

@@ -136,7 +136,6 @@
   .filter-row { display: flex; gap: 14px; align-items: end; margin-bottom: 14px; flex-wrap: wrap; }
   .filter-row label { display: flex; flex-direction: column; gap: 4px; font-size: var(--es-fs-xs); color: var(--es-muted); }
   .filter-row .check { flex-direction: row; align-items: center; gap: 6px; padding-bottom: 6px; }
-  .filter-row input:not([type]) { padding: 6px 10px; border: 1px solid var(--es-border); border-radius: 6px; background: var(--es-surface); color: var(--es-text); }
   table { width: 100%; border-collapse: collapse; font-size: var(--es-fs-sm); border: 1px solid var(--es-border); border-radius: var(--es-radius); overflow: hidden; }
   th, td { padding: 6px 8px; border-bottom: 1px solid var(--es-border); text-align: left; }
   th { background: var(--es-surface-2); color: var(--es-muted); font-size: var(--es-fs-xs); font-weight: 600; }

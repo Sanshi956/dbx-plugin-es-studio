@@ -262,7 +262,7 @@
   .count { margin-left: 6px; font-family: var(--es-mono); letter-spacing: 0; text-transform: none; }
   .fields { display: flex; gap: 12px; align-items: end; flex-wrap: wrap; margin-bottom: 10px; }
   .fields label { display: flex; flex-direction: column; gap: 4px; font-size: var(--es-fs-xs); color: var(--es-muted); }
-  .fields input { padding: 6px 10px; border: 1px solid var(--es-border); border-radius: 6px; background: var(--es-surface); color: var(--es-text); min-width: 220px; }
+  .fields input { min-width: 220px; }
   textarea { width: 100%; box-sizing: border-box; font-family: var(--es-mono); font-size: var(--es-fs-sm); padding: 10px; border: 1px solid var(--es-border); border-radius: 6px; background: var(--es-surface-2); color: var(--es-text); }
   .form-error { margin: 8px 0 0; font-size: var(--es-fs-xs); color: var(--es-red); }
   table { width: 100%; border-collapse: collapse; font-size: var(--es-fs-sm); }

@@ -1,7 +1,7 @@
 # 10 · 今日问题分诊总表（2026-11-17）
 
 > 本文汇总今天确认的三个问题，作为执行入口。**不含监控历史文件大小/保留策略**——该项仅做讨论，不纳入本次范围。
-> 详细论证分别见 `07-PERF-LARGE-CLUSTER.md`、`08-UI-AUDIT-AND-FIX-PLAN.md`、`09-PROFILE-ALL-ZERO-BUG.md`。状态：均已出方案，**代码尚未改动**。
+> 详细论证分别见 `07-PERF-LARGE-CLUSTER.md`、`08-UI-AUDIT-AND-FIX-PLAN.md`、`09-PROFILE-ALL-ZERO-BUG.md`。状态（2026-11-18）：A/B/C 已在 0.5.2 全部修复并回归通过，执行记录见 §6。
 
 ## 1. 总表
 
@@ -65,3 +65,18 @@ check-manifest / verify-package / smoke-test --sidecar
 ## 5. 不在本次范围
 
 - **集群监控历史文件大小/保留策略**：今天讨论过但未立项。现状是 7 天 / 20000 条 / 8MB 三重封顶、每 64 次 append 惰性压缩；默认保留天数可后续单独成项，需同步处理字节上限与条数上限对保留期的挤压、以及全文件读取 + 3 秒轮询的 IO 压力。
+
+## 6. 0.5.2 执行结果（2026-11-18）
+
+| 项 | 结果 | 关键改动 |
+|---|---|---|
+| A 查询剖析全 0 | 已修复 | `src/lib/profile-parse.ts` 解析 6/7 复合 id；6.8/7.17/8.19 fixture 单测 5/5 |
+| B1 控件样式 | 已统一 | `tokens.css` 单一控件基准 + 统一 focus 环 + 统一 `calc(1.5em + 14px)` 高度；删除 12 处页面级重复 chrome；Combobox 替换全部 datalist |
+| B2 结果字段分列 | 已修复 | QueryBuilder 动态列 + 逐行详情 + >30 列开关；删除 90 字符/460px 双重截断 |
+| B3 文本截断 | 已修复 | QueryProfiler node 完整展示；JsonView/Inspector 复制按钮；各处补 title/详情入口 |
+| C 大集群性能 | 已修复 | 后端超时 10s→60s、RPC `timeout_secs`、前端 120s；Overview 去掉冗余 `_cat/indices`；Shards/IndexList/拓扑矩阵分页 |
+| CI / 发布 | 已接入 | `.github/workflows/ci.yml` + `plugin-release.yml`（官方 reusable `plugin-cli-v0.1.10`） |
+| README | 已同步 | 版本 0.5.2、CI 章节、写操作与只读保护、已知限制 |
+
+验证基线：svelte-check 0/0、Go test/vet 全绿、fixture 5/5、大集群验收 PASS、主回归 23/23、UX 106/106、25 页渲染 0 错误、i18n 25+25、MCP 32/32、写 7/7、只读 4/4、smoke 125/125、verify 17/17、manifest 111。
+仍保留的非阻塞项：未单独抽象 `CellValue.svelte`（由 JsonView/Inspector 复制 + 逐行详情 + title 覆盖）；Snapshots 索引列表仍只显示前 3 项但带完整 `title`。

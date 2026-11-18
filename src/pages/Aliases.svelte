@@ -330,12 +330,12 @@
   .grid label { display: flex; flex-direction: column; gap: 4px; font-size: var(--es-fs-xs); color: var(--es-muted); }
   .grid .span2 { grid-column: span 2; }
   .grid .span3 { grid-column: 1 / -1; }
-  .grid input, .grid select, .grid textarea { padding: 6px 10px; border: 1px solid var(--es-border); border-radius: 6px; background: var(--es-surface); color: var(--es-text); width: 100%; }
+  .grid input, .grid select, .grid textarea { width: 100%; }
   .grid textarea { font-family: var(--es-mono); font-size: var(--es-fs-xs); resize: vertical; min-height: 46px; }
   .submit { display: flex; justify-content: flex-end; }
   .form-error { margin: 10px 0 0; font-size: var(--es-fs-xs); color: var(--es-red); }
   .filters { display: flex; gap: 12px; align-items: center; margin-bottom: 12px; flex-wrap: wrap; }
-  .filters input:not([type]) { padding: 6px 10px; border: 1px solid var(--es-border); border-radius: 6px; background: var(--es-surface); color: var(--es-text); min-width: 300px; flex: 1; }
+  .filters input:not([type]) { min-width: 300px; flex: 1; }
   .filters .check { display: flex; align-items: center; gap: 6px; font-size: var(--es-fs-xs); color: var(--es-muted); white-space: nowrap; }
   table.ax { width: 100%; border-collapse: collapse; font-size: var(--es-fs-sm); border: 1px solid var(--es-border); border-radius: var(--es-radius); overflow: hidden; }
   .ax th, .ax td { padding: 8px 10px; border-bottom: 1px solid var(--es-border); white-space: nowrap; vertical-align: middle; }

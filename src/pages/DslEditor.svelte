@@ -208,13 +208,13 @@
   button:disabled { opacity: 0.55; cursor: default; }
   .bar { display: flex; gap: 12px; align-items: end; margin-bottom: 10px; flex-wrap: wrap; }
   .bar label { display: flex; flex-direction: column; gap: 4px; font-size: var(--es-fs-xs); color: var(--es-muted); }
-  .bar select { padding: 6px 10px; border: 1px solid var(--es-border); border-radius: 6px; background: var(--es-surface); color: var(--es-text); min-width: 190px; }
+  .bar select { min-width: 190px; }
   .keys { font-size: var(--es-fs-2xs); color: var(--es-muted); font-family: var(--es-mono); padding-bottom: 9px; }
   .primary { background: var(--es-accent); color: #fff; border-color: var(--es-accent); }
   .err { padding: 8px 12px; margin-bottom: 10px; border: 1px solid var(--es-red); border-radius: 6px; background: var(--es-surface-2); color: var(--es-red); font-size: var(--es-fs-sm); font-family: var(--es-mono); }
   .editor {
     width: 100%; min-height: 220px; resize: vertical;
-    padding: 12px 14px; border: 1px solid var(--es-border); border-radius: var(--es-radius);
+    padding: 12px 14px; border: 1px solid var(--es-border);
     background: var(--es-surface-2); color: var(--es-text);
     font-family: var(--es-mono); font-size: var(--es-fs-sm); line-height: 1.6; box-sizing: border-box;
   }

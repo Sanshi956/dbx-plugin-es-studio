@@ -200,14 +200,14 @@ node ID 永久只剩 10 字符，无 title/复制/展开。查询树区的 `desc
 
 ## 5. 实施清单
 
-- [ ] P0-1 `tokens.css` 全局控件规则 + 4 页本地样式清理 + `--es-bg` 修正 + 撞名 grep
-- [ ] P0-2 QueryBuilder 动态字段列 + 逐行详情 + 删双重截断 + 新 i18n 键（zh-CN/en 同步）
-- [ ] P0-3 QueryProfiler node 列完整展示 + title
-- [ ] P1 `CellValue.svelte` + JsonView/Inspector 复制按钮 + 6 页接入
-- [ ] P2 与 07 号报告合并的 DataTable 分页改造
-- [ ] 同步更新 `scripts/browser-ux-test.mjs` 等浏览器脚本的 CSS 选择器（UI 文案/结构改动后必须同步）
-- [ ] 测试链：`npm run check`（svelte-check 0/0）、browser-test、browser-ux-test（106）、browser-render-check（25 页 0 错）、browser-i18n-test（25+25，键集一致）、go test
-- [ ] 版本号 bump（manifest.json + backend/main.go pluginVersion）+ 打包签名链
+- [x] P0-1 `tokens.css` 全局控件规则 + 4 页本地样式清理 + `--es-bg` 修正 + 撞名 grep
+- [x] P0-2 QueryBuilder 动态字段列 + 逐行详情 + 删双重截断 + 新 i18n 键（zh-CN/en 同步）
+- [x] P0-3 QueryProfiler node 列完整展示 + title
+- [x] P1 JsonView/Inspector 复制按钮 + 逐行详情/title 接入（未单独抽 `CellValue.svelte`，由现有组件组合覆盖）
+- [x] P2 与 07 号报告合并的 DataTable 分页改造
+- [x] 同步更新 `scripts/browser-ux-test.mjs` 等浏览器脚本的 CSS 选择器（UI 文案/结构改动后必须同步）
+- [x] 测试链：`npm run check`（svelte-check 0/0）、browser-test、browser-ux-test（106）、browser-render-check（25 页 0 错）、browser-i18n-test（25+25，键集一致）、go test
+- [x] 版本号 bump（manifest.json + backend/main.go pluginVersion）+ 打包签名链
 
 ## 6. 验收标准
 
