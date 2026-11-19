@@ -2,7 +2,7 @@
   "plugin": {
     "id": "local.es.studio",
     "publisher": "xihonglei",
-    "version": "0.5.3",
+    "version": "0.5.4",
     "name": "ES Studio",
     "description": "Professional Elasticsearch management workbench for DBX.",
     "permissions": [
@@ -14,10 +14,34 @@
   },
   "artifacts": [
     {
+      "target": "darwin-arm64",
+      "url": "local.es.studio-0.5.4-darwin-arm64.dbxp",
+      "sha256": "e2146643c309dc5f505935b72aaa8725e763f5421651fd910b163de2531dbb91",
+      "size": 4474951
+    },
+    {
+      "target": "darwin-x64",
+      "url": "local.es.studio-0.5.4-darwin-x64.dbxp",
+      "sha256": "cb7ba0173a6a56727355ed563c5d3cfc91482b8fe1b451302dcad83853455451",
+      "size": 4689509
+    },
+    {
+      "target": "linux-arm64",
+      "url": "local.es.studio-0.5.4-linux-arm64.dbxp",
+      "sha256": "cb735152eff2f2a82fd9d17fb5b3ac323f0ff1ae50032257c4be0b2c10b0d576",
+      "size": 4459131
+    },
+    {
+      "target": "linux-x64",
+      "url": "local.es.studio-0.5.4-linux-x64.dbxp",
+      "sha256": "4bffcee16de91572a83529e7f5e7b8da1245041e3dc45bc6a87364451ee51a48",
+      "size": 4752081
+    },
+    {
       "target": "windows-x64",
-      "url": "local.es.studio-0.5.3-windows-x64.dbxp",
-      "sha256": "d98fe965ba4a950c2b6e49c9f1c7fa8ca3957d2159e06a8de5001e2b1ec11284",
-      "size": 4766100
+      "url": "local.es.studio-0.5.4-windows-x64.dbxp",
+      "sha256": "71ecf98233e30fb34cc74ce34e5430ae39c37eb2a4991443da9da8b5d5296cf6",
+      "size": 4765988
     }
   ]
 }
