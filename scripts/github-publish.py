@@ -178,11 +178,14 @@ def main() -> None:
         print("created release:", release["html_url"])
 
     upload_url = release["upload_url"].split("{", 1)[0]
-    assets = [
-        ROOT / "dist" / f"{plugin_id}-{version}-windows-x64.dbxp",
-        ROOT / "dist" / f"{plugin_id}-{version}-windows-x64.artifact.json",
-        ROOT / "release-candidates.json",
-    ]
+    candidates = json.loads((ROOT / "release-candidates.json").read_text(encoding="utf-8"))
+    assert candidates["plugin"]["id"] == plugin_id, "release candidate plugin mismatch"
+    assert candidates["plugin"]["version"] == version, "release candidate version mismatch"
+    assets = []
+    for artifact in candidates["artifacts"]:
+        package = ROOT / "dist" / artifact["url"]
+        assets.extend([package, package.with_suffix(".artifact.json")])
+    assets.append(ROOT / "release-candidates.json")
     for asset in assets:
         assert asset.exists(), f"missing asset: {asset}"
         req = urllib.request.Request(
@@ -206,8 +209,8 @@ def main() -> None:
                 raise SystemExit(f"upload failed {asset.name}: HTTP {exc.code} {exc.read()[:300]}") from exc
 
     print("\nDONE. Next: open a PR against t8y2/dbx-store:main with")
-    print(f"  dist/marketplace-0.5.1/store/candidates/{plugin_id}.json")
-    print("Full checklist: dist/marketplace-0.5.1/store/REPO-AND-PR.md")
+    print(f"  dist/marketplace-{version}/store/candidates/{plugin_id}.json")
+    print(f"Full checklist: dist/marketplace-{version}/store/REPO-AND-PR.md")
 
 
 if __name__ == "__main__":

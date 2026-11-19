@@ -59,23 +59,33 @@ def main() -> None:
     manifest = load_json(ROOT / "manifest.json")
     version = manifest["version"]
     plugin_id = manifest["id"]
-    target = "windows-x64"
     tag = args.tag or f"v{version}"
     marketplace = ROOT / "dist" / f"marketplace-{version}"
     candidate_dir = marketplace / "store"
 
-    artifact_path = ROOT / "dist" / f"{plugin_id}-{version}-{target}.artifact.json"
-    artifact = load_json(artifact_path)
-    assert artifact["target"] == target, f"unexpected target: {artifact['target']}"
-    package = ROOT / "dist" / artifact["url"]
-    actual = hashlib.sha256(package.read_bytes()).hexdigest()
-    assert actual == artifact["sha256"], f"artifact sha mismatch: {actual} != {artifact['sha256']}"
-    assert package.stat().st_size == artifact["size"], "artifact size mismatch"
-    print(f"verified {package.name}: sha256={actual[:16]}... size={artifact['size']}")
+    artifact_paths = sorted(
+        path
+        for path in (ROOT / "dist").glob(f"{plugin_id}-{version}-*.artifact.json")
+        if not path.name.endswith(".signed.artifact.json")
+    )
+    assert artifact_paths, f"no unsigned artifacts found for {plugin_id} {version}"
+    artifacts = []
+    for artifact_path in artifact_paths:
+        artifact = load_json(artifact_path)
+        target = artifact["target"]
+        expected_stem = f"{plugin_id}-{version}-{target}"
+        assert artifact_path.name == f"{expected_stem}.artifact.json", f"unexpected artifact: {artifact_path.name}"
+        assert artifact["url"] == f"{expected_stem}.dbxp", f"unexpected package url: {artifact['url']}"
+        package = ROOT / "dist" / artifact["url"]
+        actual = hashlib.sha256(package.read_bytes()).hexdigest()
+        assert actual == artifact["sha256"], f"artifact sha mismatch: {actual} != {artifact['sha256']}"
+        assert package.stat().st_size == artifact["size"], f"artifact size mismatch: {package.name}"
+        artifacts.append(artifact)
+        print(f"verified {package.name}: sha256={actual[:16]}... size={artifact['size']}")
+    print(f"verified {len(artifacts)} target(s): {', '.join(artifact['target'] for artifact in artifacts)}")
 
     source = f"https://github.com/{repo}/tree/{tag}"
     homepage = f"https://github.com/{repo}"
-    download = f"https://github.com/{repo}/releases/download/{tag}/{artifact['url']}"
 
     # Store listing release notes: a per-version RELEASE-NOTES.md keeps the wording in
     # one place instead of hardcoding each bump here.
@@ -122,6 +132,7 @@ def main() -> None:
                 "sha256": artifact["sha256"],
                 "size": artifact["size"],
             }
+            for artifact in artifacts
         ],
     }
     dump_json(ROOT / "release-candidates.json", release_candidates)
@@ -144,37 +155,53 @@ def main() -> None:
         "localizations": store_meta["localizations"],
         "targets": [
             {
-                "target": target,
-                "url": download,
+                "target": artifact["target"],
+                "url": f"https://github.com/{repo}/releases/download/{tag}/{artifact['url']}",
                 "sha256": artifact["sha256"],
                 "size": artifact["size"],
             }
+            for artifact in artifacts
         ],
     }
     dump_json(candidate_dir / "candidates" / f"{plugin_id}.json", candidate)
 
+    asset_lines = "\n".join(
+        f"- `{artifact['target']}`：`dist/{artifact['url']}` + "
+        f"`dist/{artifact['url'].removesuffix('.dbxp')}.artifact.json`"
+        for artifact in artifacts
+    )
+    verification_lines = "\n".join(
+        f"- `{artifact['target']}`：SHA-256 `{artifact['sha256']}`，大小 `{artifact['size']}` 字节"
+        for artifact in artifacts
+    )
+    verify_lines = "\n".join(
+        f"python scripts/verify-package.py --package dist/{plugin_id}-{version}-{artifact['target']}.signed.dbxp"
+        for artifact in artifacts
+    )
     steps = f"""# GitHub 仓库与 dbx-store PR（{repo} @ {tag}）
 
 ## A. 发布作者仓库的 Release（审核输入）
 
 仓库：`{homepage}`
 源码 Tag：`{tag}`（与 manifest version `{version}` 一致）
-Release 资产（4 个）：
+Release 资产（{len(artifacts) * 2 + 1} 个文件，另填 Release Notes）：
 
-1. `dist/{artifact['url']}`（未签名候选包，**不要**提交到 Git 历史）
-2. `dist/{artifact['url'].replace('.dbxp', '.artifact.json')}`（url 为裸文件名）
-3. 仓库根目录 `release-candidates.json`（本脚本已生成）
-4. Release Notes（可用 `dist/marketplace-{version}/SUBMISSION.md` 的变更日志段）
+{asset_lines}
+- 仓库根目录 `release-candidates.json`（本脚本已生成）
+
+未签名候选包**不要**提交到 Git 历史。Release Notes 可用
+`dist/marketplace-{version}/SUBMISSION.md` 的变更日志段。
 
 ```bash
 git remote add origin {homepage}.git
 git add -A && git commit -m "release: {version} store submission metadata"
 git tag {tag} && git push origin HEAD --tags
-# GitHub 网页上创建 Release，上传上面 4 项资产
+# GitHub 网页上创建 Release，上传上述文件并填写 Release Notes
 ```
 
-注意：**商店不从这个 tag 源码打包**，同步器下载 Release 里的未签名 `.dbxp` 并按
-SHA-256（`{artifact['sha256']}`）与大小（`{artifact['size']}`）校验。`source` tag 仅用于审核溯源。
+注意：**商店不从这个 tag 源码打包**，同步器下载 Release 里的未签名 `.dbxp` 并按以下值校验：
+{verification_lines}
+`source` tag 仅用于审核溯源。
 
 ## B. 向 dbx-store 提交 PR
 
@@ -204,7 +231,7 @@ SHA-256（`{artifact['sha256']}`）与大小（`{artifact['size']}`）校验。`
 
 ```bash
 python scripts/check-manifest.py
-python scripts/verify-package.py --package dist/{plugin_id}-{version}-{target}.signed.dbxp
+{verify_lines}
 ```
 
 商店侧：`node scripts/validate.mjs`（在 dbx-store 仓库中运行）。

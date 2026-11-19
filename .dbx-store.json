@@ -15,10 +15,10 @@
     "host.connections:read",
     "host.events"
   ],
-  "source": "https://github.com/Sanshi956/dbx-plugin-es-studio/tree/v0.5.3",
+  "source": "https://github.com/Sanshi956/dbx-plugin-es-studio/tree/v0.5.4",
   "homepage": "https://github.com/Sanshi956/dbx-plugin-es-studio",
   "license": "MIT",
-  "releaseNotes": "0.5.3: see https://github.com/Sanshi956/dbx-plugin-es-studio/releases/tag/v0.5.3.",
+  "releaseNotes": "0.5.4: see https://github.com/Sanshi956/dbx-plugin-es-studio/releases/tag/v0.5.4.",
   "localizations": {
     "zh-CN": {
       "name": "ES Studio",

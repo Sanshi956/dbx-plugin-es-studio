@@ -98,12 +98,16 @@ def main() -> None:
         print("created release:", release["html_url"])
 
     upload_url = release["upload_url"].split("{", 1)[0]
-    assets = [
-        ROOT / "dist" / f"{plugin_id}-{version}-windows-x64.dbxp",
-        ROOT / "dist" / f"{plugin_id}-{version}-windows-x64.artifact.json",
-        ROOT / "release-candidates.json",
-    ]
+    candidates = json.loads((ROOT / "release-candidates.json").read_text(encoding="utf-8"))
+    assert candidates["plugin"]["id"] == plugin_id, "release candidate plugin mismatch"
+    assert candidates["plugin"]["version"] == version, "release candidate version mismatch"
+    assets = []
+    for artifact in candidates["artifacts"]:
+        package = ROOT / "dist" / artifact["url"]
+        assets.extend([package, package.with_suffix(".artifact.json")])
+    assets.append(ROOT / "release-candidates.json")
     for asset in assets:
+        assert asset.exists(), f"missing asset: {asset}"
         req = urllib.request.Request(
             f"{upload_url}?name={asset.name}",
             data=asset.read_bytes(),

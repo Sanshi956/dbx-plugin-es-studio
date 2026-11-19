@@ -106,7 +106,16 @@ def main() -> None:
     print("branch ready:", branch)
 
     candidate_path = ROOT / "dist" / f"marketplace-{version}" / "store" / "candidates" / f"{PLUGIN_ID}.json"
-    content = base64.b64encode(candidate_path.read_bytes()).decode()
+    candidate_bytes = candidate_path.read_bytes()
+    candidate = json.loads(candidate_bytes.decode("utf-8"))
+    assert candidate["id"] == PLUGIN_ID and candidate["version"] == version, "candidate version mismatch"
+    assert candidate["targets"], "candidate has no targets"
+    content = base64.b64encode(candidate_bytes).decode()
+    targets = ", ".join(f"`{target['target']}`" for target in candidate["targets"])
+    sidecars = ", ".join(
+        f"`bin/{target['target']}/es-studio-sidecar{'.exe' if target['target'].startswith('windows-') else ''}`"
+        for target in candidate["targets"]
+    )
     existing = api(
         "GET", f"/repos/{fork_slug}/contents/candidates/{PLUGIN_ID}.json?ref={branch}", allow_404=True
     )
@@ -132,7 +141,7 @@ def main() -> None:
 Public source: https://github.com/Sanshi956/dbx-plugin-es-studio
 Exact immutable tag: `{source}`
 Release (unsigned candidate + artifact + release-candidates.json): https://github.com/Sanshi956/dbx-plugin-es-studio/releases/tag/{tag}
-Candidate target SHA-256 is pinned in `candidates/{PLUGIN_ID}.json`.
+Candidate target SHA-256 values are pinned in `candidates/{PLUGIN_ID}.json`.
 
 ## Capabilities and user workflow
 
@@ -158,7 +167,8 @@ revocable); the built-in DBX AI channel uses the same 45 read-only tools without
 
 ## Native sidecar behavior
 
-Yes: `bin/windows-x64/es-studio-sidecar.exe` (Go, current-host build, vendored SDK). It runs as a
+Targets: {targets}.
+Sidecars: {sidecars} (Go, vendored SDK). Each sidecar runs as a
 stdio-jsonl child process, opens no listening ports, spawns no external commands, and writes only
 rolling monitoring time series (JSONL, 7-day / 20000-point / 8 MiB caps) under `DBX_PLUGIN_DATA_DIR`.
 No other filesystem writes and no subprocesses.
